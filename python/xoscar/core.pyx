@@ -23,9 +23,7 @@ from typing import AsyncGenerator
 cimport cython
 
 from .context cimport get_context
-
 from .errors import ActorNotExist, Return
-
 from .utils cimport is_async_generator
 
 CALL_METHOD_DEFAULT = 0
@@ -92,7 +90,7 @@ cpdef create_local_actor_ref(address, uid):
 cpdef create_actor_ref(address, uid):
     """
     Create an actor reference.
-    TODO(fyrestone): Remove the create_actor_ref in utils.pyx
+    TODO(fyrestone): Remove the create_actor_ref in _utils.pyx
 
     Returns
     -------

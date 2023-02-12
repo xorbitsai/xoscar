@@ -77,7 +77,7 @@ else:
 
 def _discover_pyx():
     exts = dict()
-    for root, _, files in os.walk(os.path.join(repo_root, "xorbits"), followlinks=True):
+    for root, _, files in os.walk(os.path.join(repo_root, "xoscar"), followlinks=True):
         for fn in files:
             if not fn.endswith(".pyx"):
                 continue

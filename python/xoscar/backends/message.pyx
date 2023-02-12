@@ -17,14 +17,12 @@ from enum import Enum
 from types import TracebackType
 from typing import Any, Type
 
-from ...lib.tblib import pickling_support
+from tblib import pickling_support
 
-from ..._utils cimport new_random_id
-from ...serialization.core cimport Serializer
-
-from ...utils import wrap_exception
-
+from .._utils cimport new_random_id
 from ..core cimport ActorRef
+from ..serialization.core cimport Serializer
+from ..utils import wrap_exception
 
 # make sure traceback can be pickled
 pickling_support.install()
