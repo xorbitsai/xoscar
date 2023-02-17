@@ -17,7 +17,7 @@ from abc import ABC, abstractmethod
 from random import choice
 from typing import Dict, Optional, Tuple
 
-from ...utils import implements
+from ..utils import implements
 from ..core import ActorRef
 from ..errors import NoIdleSlot
 from .config import ActorPoolConfig

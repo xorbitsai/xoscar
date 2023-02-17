@@ -20,7 +20,7 @@ import os
 import posixpath
 from urllib.parse import unquote, urlparse
 
-from ....utils import lazy_import, lazy_import_on_load
+from ...utils import lazy_import, lazy_import_on_load
 
 ray = lazy_import("ray")
 

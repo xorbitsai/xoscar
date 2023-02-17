@@ -19,7 +19,7 @@ import weakref
 from typing import Any, Callable, Coroutine, Dict, Type
 from urllib.parse import urlparse
 
-from ....utils import abc_type_require_weakref_slot, classproperty, implements
+from ...utils import abc_type_require_weakref_slot, classproperty, implements
 from ...errors import ServerClosed
 from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server

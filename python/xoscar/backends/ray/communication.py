@@ -24,10 +24,10 @@ from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, Dict, List, Set, Tuple, Type
 from urllib.parse import urlparse
 
-from ....metrics import Metrics
-from ....oscar.profiling import ProfilingData
-from ....serialization import deserialize, serialize
-from ....utils import Timer, classproperty, implements, lazy_import, lazy_import_on_load
+from ...metrics import Metrics
+from ...profiling import ProfilingData
+from ...serialization import deserialize, serialize
+from ...utils import Timer, classproperty, implements, lazy_import, lazy_import_on_load
 from ...debug import debug_async_timeout
 from ...errors import ServerClosed
 from ..communication.base import Channel, ChannelType, Client, Server

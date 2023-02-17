@@ -18,7 +18,7 @@ import os
 from numbers import Number
 from typing import Dict
 
-from ....utils import lazy_import
+from ...utils import lazy_import
 from ...driver import BaseActorDriver
 from .utils import addresses_to_placement_group_info, process_placement_to_address
 

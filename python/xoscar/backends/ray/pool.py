@@ -27,7 +27,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import List, Optional
 
-from ....utils import ensure_coverage, lazy_import, retry_callable
+from ...utils import ensure_coverage, lazy_import, retry_callable
 from ... import ServerClosed
 from ..config import ActorPoolConfig
 from ..message import CreateActorMessage

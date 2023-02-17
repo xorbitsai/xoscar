@@ -231,12 +231,6 @@ class _ProfilingData:
                 for stats in self._call_stats.values():
                     stats.collect(message, duration)
 
-    def collect_subtask(self, subtask, band: BandType, duration: float):
-        if self._subtask_stats:
-            stats = self._subtask_stats.get(subtask.task_id)
-            if stats is not None:
-                stats.collect(subtask, band, duration)
-
     def __getitem__(self, item):
         key = item if isinstance(item, tuple) else (item,)
         v = None

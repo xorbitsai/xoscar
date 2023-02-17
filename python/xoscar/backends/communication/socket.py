@@ -26,8 +26,8 @@ from hashlib import md5
 from typing import Any, Callable, Coroutine, Dict, Type
 from urllib.parse import urlparse
 
-from ....serialization import AioDeserializer, AioSerializer, deserialize
-from ....utils import classproperty, implements, to_binary
+from ...serialization import AioDeserializer, AioSerializer, deserialize
+from ...utils import classproperty, implements, to_binary
 from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server
 from .utils import read_buffers, write_buffers

@@ -19,7 +19,7 @@ from typing import Any, Type
 
 from tblib import pickling_support
 
-from .._utils cimport new_random_id
+from ..utils cimport new_random_id
 from ..core cimport ActorRef
 from ..serialization.core cimport Serializer
 from ..utils import wrap_exception

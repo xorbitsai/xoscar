@@ -23,7 +23,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import List, Optional  # noqa: F401
 
-from ..utils import dataslots
+from .utils import dataslots
 
 logger: logging.Logger = logging.getLogger(__name__)
 

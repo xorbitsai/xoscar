@@ -13,49 +13,50 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..core.base import MarsError
-
-
-class ReconstructWorkerError(MarsError):
+class XoscarError(Exception):
     pass
 
 
-class ActorPoolNotStarted(MarsError):
+class ReconstructWorkerError(XoscarError):
     pass
 
 
-class ActorNotExist(MarsError):
+class ActorPoolNotStarted(XoscarError):
     pass
 
 
-class ActorAlreadyExist(MarsError):
+class ActorNotExist(XoscarError):
     pass
 
 
-class NoIdleSlot(MarsError):
+class ActorAlreadyExist(XoscarError):
     pass
 
 
-class NoFreeSlot(MarsError):
+class NoIdleSlot(XoscarError):
     pass
 
 
-class SlotStateError(MarsError):
+class NoFreeSlot(XoscarError):
     pass
 
 
-class ServerClosed(MarsError):
+class SlotStateError(XoscarError):
     pass
 
 
-class CannotCancelTask(MarsError):
+class ServerClosed(XoscarError):
     pass
 
 
-class SendMessageFailed(MarsError):
+class CannotCancelTask(XoscarError):
     pass
 
 
-class Return(MarsError):
+class SendMessageFailed(XoscarError):
+    pass
+
+
+class Return(XoscarError):
     def __init__(self, value):
         self.value = value

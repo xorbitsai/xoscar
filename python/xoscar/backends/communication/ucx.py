@@ -23,10 +23,10 @@ from typing import Any, Callable, Coroutine, Dict, List, Tuple, Type
 import cloudpickle
 import numpy as np
 
-from ....lib.nvutils import get_cuda_context, get_index_and_uuid
-from ....serialization import deserialize
-from ....serialization.aio import BUFFER_SIZES_NAME, AioSerializer, get_header_length
-from ....utils import classproperty, implements, lazy_import
+from ...nvutils import get_cuda_context, get_index_and_uuid
+from ...serialization import deserialize
+from ...serialization.aio import BUFFER_SIZES_NAME, AioSerializer, get_header_length
+from ...utils import classproperty, implements, lazy_import
 from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server
 from .errors import ChannelClosed

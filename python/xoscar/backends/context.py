@@ -17,7 +17,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Tuple, Type, Union
 
-from ...utils import dataslots, to_binary
+from ..utils import dataslots, to_binary
 from ..api import Actor
 from ..context import BaseActorContext
 from ..core import ActorRef, create_local_actor_ref

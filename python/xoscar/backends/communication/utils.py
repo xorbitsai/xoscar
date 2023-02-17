@@ -18,8 +18,8 @@ from typing import Dict, List, Union
 
 import numpy as np
 
-from ....serialization.aio import BUFFER_SIZES_NAME
-from ....utils import lazy_import
+from ...serialization.aio import BUFFER_SIZES_NAME
+from ...utils import lazy_import
 
 cupy = lazy_import("cupy")
 cudf = lazy_import("cudf")

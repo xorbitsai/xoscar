@@ -16,11 +16,6 @@
 
 from typing import TypeVar, Union
 
-# import aio to ensure patch enabled for Python 3.6
-from ..lib import aio
-
-del aio
-
 from . import debug
 from .api import (
     actor_ref,

@@ -25,9 +25,8 @@ import traceback
 from abc import ABC, ABCMeta, abstractmethod
 from typing import Callable, Coroutine, Dict, List, Optional, Type, TypeVar, Union
 
-from ...core.entrypoints import init_extension_entrypoints
-from ...metrics import init_metrics
-from ...utils import (
+from ..metrics import init_metrics
+from ..utils import (
     TypeDispatcher,
     implements,
     lazy_import,
@@ -36,6 +35,7 @@ from ...utils import (
 )
 from ..api import Actor
 from ..core import ActorRef, register_local_pool
+from ..entrypoints import init_extension_entrypoints
 from ..debug import debug_async_timeout, record_message_trace
 from ..errors import (
     ActorAlreadyExist,

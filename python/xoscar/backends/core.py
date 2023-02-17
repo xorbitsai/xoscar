@@ -18,8 +18,8 @@ import copy
 import logging
 from typing import Dict, Union
 
-from ...oscar.profiling import ProfilingData
-from ...utils import Timer
+from ..profiling import ProfilingData
+from ..utils import Timer
 from ..errors import ServerClosed
 from .communication import Client
 from .message import DeserializeMessageFailed, ErrorMessage, ResultMessage, _MessageBase
