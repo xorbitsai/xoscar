@@ -18,7 +18,7 @@ import sys
 
 import pytest
 
-from ..... import oscar as mo
+import xoscar as mo
 
 
 class DummyActor(mo.Actor):
