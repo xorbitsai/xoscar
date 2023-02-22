@@ -303,13 +303,13 @@ def parse_readable_size(value: Union[str, int, float]) -> Tuple[float, bool]:
 
 
 def wrap_exception(
-    exc: Exception,
+    exc: BaseException,
     bases: Tuple[Type] = None,
     wrap_name: str = None,
     message: str = None,
     traceback: Optional[TracebackType] = None,
     attr_dict: dict = None,
-) -> Exception:
+) -> BaseException:
     """Generate an exception wraps the cause exception."""
 
     def __init__(self):
