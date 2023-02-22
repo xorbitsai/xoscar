@@ -12,16 +12,13 @@ build-backend = "setuptools.build_meta"
 [tool.black]
 include = '\.pyi?$'
 extend-exclude = '''
-^/xorbits/(_version.py|lib/tblib/.*)
+^/xoscar/(_version.py)
 '''
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = [
     "cuda: mark a test as a cuda case.",
-    "ray: mark test as a ray case.",
-    "ray_dag: marks tests for ray backend.",
-    "skip_ray_dag: marks tests that not execute in ray backend.",
 ]
 
 [tool.cibuildwheel]

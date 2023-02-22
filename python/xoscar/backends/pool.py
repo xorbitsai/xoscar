@@ -1416,8 +1416,6 @@ async def create_actor_pool(
     extra_conf: dict = None,
     **kwargs,
 ) -> MainActorPoolType:
-    from ... import dataframe, learn, remote, tensor
-
     if n_process is None:
         n_process = multiprocessing.cpu_count()
     if labels and len(labels) != n_process + 1:
@@ -1452,13 +1450,6 @@ async def create_actor_pool(
             use_uvloop = True
         except ImportError:
             use_uvloop = False
-
-    modules = list(modules or []) + [
-        tensor.__name__,
-        dataframe.__name__,
-        learn.__name__,
-        remote.__name__,
-    ]
 
     external_addresses = pool_cls.get_external_addresses(
         address, n_process=n_process, ports=ports, schemes=external_address_schemes
