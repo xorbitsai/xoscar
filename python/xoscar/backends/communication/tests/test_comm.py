@@ -22,9 +22,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from .....lib.aio import AioEvent
-from .....tests.core import require_cudf, require_cupy
-from .....utils import get_next_port, lazy_import
+from ....aio import AioEvent
+from ....tests.core import require_cudf, require_cupy
+from ....utils import get_next_port, lazy_import
 from .. import (
     Channel,
     DummyChannel,

@@ -25,8 +25,11 @@ import itertools
 import logging
 import numbers
 import os
+import random
+import socket
 import sys
 import time
+import uuid
 import warnings
 import pkgutil
 from abc import ABC
@@ -40,6 +43,7 @@ from typing import (
     Dict,
     Optional,
     List,
+    Set,
     Tuple,
     Type,
     Union,
@@ -380,6 +384,74 @@ class classproperty:
 
     def __get__(self, obj, owner):
         return self.f(owner)
+
+
+LOW_PORT_BOUND = 10000
+HIGH_PORT_BOUND = 65535
+_local_occupied_ports = set()
+
+
+def _get_ports_from_netstat() -> Set[int]:
+    import subprocess
+
+    while True:
+        p = subprocess.Popen("netstat -a -n -p tcp".split(), stdout=subprocess.PIPE)
+        try:
+            outs, _ = p.communicate(timeout=5)
+            outs = outs.split(to_binary(os.linesep))
+            occupied = set()
+            for line in outs:
+                if b"." not in line:
+                    continue
+                line = to_str(line)
+                for part in line.split():
+                    # in windows, netstat uses ':' to separate host and port
+                    part = part.replace(":", ".")
+                    if "." in part:
+                        _, port_str = part.rsplit(".", 1)
+                        if port_str == "*":
+                            continue
+                        port = int(port_str)
+                        if LOW_PORT_BOUND <= port <= HIGH_PORT_BOUND:
+                            occupied.add(int(port_str))
+                        break
+            return occupied
+        except subprocess.TimeoutExpired:
+            p.kill()
+            continue
+
+
+def get_next_port(typ: int = None, occupy: bool = True) -> int:
+    import psutil
+
+    if sys.platform.lower().startswith("win"):
+        occupied = _get_ports_from_netstat()
+    else:
+        try:
+            conns = psutil.net_connections()
+            typ = typ or socket.SOCK_STREAM
+            occupied = set(
+                sc.laddr.port
+                for sc in conns
+                if sc.type == typ and LOW_PORT_BOUND <= sc.laddr.port <= HIGH_PORT_BOUND
+            )
+        except psutil.AccessDenied:
+            occupied = _get_ports_from_netstat()
+
+    occupied.update(_local_occupied_ports)
+    random.seed(uuid.uuid1().bytes)
+    randn = random.randint(0, 100000000)
+
+    idx = int(randn % (1 + HIGH_PORT_BOUND - LOW_PORT_BOUND - len(occupied)))
+    for i in range(LOW_PORT_BOUND, HIGH_PORT_BOUND + 1):
+        if i in occupied:
+            continue
+        if idx == 0:
+            if occupy:
+                _local_occupied_ports.add(i)
+            return i
+        idx -= 1
+    raise SystemError("No ports available.")
 
 
 def lazy_import(

@@ -1,0 +1,30 @@
+[build-system]
+requires = [
+    "setuptools<64",
+    "wheel",
+    "oldest-supported-numpy",
+    "cython==0.29.26",
+    "requests>=2.4.0",
+    "cloudpickle>=1.5.0"
+]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+include = '\.pyi?$'
+extend-exclude = '''
+^/xorbits/(_version.py|lib/tblib/.*)
+'''
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "cuda: mark a test as a cuda case.",
+    "ray: mark test as a ray case.",
+    "ray_dag: marks tests for ray backend.",
+    "skip_ray_dag: marks tests that not execute in ray backend.",
+]
+
+[tool.cibuildwheel]
+build = ["cp37-*", "cp38-*", "cp39-*", "cp310-*"]
+skip = "pp* *musllinux* *i686 cp36* cp310-win32"
+manylinux-x86_64-image = "manylinux2014"

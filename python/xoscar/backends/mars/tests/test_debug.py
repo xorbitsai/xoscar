@@ -23,7 +23,7 @@ from typing import List
 
 import pytest
 
-from ..... import oscar as mo
+import xoscar as mo
 from ....debug import get_debug_options, reload_debug_opts_from_env
 
 
