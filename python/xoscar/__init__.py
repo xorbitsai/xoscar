@@ -42,7 +42,7 @@ from .errors import (
     SendMessageFailed,
     Return,
 )
-from .utils import create_actor_ref
+from ._utils import create_actor_ref
 
 # make sure methods are registered
 from .backends import mars, ray, test

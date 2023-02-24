@@ -15,8 +15,9 @@
 import logging
 from typing import Dict
 
-from ...utils import Timer, lazy_import
 from ...backend import BaseActorBackend, register_backend
+from ...utils import lazy_import
+from ..._utils import Timer
 from ..context import MarsActorContext
 from .driver import RayActorDriver
 from .pool import RayMainPool

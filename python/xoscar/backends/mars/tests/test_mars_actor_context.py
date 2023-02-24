@@ -24,8 +24,8 @@ from collections import deque
 import pandas as pd
 import pytest
 
-from ..... import oscar as mo
-from .....oscar.core import ActorRef, LocalActorRef
+import xoscar as mo
+from ....core import ActorRef, LocalActorRef
 from ....backends.allocate_strategy import RandomSubPool
 from ....debug import DebugOptions, get_debug_options, set_debug_options
 from ...router import Router

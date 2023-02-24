@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from unittest import mock
+
 import pytest
 
 from ..utils import lazy_import
 
 cupy = lazy_import("cupy")
 cudf = lazy_import("cudf")
+ray = lazy_import("ray")
+ucx = lazy_import("ucp")
 
 
 def require_cupy(func):
@@ -31,4 +35,18 @@ def require_cudf(func):
     if pytest:
         func = pytest.mark.cuda(func)
     func = pytest.mark.skipif(cudf is None, reason="cudf not installed")(func)
+    return func
+
+
+def require_ray(func):
+    if pytest:
+        func = pytest.mark.ray(func)
+    func = pytest.mark.skipif(ray is None, reason="ray not installed")(func)
+    return func
+
+
+def require_ucx(func):
+    if pytest:
+        func = pytest.mark.ucx(func)
+    func = pytest.mark.skipif(ucx is None, reason="ucx not installed")(func)
     return func

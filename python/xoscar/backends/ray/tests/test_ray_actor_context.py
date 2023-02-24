@@ -18,8 +18,8 @@ import time
 
 import pytest
 
-from .....tests.core import require_ray
-from .....utils import lazy_import
+from ....tests.core import require_ray
+from ....utils import lazy_import
 from ...mars.tests import test_mars_actor_context
 from ...router import Router
 from ..backend import RayActorBackend

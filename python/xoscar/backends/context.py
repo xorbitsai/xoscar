@@ -17,13 +17,13 @@ import asyncio
 from dataclasses import dataclass
 from typing import Tuple, Type, Union
 
-from ..utils import dataslots, to_binary
+from ..utils import dataslots
 from ..api import Actor
 from ..context import BaseActorContext
 from ..core import ActorRef, create_local_actor_ref
 from ..debug import debug_async_timeout, detect_cycle_send
 from ..errors import CannotCancelTask
-from ..utils import create_actor_ref
+from .._utils import create_actor_ref, to_binary
 from .allocate_strategy import AddressSpecified, AllocateStrategy
 from .core import ActorCaller
 from .message import (

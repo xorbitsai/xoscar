@@ -34,8 +34,8 @@ from typing import List
 from ...utils import (
     dataslots,
     ensure_coverage,
-    reset_id_random_seed,
 )
+from ..._utils import reset_id_random_seed
 from ..config import ActorPoolConfig
 from ..message import CreateActorMessage
 from ..pool import MainActorPoolBase, SubActorPoolBase, _register_message_handler

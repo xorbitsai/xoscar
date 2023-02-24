@@ -18,8 +18,8 @@ import inspect
 
 import pytest
 
-from .....tests.core import require_ray
-from .....utils import ensure_coverage, lazy_import
+from ....tests.core import require_ray
+from ....utils import ensure_coverage, lazy_import
 from ....core import ActorRef
 from ....errors import ServerClosed
 from ...communication.base import ChannelType

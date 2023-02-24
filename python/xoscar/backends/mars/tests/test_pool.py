@@ -22,8 +22,8 @@ import time
 
 import pytest
 
-from .....tests.core import mock, require_ucx
-from .....utils import get_next_port
+from ....tests.core import mock, require_ucx
+from ....utils import get_next_port
 from .... import Actor, create_actor_ref, kill_actor
 from ....context import get_context
 from ....errors import ActorNotExist, NoIdleSlot, SendMessageFailed, ServerClosed

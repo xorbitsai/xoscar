@@ -27,9 +27,10 @@ from urllib.parse import urlparse
 from ...metrics import Metrics
 from ...profiling import ProfilingData
 from ...serialization import deserialize, serialize
-from ...utils import Timer, classproperty, implements, lazy_import, lazy_import_on_load
+from ...utils import classproperty, implements, lazy_import, lazy_import_on_load
 from ...debug import debug_async_timeout
 from ...errors import ServerClosed
+from ..._utils import Timer
 from ..communication.base import Channel, ChannelType, Client, Server
 from ..communication.core import register_client, register_server
 from ..communication.errors import ChannelClosed

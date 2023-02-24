@@ -19,8 +19,8 @@ import logging
 from typing import Dict, Union
 
 from ..profiling import ProfilingData
-from ..utils import Timer
 from ..errors import ServerClosed
+from .._utils import Timer
 from .communication import Client
 from .message import DeserializeMessageFailed, ErrorMessage, ResultMessage, _MessageBase
 from .router import Router

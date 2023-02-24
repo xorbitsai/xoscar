@@ -45,8 +45,8 @@ try:
 except (ImportError, AttributeError):
     pass
 
-from ..utils import NamedType
-from ..utils cimport TypeDispatcher
+from .._utils import NamedType
+from .._utils cimport TypeDispatcher
 
 BUFFER_PICKLE_PROTOCOL = max(pickle.DEFAULT_PROTOCOL, 5)
 cdef bint HAS_PICKLE_BUFFER = pickle.HIGHEST_PROTOCOL >= 5

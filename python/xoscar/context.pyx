@@ -16,7 +16,7 @@
 from urllib.parse import urlparse
 
 from .core cimport ActorRef
-from .utils cimport new_actor_id
+from ._utils cimport new_actor_id
 
 
 cdef dict _backend_context_cls = dict()
@@ -230,7 +230,7 @@ cdef class ClientActorContext(BaseActorContext):
         return context.kill_actor(actor_ref)
 
     def actor_ref(self, *args, **kwargs):
-        from .utils import create_actor_ref
+        from ._utils import create_actor_ref
 
         actor_ref = create_actor_ref(*args, **kwargs)
         context = self._get_backend_context(actor_ref.address)

@@ -26,11 +26,9 @@ from abc import ABC, ABCMeta, abstractmethod
 from typing import Callable, Coroutine, Dict, List, Optional, Type, TypeVar, Union
 
 from ..metrics import init_metrics
-from ..utils import (
+from .._utils import (
     TypeDispatcher,
-    implements,
-    lazy_import,
-    register_asyncio_task_timeout_detector,
+    create_actor_ref,
     to_binary,
 )
 from ..api import Actor
@@ -44,7 +42,11 @@ from ..errors import (
     SendMessageFailed,
     ServerClosed,
 )
-from ..utils import create_actor_ref
+from ..utils import (
+    implements,
+    lazy_import,
+    register_asyncio_task_timeout_detector,
+)
 from .allocate_strategy import AddressSpecified, allocated_type
 from .communication import Channel, Server, gen_local_address, get_server_type
 from .communication.errors import ChannelClosed
