@@ -18,9 +18,9 @@ import os
 
 import pytest
 
-from ..... import oscar as mo
-from .....tests.core import require_ray
-from .....utils import lazy_import
+import xoscar as mo
+from ....tests.core import require_ray
+from ....utils import lazy_import
 from ..communication import RayServer
 from ..driver import RayActorDriver
 from ..utils import (

@@ -18,10 +18,10 @@ import os
 
 import pytest
 
-from ..... import oscar as mo
-from .....tests.core import mock, require_ray
-from .....utils import lazy_import
+import xoscar as mo
 from ....context import get_context
+from ....tests.core import mock, require_ray
+from ....utils import lazy_import
 from ....errors import ServerClosed
 from ...allocate_strategy import MainPool, ProcessIndex
 from ..backend import RayActorBackend

@@ -17,7 +17,7 @@ import asyncio
 
 import pytest
 
-from ...tests.core import mock
+from .core import mock
 from ..backends.core import ActorCaller
 from ..backends.router import Router
 from ..errors import ServerClosed

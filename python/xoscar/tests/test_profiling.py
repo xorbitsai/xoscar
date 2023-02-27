@@ -19,7 +19,7 @@ import os
 
 import pytest
 
-from ...tests.core import check_dict_structure_same, mock
+from .core import check_dict_structure_same, mock
 from ..backends.message import SendMessage
 from ..profiling import (
     DummyOperator,
@@ -27,7 +27,6 @@ from ..profiling import (
     ProfilingDataOperator,
     _CallStats,
     _ProfilingOptions,
-    _SubtaskStats,
 )
 
 
@@ -140,18 +139,6 @@ def test_collect():
     cs.collect(fake_message1, 1.0)
     cs.collect(fake_message2, 1.0)
 
-    @dataclasses.dataclass
-    class _FakeSubtask:
-        extra_config: dict
-
-    # Test collect subtask with incomparable arguments.
-    band = ("1.2.3.4", "numa-0")
-    subtask1 = _FakeSubtask({})
-    subtask2 = _FakeSubtask(None)
-    ss = _SubtaskStats(options)
-    ss.collect(subtask1, band, 1.0)
-    ss.collect(subtask2, band, 1.0)
-
     # Test call stats order.
     cs = _CallStats(options)
     for i in range(20):
@@ -162,17 +149,3 @@ def test_collect():
     d = cs.to_dict()
     assert list(d["most_calls"].values())[0] == 20
     assert list(d["slow_calls"].values()) == list(reversed(range(10, 20)))
-
-    # Test subtask stats order.
-    ss = _SubtaskStats(options)
-    counter = 0
-    for i in range(20):
-        for j in range(i):
-            fake_message = _FakeSubtask(counter)
-            ss.collect(fake_message, (str(j), "numa-0"), counter)
-            counter += 1
-    d = ss.to_dict()
-    assert list(d["band_subtasks"].values()) == [19, 18, 17, 16, 15, 5, 4, 3, 2, 1]
-    assert list(d["slow_subtasks"].values()) == list(
-        reversed(range(counter - 10, counter))
-    )

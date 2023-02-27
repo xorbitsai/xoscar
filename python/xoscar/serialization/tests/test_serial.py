@@ -30,7 +30,6 @@ try:
 except ImportError:
     sps = None
 
-from ...lib.sparse import SparseMatrix
 from ...tests.core import require_cudf, require_cupy
 from ...utils import lazy_import
 from .. import deserialize, serialize, serialize_with_spawn
@@ -212,13 +211,6 @@ def test_scipy_sparse():
     val = sps.random(100, 100, 0.1, format="csr")
     deserial = deserialize(*serialize(val))
     assert (val != deserial).nnz == 0
-
-
-@pytest.mark.skipif(sps is None, reason="need scipy to run the test")
-def test_mars_sparse():
-    val = SparseMatrix(sps.random(100, 100, 0.1, format="csr"))
-    deserial = deserialize(*serialize(val))
-    assert (val.spmatrix != deserial.spmatrix).nnz == 0
 
 
 class MockSerializerForErrors(ListSerializer):
