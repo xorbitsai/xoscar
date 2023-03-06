@@ -62,12 +62,14 @@ jobs:
       matrix:
         os: ["ubuntu-latest", "macos-latest", "windows-latest"]
         python-version: ["3.7", "3.8", "3.9", "3.10"]
-        module: ["xoscar", "ray-deploy"]
+        module: ["xoscar"]
         exclude:
           - { os: macos-latest, python-version: 3.8}
           - { os: macos-latest, python-version: 3.9}
           - { os: windows-latest, python-version: 3.8}
           - { os: windows-latest, python-version: 3.9}
+        include:
+          - { os: ubuntu-latest, module: ray-deploy, python-version: 3.9 }
 
     steps:
     - name: Check out code
