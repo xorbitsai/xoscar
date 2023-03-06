@@ -1,0 +1,116 @@
+name: Python CI
+
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    types: ['opened', 'reopened', 'synchronize']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ "ubuntu-latest" ]
+        python-version: [ "3.10" ]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: Set up Python environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - name: flake8 Lint
+        uses: py-actions/flake8@v2
+        with:
+          path: "python/xoscar"
+          args: "--config python/setup.cfg"
+      - name: black
+        uses: psf/black@stable
+        with:
+          src: "python/xoscar"
+          options: "--check"
+      - uses: isort/isort-action@master
+        with:
+          sortPaths: "python/xoscar"
+          configuration: "--check-only --diff --sp python/setup.cfg"
+      - name: mypy
+        run: pip install mypy && cd python && mypy xoscar
+      - name: codespell
+        run: pip install codespell && cd python && codespell xoscar
+
+  build_test_job:
+    runs-on: ${{ matrix.os }}
+    needs: lint
+    env:
+      CONDA_ENV: xoscar-test
+    defaults:
+      run:
+        shell: bash -l {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
+        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        module: ["xoscar", "ray-deploy"]
+        exclude:
+          - { os: macos-latest, python-version: 3.8}
+          - { os: macos-latest, python-version: 3.9}
+          - { os: windows-latest, python-version: 3.8}
+          - { os: windows-latest, python-version: 3.9}
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+        submodules: recursive
+
+    - name: Set up conda ${{ matrix.python-version }}
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+        activate-environment: ${{ env.CONDA_ENV }}
+
+    - name: Install dependencies
+      env:
+        MODULE: ${{ matrix.module }}
+      run: |
+        pip install numpy scipy cython coverage flaky
+        
+        if [[ "$MODULE" == "ray-deploy" ]]; then
+          pip install "xgboost_ray<0.1.14" "protobuf<4" "sqlalchemy<2"
+        fi
+
+        pip install -e ".[dev,extra]"
+      working-directory: ./python
+
+    - name: Test with pytest
+      env:
+        MODULE: ${{ matrix.module }}
+      run: |
+        if [[ "$MODULE" == "xoscar" ]]; then
+          pytest --timeout=1500 \
+            -W ignore::PendingDeprecationWarning \
+            --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar
+        else
+          pytest --cov-config=setup.cfg --cov-report=xml --cov=xoscar --durations=0 \
+            --log-level=DEBUG --timeout=200 xoscar -m ray
+        fi
+      working-directory: ./python
+
+    - name: Report coverage data
+      uses: codecov/codecov-action@v3
+      with:
+        working-directory: ./python
+        flags: unittests

@@ -129,3 +129,6 @@ dmypy.json
 .pyre/
 
 .idea
+
+# cython compiled files
+python/xoscar/**/*.c*
