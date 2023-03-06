@@ -175,7 +175,6 @@ class _ProfilingData:
     def __init__(self):
         self._data = {}
         self._call_stats = {}
-        self._subtask_stats = {}
         self._debug_task = {}
 
     def init(self, task_id: str, options=None):
@@ -204,7 +203,6 @@ class _ProfilingData:
                         break
                     r = copy.copy(r)  # shadow copy is enough.
                     r.update(self._call_stats.get(task_id).to_dict())
-                    r.update(self._subtask_stats.get(task_id).to_dict())
                     logger.warning("Profiling debug:\n%s", json.dumps(r, indent=4))
                 except Exception:
                     logger.exception("Profiling debug log failed.")
@@ -224,7 +222,6 @@ class _ProfilingData:
         r = self._data.pop(task_id, None)
         if r is not None:
             r.update(self._call_stats.pop(task_id).to_dict())
-            r.update(self._subtask_stats.pop(task_id).to_dict())
         return r
 
     def collect_actor_call(self, message, duration: float):
