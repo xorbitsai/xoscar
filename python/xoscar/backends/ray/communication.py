@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures as futures
 import itertools
@@ -24,13 +26,13 @@ from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, Dict, List, Set, Tuple, Type
 from urllib.parse import urlparse
 
+from ..._utils import Timer
+from ...debug import debug_async_timeout
+from ...errors import ServerClosed
 from ...metrics import Metrics
 from ...profiling import ProfilingData
 from ...serialization import deserialize, serialize
 from ...utils import classproperty, implements, lazy_import, lazy_import_on_load
-from ...debug import debug_async_timeout
-from ...errors import ServerClosed
-from ..._utils import Timer
 from ..communication.base import Channel, ChannelType, Client, Server
 from ..communication.core import register_client, register_server
 from ..communication.errors import ChannelClosed
@@ -213,10 +215,10 @@ class RayChannelBase(Channel, ABC):
 
     def __init__(
         self,
-        local_address: str = None,
-        dest_address: str = None,
-        channel_index: int = None,
-        channel_id: ChannelID = None,
+        local_address: str | None = None,
+        dest_address: str | None = None,
+        channel_index: int | None = None,
+        channel_id: ChannelID | None = None,
         compression=None,
     ):
         super().__init__(
@@ -256,21 +258,24 @@ class RayClientChannel(RayChannelBase):
 
     __slots__ = "_peer_actor", "_done", "_todo"
 
+    _done: asyncio.Queue
+    _todo: set
+
     def __init__(
         self,
-        dest_address: str = None,
-        channel_index: int = None,
-        channel_id: ChannelID = None,
-        compression=None,
+        dest_address: str | None = None,
+        channel_index: int | None = None,
+        channel_id: ChannelID | None = None,
+        compression: str | None = None,
     ):
         super().__init__(None, dest_address, channel_index, channel_id, compression)
         # ray actor should be created with the address as the name.
-        self._peer_actor: "ray.actor.ActorHandle" = ray.get_actor(dest_address)
+        self._peer_actor: "ray.actor.ActorHandle" = ray.get_actor(dest_address)  # type: ignore
         self._done = asyncio.Queue()
         self._todo = set()
 
-    def _submit_task(self, message: Any, object_ref: "ray.ObjectRef"):
-        async def handle_task(message: Any, object_ref: "ray.ObjectRef"):
+    def _submit_task(self, message: Any, object_ref: "ray.ObjectRef"):  # type: ignore
+        async def handle_task(message: Any, object_ref: "ray.ObjectRef"):  # type: ignore
             # use `%.500` to avoid print too long messages
             with debug_async_timeout(
                 "ray_object_retrieval_timeout",
@@ -345,12 +350,15 @@ class RayServerChannel(RayChannelBase):
 
     __slots__ = "_in_queue", "_out_queue", "_msg_recv_counter", "_msg_sent_counter"
 
+    _in_queue: asyncio.Queue
+    _out_queue: asyncio.Queue
+
     def __init__(
         self,
-        local_address: str = None,
-        channel_index: int = None,
-        channel_id: ChannelID = None,
-        compression=None,
+        local_address: str | None = None,
+        channel_index: int | None = None,
+        channel_id: ChannelID | None = None,
+        compression: str | None = None,
     ):
         super().__init__(local_address, None, channel_index, channel_id, compression)
         self._in_queue = asyncio.Queue()
@@ -404,7 +412,9 @@ class RayServer(Server):
     _server_instance = None
     _ray_actor_started = False
 
-    def __init__(self, address, channel_handler: Callable[[Channel], Coroutine] = None):
+    def __init__(
+        self, address, channel_handler: Callable[[Channel], Coroutine] | None = None
+    ):
         super().__init__(address, channel_handler)
         self._closed = asyncio.Event()
         self._channels: Dict[ChannelID, RayServerChannel] = dict()
@@ -526,13 +536,15 @@ class RayClient(Client):
 
     scheme = RayServer.scheme
 
-    def __init__(self, local_address: str, dest_address: str, channel: Channel):
+    def __init__(
+        self, local_address: str | None, dest_address: str | None, channel: Channel
+    ):
         super().__init__(local_address, dest_address, channel)
 
     @staticmethod
     @implements(Client.connect)
     async def connect(
-        dest_address: str, local_address: str = None, **kwargs
+        dest_address: str, local_address: str | None = None, **kwargs
     ) -> "Client":
         if urlparse(dest_address).scheme != RayServer.scheme:  # pragma: no cover
             raise ValueError(

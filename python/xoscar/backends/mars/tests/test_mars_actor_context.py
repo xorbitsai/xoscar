@@ -25,8 +25,9 @@ import pandas as pd
 import pytest
 
 import xoscar as mo
-from ....core import ActorRef, LocalActorRef
+
 from ....backends.allocate_strategy import RandomSubPool
+from ....core import ActorRef, LocalActorRef
 from ....debug import DebugOptions, get_debug_options, set_debug_options
 from ...router import Router
 
@@ -48,7 +49,7 @@ class DummyActor(mo.Actor):
         self.value += value
         return self.value
 
-    @add.batch
+    @add.batch  # type: ignore
     async def add(self, args_list, _kwargs_list):
         self.value += sum(v[0] for v in args_list)
         return self.value
@@ -57,7 +58,7 @@ class DummyActor(mo.Actor):
     async def add_ret(self, value):
         return self.value + value
 
-    @add_ret.batch
+    @add_ret.batch  # type: ignore
     async def add_ret(self, args_list, _kwargs_list):
         sum_val = sum(v[0] for v in args_list)
         return [self.value + sum_val for _ in args_list]

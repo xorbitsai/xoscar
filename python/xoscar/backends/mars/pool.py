@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
-import atexit
 import concurrent.futures as futures
 import configparser
 import contextlib
@@ -31,11 +32,8 @@ from dataclasses import dataclass
 from types import TracebackType
 from typing import List
 
-from ...utils import (
-    dataslots,
-    ensure_coverage,
-)
 from ..._utils import reset_id_random_seed
+from ...utils import dataslots, ensure_coverage
 from ..config import ActorPoolConfig
 from ..message import CreateActorMessage
 from ..pool import MainActorPoolBase, SubActorPoolBase, _register_message_handler
@@ -110,10 +108,10 @@ def _suspend_init_main():
 @dataclass
 class SubpoolStatus:
     # for status, 0 is succeeded, 1 is failed
-    status: int = None
-    external_addresses: List[str] = None
-    error: BaseException = None
-    traceback: TracebackType = None
+    status: int | None = None
+    external_addresses: List[str] | None = None
+    error: BaseException | None = None
+    traceback: TracebackType | None = None
 
 
 @_register_message_handler
@@ -122,14 +120,15 @@ class MainActorPool(MainActorPoolBase):
     def get_external_addresses(
         cls,
         address: str,
-        n_process: int = None,
-        ports: List[int] = None,
-        schemes: List[str] = None,
+        n_process: int | None = None,
+        ports: list[int] | None = None,
+        schemes: list[str] | None = None,
     ):
         """Get external address for every process"""
+        assert n_process is not None
         if ":" in address:
-            host, port = address.split(":", 1)
-            port = int(port)
+            host, port_str = address.split(":", 1)
+            port = int(port_str)
             if ports:
                 if len(ports) != n_process:
                     raise ValueError(
@@ -158,7 +157,7 @@ class MainActorPool(MainActorPoolBase):
         if not schemes:
             prefix_iter = itertools.repeat("")
         else:
-            prefix_iter = [f"{scheme}://" if scheme else "" for scheme in schemes]
+            prefix_iter = [f"{scheme}://" if scheme else "" for scheme in schemes]  # type: ignore
         return [
             f"{prefix}{host}:{port}"
             for port, prefix in zip([port] + sub_ports, prefix_iter)
@@ -166,8 +165,8 @@ class MainActorPool(MainActorPoolBase):
 
     @classmethod
     def gen_internal_address(
-        cls, process_index: int, external_address: str = None
-    ) -> str:
+        cls, process_index: int, external_address: str | None = None
+    ) -> str | None:
         if hasattr(asyncio, "start_unix_server"):
             return f"unixsocket:///{process_index}"
         else:
@@ -178,7 +177,7 @@ class MainActorPool(MainActorPoolBase):
         cls,
         actor_pool_config: ActorPoolConfig,
         process_index: int,
-        start_method: str = None,
+        start_method: str | None = None,
     ):
         def start_pool_in_process():
             ctx = multiprocessing.get_context(method=start_method)
@@ -293,7 +292,7 @@ class MainActorPool(MainActorPoolBase):
         ):  # pragma: no cover
             # must shutdown gracefully, or coverage info lost
             try:
-                os.kill(process.pid, signal.SIGINT)
+                os.kill(process.pid, signal.SIGINT)  # type: ignore
             except OSError:  # pragma: no cover
                 pass
             process.terminate()
@@ -328,7 +327,7 @@ class MainActorPool(MainActorPoolBase):
         if self._auto_recover == "actor":
             # need to recover all created actors
             for _, message in self._allocated_actors[address].values():
-                create_actor_message: CreateActorMessage = message
+                create_actor_message: CreateActorMessage = message  # type: ignore
                 await self.call(address, create_actor_message)
 
     async def start(self):

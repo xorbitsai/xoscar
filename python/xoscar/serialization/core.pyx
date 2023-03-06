@@ -22,6 +22,7 @@ import inspect
 import sys
 from functools import partial, wraps
 from typing import Any, Dict, List
+
 if sys.version_info[:2] < (3, 8):  # pragma: no cover
     try:
         import pickle5 as pickle  # nosec  # pylint: disable=import_pickle
@@ -33,9 +34,11 @@ else:
 import cloudpickle
 import numpy as np
 import pandas as pd
+
 from cpython cimport PyObject
 from libc.stdint cimport int32_t, int64_t, uint32_t, uint64_t, uintptr_t
 from libcpp.unordered_map cimport unordered_map
+
 # resolve pandas pickle compatibility between <1.2 and >=1.3
 try:
     from pandas.core.internals import blocks as pd_blocks
@@ -46,6 +49,7 @@ except (ImportError, AttributeError):
     pass
 
 from .._utils import NamedType
+
 from .._utils cimport TypeDispatcher
 
 BUFFER_PICKLE_PROTOCOL = max(pickle.DEFAULT_PROTOCOL, 5)

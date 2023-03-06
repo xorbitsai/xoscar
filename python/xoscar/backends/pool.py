@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures as futures
 import contextlib
@@ -23,18 +25,13 @@ import os
 import threading
 import traceback
 from abc import ABC, ABCMeta, abstractmethod
-from typing import Callable, Coroutine, Dict, List, Optional, Type, TypeVar, Union
+from typing import Any, Callable, Coroutine, Optional, Type, TypeVar, Union
 
-from ..metrics import init_metrics
-from .._utils import (
-    TypeDispatcher,
-    create_actor_ref,
-    to_binary,
-)
+from .._utils import TypeDispatcher, create_actor_ref, to_binary
 from ..api import Actor
 from ..core import ActorRef, register_local_pool
-from ..entrypoints import init_extension_entrypoints
 from ..debug import debug_async_timeout, record_message_trace
+from ..entrypoints import init_extension_entrypoints
 from ..errors import (
     ActorAlreadyExist,
     ActorNotExist,
@@ -42,11 +39,8 @@ from ..errors import (
     SendMessageFailed,
     ServerClosed,
 )
-from ..utils import (
-    implements,
-    lazy_import,
-    register_asyncio_task_timeout_detector,
-)
+from ..metrics import init_metrics
+from ..utils import implements, lazy_import, register_asyncio_task_timeout_detector
 from .allocate_strategy import AddressSpecified, allocated_type
 from .communication import Channel, Server, gen_local_address, get_server_type
 from .communication.errors import ChannelClosed
@@ -125,7 +119,7 @@ def _register_message_handler(pool_type: Type["AbstractActorPool"]):
         (MessageType.cancel, pool_type.cancel),
         (MessageType.control, pool_type.handle_control_command),
     ]:
-        pool_type._message_handler[message_type] = handler
+        pool_type._message_handler[message_type] = handler  # type: ignore
     return pool_type
 
 
@@ -146,16 +140,19 @@ class AbstractActorPool(ABC):
         "_asyncio_task_timeout_detector_task",
     )
 
+    _message_handler: dict[MessageType, Callable]
+    _process_messages: dict[bytes, asyncio.Future | asyncio.Task | None]
+
     def __init__(
         self,
         process_index: int,
         label: str,
         external_address: str,
         internal_address: str,
-        env: Dict,
+        env: dict,
         router: Router,
         config: ActorPoolConfig,
-        servers: List[Server],
+        servers: list[Server],
     ):
         # register local pool for local actor lookup.
         # The pool is weakrefed, so we don't need to unregister it.
@@ -173,9 +170,9 @@ class AbstractActorPool(ABC):
 
         # states
         # actor id -> actor
-        self._actors: Dict[bytes, Actor] = dict()
+        self._actors: dict[bytes, Actor] = dict()
         # message id -> future
-        self._process_messages: Dict[bytes, asyncio.Future] = dict()
+        self._process_messages = dict()
 
         # manage async actor callers
         self._caller = ActorCaller()
@@ -334,7 +331,7 @@ class AbstractActorPool(ABC):
         with _ErrorProcessor(
             self.external_address, message.message_id, protocol=message.protocol
         ) as processor:
-            content = True
+            content: bool | ActorPoolConfig = True
             if message.control_message_type == ControlMessageType.stop:
                 await self.stop()
             elif message.control_message_type == ControlMessageType.sync_config:
@@ -420,10 +417,10 @@ class AbstractActorPool(ABC):
         await self._send_channel(processor.result, channel)
 
     async def call(self, dest_address: str, message: _MessageBase) -> ResultMessageType:
-        return await self._caller.call(self._router, dest_address, message)
+        return await self._caller.call(self._router, dest_address, message)  # type: ignore
 
     @staticmethod
-    def _parse_config(config: Dict, kw: Dict) -> Dict:
+    def _parse_config(config: dict, kw: dict) -> dict:
         actor_pool_config: ActorPoolConfig = config.pop("actor_pool_config")
         kw["config"] = actor_pool_config
         kw["process_index"] = process_index = config.pop("process_index")
@@ -449,13 +446,13 @@ class AbstractActorPool(ABC):
 
     @classmethod
     @abstractmethod
-    async def create(cls, config: Dict) -> "AbstractActorPool":
+    async def create(cls, config: dict) -> "AbstractActorPool":
         """
         Create an actor pool.
 
         Parameters
         ----------
-        config: Dict
+        config: dict
             configurations.
 
         Returns
@@ -470,7 +467,7 @@ class AbstractActorPool(ABC):
         start_servers = [server.start() for server in self._servers]
         await asyncio.gather(*start_servers)
 
-    async def join(self, timeout: float = None):
+    async def join(self, timeout: float | None = None):
         wait_stopped = asyncio.create_task(self._stopped.wait())
 
         try:
@@ -537,7 +534,7 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
             actor_id = message.actor_id
             if actor_id in self._actors:
                 raise ActorAlreadyExist(
-                    f"Actor {actor_id} already exist, cannot create"
+                    f"Actor {actor_id!r} already exist, cannot create"
                 )
 
             actor = message.actor_cls(*message.args, **message.kwargs)
@@ -663,10 +660,10 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
 
     @staticmethod
     def _update_stored_addresses(
-        servers: List[Server],
-        raw_addresses: List[str],
+        servers: list[Server],
+        raw_addresses: list[str],
         actor_pool_config: ActorPoolConfig,
-        kw: Dict,
+        kw: dict,
     ):
         process_index = kw["process_index"]
         curr_pool_config = actor_pool_config.get_pool_config(process_index)
@@ -707,7 +704,7 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
 
     @classmethod
     async def _create_servers(
-        cls, addresses: List[str], channel_handler: Callable, config: dict
+        cls, addresses: list[str], channel_handler: Callable, config: dict
     ):
         assert len(set(addresses)) == len(addresses)
         # create servers
@@ -725,9 +722,9 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
 
     @classmethod
     @implements(AbstractActorPool.create)
-    async def create(cls, config: Dict) -> "ActorPoolType":
+    async def create(cls, config: dict) -> "ActorPoolType":
         config = config.copy()
-        kw = dict()
+        kw: dict[str, Any] = dict()
         cls._parse_config(config, kw)
         process_index: int = kw["process_index"]
         actor_pool_config = kw["config"]  # type: ActorPoolConfig
@@ -763,12 +760,12 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
 
         # create pool
         pool = cls(**kw)
-        return pool
+        return pool  # type: ignore
 
 
 ActorPoolType = TypeVar("ActorPoolType", bound=AbstractActorPool)
 MainActorPoolType = TypeVar("MainActorPoolType", bound="MainActorPoolBase")
-SubProcessHandle = Union[multiprocessing.Process, "ray.actor.ActorHandle"]
+SubProcessHandle = Union[multiprocessing.Process, "ray.actor.ActorHandle"]  # type: ignore
 
 
 class SubActorPoolBase(ActorPoolBase):
@@ -780,10 +777,10 @@ class SubActorPoolBase(ActorPoolBase):
         label: str,
         external_address: str,
         internal_address: str,
-        env: Dict,
+        env: dict,
         router: Router,
         config: ActorPoolConfig,
-        servers: List[Server],
+        servers: list[Server],
         main_address: str,
     ):
         super().__init__(
@@ -850,11 +847,11 @@ class SubActorPoolBase(ActorPoolBase):
         return await super().handle_control_command(message)
 
     @staticmethod
-    def _parse_config(config: Dict, kw: Dict) -> Dict:
+    def _parse_config(config: dict, kw: dict) -> dict:
         kw = AbstractActorPool._parse_config(config, kw)
-        config: ActorPoolConfig = kw["config"]
-        main_process_index = config.get_process_indexes()[0]
-        kw["main_address"] = config.get_pool_config(main_process_index)[
+        pool_config: ActorPoolConfig = kw["config"]
+        main_process_index = pool_config.get_process_indexes()[0]
+        kw["main_address"] = pool_config.get_pool_config(main_process_index)[
             "external_address"
         ][0]
         return kw
@@ -877,14 +874,14 @@ class MainActorPoolBase(ActorPoolBase):
         label: str,
         external_address: str,
         internal_address: str,
-        env: Dict,
+        env: dict,
         router: Router,
         config: ActorPoolConfig,
-        servers: List[Server],
-        subprocess_start_method: str = None,
-        auto_recover: Union[str, bool] = "actor",
-        on_process_down: Callable[[MainActorPoolType, str], None] = None,
-        on_process_recover: Callable[[MainActorPoolType, str], None] = None,
+        servers: list[Server],
+        subprocess_start_method: str | None = None,
+        auto_recover: str | bool = "actor",
+        on_process_down: Callable[[MainActorPoolType, str], None] | None = None,
+        on_process_recover: Callable[[MainActorPoolType, str], None] | None = None,
     ):
         super().__init__(
             process_index,
@@ -903,7 +900,7 @@ class MainActorPoolBase(ActorPoolBase):
         self._monitor_task: Optional[asyncio.Task] = None
         self._on_process_down = on_process_down
         self._on_process_recover = on_process_recover
-        self._recover_events: Dict[str, asyncio.Event] = dict()
+        self._recover_events: dict[str, asyncio.Event] = dict()
 
         # states
         self._allocated_actors: allocated_type = {
@@ -911,7 +908,7 @@ class MainActorPoolBase(ActorPoolBase):
         }
         self._allocation_lock = threading.Lock()
 
-        self.sub_processes: Dict[str, SubProcessHandle] = dict()
+        self.sub_processes: dict[str, SubProcessHandle] = dict()
 
     _process_index_gen = itertools.count()
 
@@ -1159,7 +1156,7 @@ class MainActorPoolBase(ActorPoolBase):
         return processor.result
 
     @staticmethod
-    def _parse_config(config: Dict, kw: Dict) -> Dict:
+    def _parse_config(config: dict, kw: dict) -> dict:
         kw["subprocess_start_method"] = config.pop("start_method", None)
         kw["auto_recover"] = config.pop("auto_recover", "actor")
         kw["on_process_down"] = config.pop("on_process_down", None)
@@ -1169,9 +1166,9 @@ class MainActorPoolBase(ActorPoolBase):
 
     @classmethod
     @implements(AbstractActorPool.create)
-    async def create(cls, config: Dict) -> MainActorPoolType:
+    async def create(cls, config: dict) -> MainActorPoolType:
         config = config.copy()
-        actor_pool_config: ActorPoolConfig = config.get("actor_pool_config")
+        actor_pool_config: ActorPoolConfig = config.get("actor_pool_config")  # type: ignore
         start_method = config.get("start_method", None)
         if "process_index" not in config:
             config["process_index"] = actor_pool_config.get_process_indexes()[0]
@@ -1250,20 +1247,20 @@ class MainActorPoolBase(ActorPoolBase):
         cls,
         actor_pool_config: ActorPoolConfig,
         process_index: int,
-        start_method: str = None,
+        start_method: str | None = None,
     ):
         """Start a sub actor pool"""
 
     @classmethod
     @abstractmethod
-    async def wait_sub_pools_ready(cls, create_pool_tasks: List[asyncio.Task]):
+    async def wait_sub_pools_ready(cls, create_pool_tasks: list[asyncio.Task]):
         """Wait all sub pools ready"""
 
     def attach_sub_process(self, external_address: str, process: SubProcessHandle):
         self.sub_processes[external_address] = process
 
     async def stop_sub_pools(self):
-        to_stop_processes: Dict[str, SubProcessHandle] = dict()
+        to_stop_processes: dict[str, SubProcessHandle] = dict()  # type: ignore
         for address, process in self.sub_processes.items():
             if not await self.is_sub_pool_alive(process):
                 continue
@@ -1278,7 +1275,7 @@ class MainActorPoolBase(ActorPoolBase):
         self,
         address: str,
         process: SubProcessHandle,
-        timeout: float = None,
+        timeout: float | None = None,
         force: bool = False,
     ):
         if force:
@@ -1383,39 +1380,39 @@ class MainActorPoolBase(ActorPoolBase):
     def get_external_addresses(
         cls,
         address: str,
-        n_process: int = None,
-        ports: List[int] = None,
-        schemes: List[str] = None,
+        n_process: int | None = None,
+        ports: list[int] | None = None,
+        schemes: list[str] | None = None,
     ):
         """Returns external addresses for n pool processes"""
 
     @classmethod
     @abstractmethod
     def gen_internal_address(
-        cls, process_index: int, external_address: str = None
-    ) -> str:
+        cls, process_index: int, external_address: str | None = None
+    ) -> str | None:
         """Returns internal address for pool of specified process index"""
 
 
 async def create_actor_pool(
     address: str,
     *,
-    pool_cls: Type[MainActorPoolType] = None,
-    n_process: int = None,
-    labels: List[str] = None,
-    ports: List[int] = None,
-    envs: List[Dict] = None,
-    external_address_schemes: List[str] = None,
-    enable_internal_addresses: List[bool] = None,
-    subprocess_start_method: str = None,
-    auto_recover: Union[str, bool] = "actor",
-    modules: List[str] = None,
-    suspend_sigint: bool = None,
-    use_uvloop: Union[str, bool] = "auto",
-    logging_conf: Union[Dict, None] = None,
-    on_process_down: Callable[[MainActorPoolType, str], None] = None,
-    on_process_recover: Callable[[MainActorPoolType, str], None] = None,
-    extra_conf: dict = None,
+    pool_cls: Type[MainActorPoolType] | None = None,
+    n_process: int | None = None,
+    labels: list[str] | None = None,
+    ports: list[int] | None = None,
+    envs: list[dict] | None = None,
+    external_address_schemes: list[str] | None = None,
+    enable_internal_addresses: list[bool] | None = None,
+    subprocess_start_method: str | None = None,
+    auto_recover: str | bool = "actor",
+    modules: list[str] | None = None,
+    suspend_sigint: bool | None = None,
+    use_uvloop: str | bool = "auto",
+    logging_conf: dict | None = None,
+    on_process_down: Callable[[MainActorPoolType, str], None] | None = None,
+    on_process_recover: Callable[[MainActorPoolType, str], None] | None = None,
+    extra_conf: dict | None = None,
     **kwargs,
 ) -> MainActorPoolType:
     if n_process is None:
@@ -1453,6 +1450,7 @@ async def create_actor_pool(
         except ImportError:
             use_uvloop = False
 
+    assert pool_cls is not None
     external_addresses = pool_cls.get_external_addresses(
         address, n_process=n_process, ports=ports, schemes=external_address_schemes
     )
@@ -1473,7 +1471,7 @@ async def create_actor_pool(
         external_addresses[0],
         modules=modules,
         suspend_sigint=suspend_sigint,
-        use_uvloop=use_uvloop,
+        use_uvloop=use_uvloop,  # type: ignore
         logging_conf=logging_conf,
         kwargs=kwargs,
     )
@@ -1493,7 +1491,7 @@ async def create_actor_pool(
             env=envs[i] if envs else None,
             modules=modules,
             suspend_sigint=suspend_sigint,
-            use_uvloop=use_uvloop,
+            use_uvloop=use_uvloop,  # type: ignore
             logging_conf=logging_conf,
             kwargs=kwargs,
         )

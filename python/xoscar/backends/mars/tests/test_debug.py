@@ -24,6 +24,7 @@ from typing import List
 import pytest
 
 import xoscar as mo
+
 from ....debug import get_debug_options, reload_debug_opts_from_env
 
 
@@ -103,7 +104,7 @@ async def debug_logger():
 
 
 @contextmanager
-def cut_file_log(log_file) -> StringIO:
+def cut_file_log(log_file) -> StringIO:  # type: ignore
     dest = StringIO()
     pos = log_file.tell()
     try:

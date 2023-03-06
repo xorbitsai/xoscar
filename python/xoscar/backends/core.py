@@ -13,14 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 import copy
 import logging
-from typing import Dict, Union
+from typing import Union
 
-from ..profiling import ProfilingData
-from ..errors import ServerClosed
 from .._utils import Timer
+from ..errors import ServerClosed
+from ..profiling import ProfilingData
 from .communication import Client
 from .message import DeserializeMessageFailed, ErrorMessage, ResultMessage, _MessageBase
 from .router import Router
@@ -32,11 +34,12 @@ logger = logging.getLogger(__name__)
 class ActorCaller:
     __slots__ = "_client_to_message_futures", "_clients"
 
+    _client_to_message_futures: dict[Client, dict[bytes, asyncio.Future]]
+    _clients: dict[Client, asyncio.Task]
+
     def __init__(self):
-        self._client_to_message_futures: Dict[
-            Client, Dict[bytes, asyncio.Future]
-        ] = dict()
-        self._clients: Dict[Client, asyncio.Task] = dict()
+        self._client_to_message_futures = dict()
+        self._clients = dict()
 
     async def get_client(self, router: Router, dest_address: str) -> Client:
         client = await router.get_client(dest_address, from_who=self)
@@ -73,9 +76,9 @@ class ActorCaller:
             except DeserializeMessageFailed as e:
                 message_id = e.message_id
                 future = self._client_to_message_futures[client].pop(message_id)
-                future.set_exception(e.__cause__)
+                future.set_exception(e.__cause__)  # type: ignore
             except Exception as e:  # noqa: E722  # pylint: disable=bare-except
-                message_futures = self._client_to_message_futures.get(client)
+                message_futures = self._client_to_message_futures[client]
                 self._client_to_message_futures[client] = dict()
                 for future in message_futures.values():
                     future.set_exception(copy.copy(e))
@@ -92,7 +95,7 @@ class ActorCaller:
                     pass
                 await asyncio.sleep(0)
 
-        message_futures = self._client_to_message_futures.get(client)
+        message_futures = self._client_to_message_futures[client]
         self._client_to_message_futures[client] = dict()
         error = ServerClosed(f"Remote server {client.dest_address} closed")
         for future in message_futures.values():
@@ -104,7 +107,7 @@ class ActorCaller:
         dest_address: str,
         message: _MessageBase,
         wait: bool = True,
-    ) -> Union[ResultMessage, ErrorMessage, asyncio.Future]:
+    ) -> ResultMessage | ErrorMessage | asyncio.Future:
         client = await self.get_client(router, dest_address)
         loop = asyncio.get_running_loop()
         wait_response = loop.create_future()

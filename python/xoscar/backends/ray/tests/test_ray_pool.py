@@ -15,14 +15,16 @@
 
 import asyncio
 import os
+from unittest import mock
 
 import pytest
 
 import xoscar as mo
+
 from ....context import get_context
-from ....tests.core import mock, require_ray
-from ....utils import lazy_import
 from ....errors import ServerClosed
+from ....tests.core import require_ray
+from ....utils import lazy_import
 from ...allocate_strategy import MainPool, ProcessIndex
 from ..backend import RayActorBackend
 from ..pool import RayMainActorPool, RayPoolState, create_actor_pool

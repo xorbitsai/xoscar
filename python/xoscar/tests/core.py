@@ -14,7 +14,6 @@
 
 import fnmatch
 import itertools
-from unittest import mock
 
 import pytest
 

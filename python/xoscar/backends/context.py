@@ -13,17 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 from dataclasses import dataclass
 from typing import Tuple, Type, Union
 
-from ..utils import dataslots
+from .._utils import create_actor_ref, to_binary
 from ..api import Actor
 from ..context import BaseActorContext
 from ..core import ActorRef, create_local_actor_ref
 from ..debug import debug_async_timeout, detect_cycle_send
 from ..errors import CannotCancelTask
-from .._utils import create_actor_ref, to_binary
+from ..utils import dataslots
 from .allocate_strategy import AddressSpecified, AllocateStrategy
 from .core import ActorCaller
 from .message import (
@@ -55,7 +57,7 @@ class MarsActorContext(BaseActorContext):
 
     support_allocate_strategy = True
 
-    def __init__(self, address: str = None):
+    def __init__(self, address: str | None = None):
         BaseActorContext.__init__(self, address)
         self._caller = ActorCaller()
 
@@ -90,7 +92,12 @@ class MarsActorContext(BaseActorContext):
         return await future
 
     async def create_actor(
-        self, actor_cls: Type[Actor], *args, uid=None, address: str = None, **kwargs
+        self,
+        actor_cls: Type[Actor],
+        *args,
+        uid=None,
+        address: str | None = None,
+        **kwargs,
     ) -> ActorRef:
         router = Router.get_instance_or_empty()
         address = address or self._address or router.external_address
@@ -109,7 +116,7 @@ class MarsActorContext(BaseActorContext):
             protocol=DEFAULT_PROTOCOL,
         )
         future = await self._call(address, create_actor_message, wait=False)
-        result = await self._wait(future, address, create_actor_message)
+        result = await self._wait(future, address, create_actor_message)  # type: ignore
         return self._process_result_message(result)
 
     async def has_actor(self, actor_ref: ActorRef) -> bool:
@@ -117,7 +124,7 @@ class MarsActorContext(BaseActorContext):
             new_message_id(), actor_ref, protocol=DEFAULT_PROTOCOL
         )
         future = await self._call(actor_ref.address, message, wait=False)
-        result = await self._wait(future, actor_ref.address, message)
+        result = await self._wait(future, actor_ref.address, message)  # type: ignore
         return self._process_result_message(result)
 
     async def destroy_actor(self, actor_ref: ActorRef):
@@ -125,7 +132,7 @@ class MarsActorContext(BaseActorContext):
             new_message_id(), actor_ref, protocol=DEFAULT_PROTOCOL
         )
         future = await self._call(actor_ref.address, message, wait=False)
-        result = await self._wait(future, actor_ref.address, message)
+        result = await self._wait(future, actor_ref.address, message)  # type: ignore
         return self._process_result_message(result)
 
     async def kill_actor(self, actor_ref: ActorRef, force: bool = True):
@@ -138,7 +145,7 @@ class MarsActorContext(BaseActorContext):
             protocol=DEFAULT_PROTOCOL,
         )
         main_address = self._process_result_message(
-            await self._call(actor_ref.address, control_message)
+            await self._call(actor_ref.address, control_message)  # type: ignore
         )
         real_actor_ref = await self.actor_ref(actor_ref)
         if real_actor_ref.address == main_address:
@@ -153,7 +160,7 @@ class MarsActorContext(BaseActorContext):
         )
         # stop server
         result = await self._call(main_address, stop_message)
-        return self._process_result_message(result)
+        return self._process_result_message(result)  # type: ignore
 
     async def actor_ref(self, *args, **kwargs):
         actor_ref = create_actor_ref(*args, **kwargs)
@@ -172,9 +179,9 @@ class MarsActorContext(BaseActorContext):
         actor_ref: ActorRef,
         message: Tuple,
         wait_response: bool = True,
-        profiling_context: ProfilingContext = None,
+        profiling_context: ProfilingContext | None = None,
     ):
-        message = SendMessage(
+        send_message = SendMessage(
             new_message_id(),
             actor_ref,
             message,
@@ -186,14 +193,14 @@ class MarsActorContext(BaseActorContext):
         with debug_async_timeout(
             "actor_call_timeout",
             "Calling %.500r on %s at %s timed out",
-            message.content,
+            send_message.content,
             actor_ref.uid,
             actor_ref.address,
         ):
-            detect_cycle_send(message, wait_response)
-            future = await self._call(actor_ref.address, message, wait=False)
+            detect_cycle_send(send_message, wait_response)
+            future = await self._call(actor_ref.address, send_message, wait=False)
             if wait_response:
-                result = await self._wait(future, actor_ref.address, message)
+                result = await self._wait(future, actor_ref.address, send_message)  # type: ignore
                 return self._process_result_message(result)
             else:
                 return future
@@ -203,9 +210,11 @@ class MarsActorContext(BaseActorContext):
             new_message_id(), address, cancel_message_id, protocol=DEFAULT_PROTOCOL
         )
         result = await self._call(address, message)
-        return self._process_result_message(result)
+        return self._process_result_message(result)  # type: ignore
 
-    async def wait_actor_pool_recovered(self, address: str, main_address: str = None):
+    async def wait_actor_pool_recovered(
+        self, address: str, main_address: str | None = None
+    ):
         if main_address is None:
             # get main_pool_address
             control_message = ControlMessage(
@@ -216,7 +225,7 @@ class MarsActorContext(BaseActorContext):
                 protocol=DEFAULT_PROTOCOL,
             )
             main_address = self._process_result_message(
-                await self._call(address, control_message)
+                await self._call(address, control_message)  # type: ignore
             )
 
         # if address is main pool, it is never recovered
@@ -230,7 +239,7 @@ class MarsActorContext(BaseActorContext):
             None,
             protocol=DEFAULT_PROTOCOL,
         )
-        self._process_result_message(await self._call(main_address, control_message))
+        self._process_result_message(await self._call(main_address, control_message))  # type: ignore
 
     async def get_pool_config(self, address: str):
         control_message = ControlMessage(
@@ -240,4 +249,4 @@ class MarsActorContext(BaseActorContext):
             None,
             protocol=DEFAULT_PROTOCOL,
         )
-        return self._process_result_message(await self._call(address, control_message))
+        return self._process_result_message(await self._call(address, control_message))  # type: ignore

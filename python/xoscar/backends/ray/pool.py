@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 import datetime
 import inspect
@@ -27,8 +29,8 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import List, Optional
 
-from ...utils import ensure_coverage, lazy_import, retry_callable
 from ... import ServerClosed
+from ...utils import ensure_coverage, lazy_import, retry_callable
 from ..config import ActorPoolConfig
 from ..message import CreateActorMessage
 from ..pool import (
@@ -68,13 +70,14 @@ class RayMainActorPool(MainActorPoolBase):
     def get_external_addresses(
         cls,
         address: str,
-        n_process: int = None,
-        ports: List[int] = None,
-        schemes: List[str] = None,
+        n_process: int | None = None,
+        ports: list[int] | None = None,
+        schemes: list[str] | None = None,
     ):
         assert (
             not ports
         ), f"ports should be none when actor pool running on ray, but got {ports}"
+        assert n_process is not None
         pg_name, bundle_index, process_index = process_address_to_placement(address)
         return [
             process_placement_to_address(pg_name, bundle_index, process_index + i)
@@ -83,8 +86,8 @@ class RayMainActorPool(MainActorPoolBase):
 
     @classmethod
     def gen_internal_address(
-        cls, process_index: int, external_address: str = None
-    ) -> str:
+        cls, process_index: int, external_address: str | None = None
+    ) -> str | None:
         return external_address
 
     @classmethod
@@ -118,7 +121,7 @@ class RayMainActorPool(MainActorPoolBase):
         cls,
         actor_pool_config: ActorPoolConfig,
         process_index: int,
-        start_method: str = None,
+        start_method: str | None = None,
     ):
         config = actor_pool_config.get_pool_config(process_index)
         external_addresses = config["external_address"]
@@ -171,27 +174,27 @@ class RayMainActorPool(MainActorPoolBase):
         process = self.sub_processes[address]
         # ray call will error when actor is restarting
         await retry_callable(
-            process.state.remote, ex_type=ray.exceptions.RayActorError, sync=False
+            process.state.remote, ex_type=ray.exceptions.RayActorError, sync=False  # type: ignore
         )()
-        await process.start.remote()
+        await process.start.remote()  # type: ignore
 
         if self._auto_recover == "actor":
             # need to recover all created actors
             for _, message in self._allocated_actors[address].values():
-                create_actor_message: CreateActorMessage = message
+                create_actor_message: CreateActorMessage = message  # type: ignore
                 await self.call(address, create_actor_message)
-            await process.mark_service_ready.remote()
+            await process.mark_service_ready.remote()  # type: ignore
 
     async def kill_sub_pool(
         self,
-        process: "ray.actor.ActorHandle",
+        process: "ray.actor.ActorHandle",  # type: ignore
         force: bool = False,
         no_restart: bool = False,
     ):
         logger.info("Start to kill ray sub pool %s", process)
         await kill_and_wait(process, no_restart=no_restart)
 
-    async def is_sub_pool_alive(self, process: "ray.actor.ActorHandle"):
+    async def is_sub_pool_alive(self, process: "ray.actor.ActorHandle"):  # type: ignore
         try:
             if self._auto_recover == "process":
                 return await process.state.remote() in [

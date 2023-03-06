@@ -14,10 +14,10 @@
 # limitations under the License.
 
 import asyncio
+from unittest import mock
 
 import pytest
 
-from .core import mock
 from ..backends.core import ActorCaller
 from ..backends.router import Router
 from ..errors import ServerClosed

@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import logging
 from typing import Dict, Optional, Tuple
 
@@ -27,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 
 class SimpleMetric:
+    _value: int | float
+
     def __init__(
         self, name: str, description: str = "", tag_keys: Optional[Tuple[str]] = None
     ):

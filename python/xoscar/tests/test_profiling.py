@@ -14,12 +14,11 @@
 # limitations under the License.
 
 import asyncio
-import dataclasses
 import os
+from unittest import mock
 
 import pytest
 
-from .core import check_dict_structure_same, mock
 from ..backends.message import SendMessage
 from ..profiling import (
     DummyOperator,
@@ -28,6 +27,7 @@ from ..profiling import (
     _CallStats,
     _ProfilingOptions,
 )
+from .core import check_dict_structure_same
 
 
 def test_profiling_data():

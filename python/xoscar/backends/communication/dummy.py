@@ -13,14 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures as futures
 import weakref
 from typing import Any, Callable, Coroutine, Dict, Type
 from urllib.parse import urlparse
 
-from ...utils import abc_type_require_weakref_slot, classproperty, implements
 from ...errors import ServerClosed
+from ...utils import abc_type_require_weakref_slot, classproperty, implements
 from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server
 from .errors import ChannelClosed
@@ -42,9 +44,9 @@ class DummyChannel(Channel):
         in_queue: asyncio.Queue,
         out_queue: asyncio.Queue,
         closed: asyncio.Event,
-        local_address: str = None,
-        dest_address: str = None,
-        compression=None,
+        local_address: str | None = None,
+        dest_address: str | None = None,
+        compression: str | None = None,
     ):
         super().__init__(
             local_address=local_address,
@@ -95,11 +97,17 @@ class DummyServer(Server):
         else tuple()
     )
 
-    _address_to_instances: Dict[str, "DummyServer"] = weakref.WeakValueDictionary()
-    scheme = "dummy"
+    _address_to_instances: weakref.WeakValueDictionary[
+        str, "DummyServer"
+    ] = weakref.WeakValueDictionary()
+    _channels: list[ChannelType]
+    _tasks: list[asyncio.Task]
+    scheme: str | None = "dummy"
 
     def __init__(
-        self, address: str, channel_handler: Callable[[Channel], Coroutine] = None
+        self,
+        address: str,
+        channel_handler: Callable[[Channel], Coroutine] | None = None,
     ):
         super().__init__(address, channel_handler)
         self._closed = asyncio.Event()
@@ -189,15 +197,17 @@ class DummyServer(Server):
 class DummyClient(Client):
     __slots__ = ("_task",)
 
-    scheme = DummyServer.scheme
+    scheme: str | None = DummyServer.scheme
 
-    def __init__(self, local_address: str, dest_address: str, channel: Channel):
+    def __init__(
+        self, local_address: str | None, dest_address: str | None, channel: Channel
+    ):
         super().__init__(local_address, dest_address, channel)
 
     @staticmethod
     @implements(Client.connect)
     async def connect(
-        dest_address: str, local_address: str = None, **kwargs
+        dest_address: str, local_address: str | None = None, **kwargs
     ) -> "Client":
         if urlparse(dest_address).scheme != DummyServer.scheme:  # pragma: no cover
             raise ValueError(
@@ -212,7 +222,8 @@ class DummyClient(Client):
         if server.stopped:  # pragma: no cover
             raise ConnectionError(f"Dummy server {dest_address} closed")
 
-        q1, q2 = asyncio.Queue(), asyncio.Queue()
+        q1: asyncio.Queue = asyncio.Queue()
+        q2: asyncio.Queue = asyncio.Queue()
         closed = asyncio.Event()
         client_channel = DummyChannel(q1, q2, closed, local_address=local_address)
         server_channel = DummyChannel(q2, q1, closed, dest_address=local_address)

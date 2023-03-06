@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 from enum import Enum
 from types import TracebackType
 from typing import Any, Type
@@ -50,9 +52,9 @@ class _MessageBase:
 
     def __init__(
         self,
-        message_id: bytes = None,
+        message_id: bytes | None = None,
         protocol: int = DEFAULT_PROTOCOL,
-        message_trace: list = None,
+        message_trace: list | None = None,
         profiling_context: Any = None,
     ): ...
     def __repr__(self): ...
@@ -66,12 +68,12 @@ class ControlMessage(_MessageBase):
 
     def __init__(
         self,
-        message_id: bytes = None,
-        address: str = None,
-        control_message_type: ControlMessageType = None,
+        message_id: bytes | None = None,
+        address: str | None = None,
+        control_message_type: ControlMessageType | None = None,
         content: Any = None,
         protocol: int = DEFAULT_PROTOCOL,
-        message_trace: list = None,
+        message_trace: list | None = None,
     ): ...
 
 class ResultMessage(_MessageBase):
@@ -81,10 +83,10 @@ class ResultMessage(_MessageBase):
 
     def __init__(
         self,
-        message_id: bytes = None,
+        message_id: bytes | None = None,
         result: Any = None,
         protocol: int = DEFAULT_PROTOCOL,
-        message_trace: list = None,
+        message_trace: list | None = None,
         profiling_context: Any = None,
     ): ...
 
@@ -99,14 +101,14 @@ class ErrorMessage(_MessageBase):
 
     def __init__(
         self,
-        message_id: bytes = None,
-        address: str = None,
+        message_id: bytes | None = None,
+        address: str | None = None,
         pid: int = -1,
-        error_type: Type[BaseException] = None,
-        error: BaseException = None,
-        traceback: TracebackType = None,
+        error_type: Type[BaseException] | None = None,
+        error: BaseException | None = None,
+        traceback: TracebackType | None = None,
         protocol: int = DEFAULT_PROTOCOL,
-        message_trace: list = None,
+        message_trace: list | None = None,
     ): ...
     def as_instanceof_cause(self) -> BaseException: ...
 
@@ -122,15 +124,15 @@ class CreateActorMessage(_MessageBase):
 
     def __init__(
         self,
-        message_id: bytes = None,
-        actor_cls: Type = None,
-        actor_id: bytes = None,
-        args: tuple = None,
-        kwargs: dict = None,
+        message_id: bytes | None = None,
+        actor_cls: Type | None = None,
+        actor_id: bytes | None = None,
+        args: tuple | None = None,
+        kwargs: dict | None = None,
         allocate_strategy: Any = None,
         from_main: bool = False,
         protocol: int = DEFAULT_PROTOCOL,
-        message_trace: list = None,
+        message_trace: list | None = None,
     ): ...
 
 class DestroyActorMessage(_MessageBase):
@@ -141,11 +143,11 @@ class DestroyActorMessage(_MessageBase):
 
     def __init__(
         self,
-        message_id: bytes = None,
+        message_id: bytes | None = None,
         actor_ref: ActorRef = None,
         from_main: bool = False,
         protocol: int = DEFAULT_PROTOCOL,
-        message_trace: list = None,
+        message_trace: list | None = None,
     ): ...
 
 class HasActorMessage(_MessageBase):
@@ -155,10 +157,10 @@ class HasActorMessage(_MessageBase):
 
     def __init__(
         self,
-        message_id: bytes = None,
+        message_id: bytes | None = None,
         actor_ref: ActorRef = None,
         protocol: int = DEFAULT_PROTOCOL,
-        message_trace: list = None,
+        message_trace: list | None = None,
     ): ...
 
 class ActorRefMessage(_MessageBase):
@@ -168,10 +170,10 @@ class ActorRefMessage(_MessageBase):
 
     def __init__(
         self,
-        message_id: bytes = None,
+        message_id: bytes | None = None,
         actor_ref: ActorRef = None,
         protocol: int = DEFAULT_PROTOCOL,
-        message_trace: list = None,
+        message_trace: list | None = None,
     ): ...
 
 class SendMessage(_MessageBase):
@@ -182,11 +184,11 @@ class SendMessage(_MessageBase):
 
     def __init__(
         self,
-        message_id: bytes = None,
+        message_id: bytes | None = None,
         actor_ref: ActorRef = None,
         content: object = None,
         protocol: int = DEFAULT_PROTOCOL,
-        message_trace: list = None,
+        message_trace: list | None = None,
         profiling_context: Any = None,
     ): ...
 
@@ -201,14 +203,16 @@ class CancelMessage(_MessageBase):
 
     def __init__(
         self,
-        message_id: bytes = None,
-        address: str = None,
-        cancel_message_id: bytes = None,
+        message_id: bytes | None = None,
+        address: str | None = None,
+        cancel_message_id: bytes | None = None,
         protocol: int = DEFAULT_PROTOCOL,
-        message_trace: list = None,
+        message_trace: list | None = None,
     ): ...
 
 class DeserializeMessageFailed(RuntimeError):
+    message_id: bytes
+
     def __init__(self, message_id: bytes): ...
     def __str__(self): ...
 

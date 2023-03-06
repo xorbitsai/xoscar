@@ -12,12 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from __future__ import annotations
+
 import logging
 from typing import Dict
 
+from ..._utils import Timer
 from ...backend import BaseActorBackend, register_backend
 from ...utils import lazy_import
-from ..._utils import Timer
 from ..context import MarsActorContext
 from .driver import RayActorDriver
 from .pool import RayMainPool
@@ -45,7 +48,9 @@ class RayActorBackend(BaseActorBackend):
         return RayActorDriver
 
     @classmethod
-    async def _create_ray_pools(cls, address: str, n_process: int = None, **kwargs):
+    async def _create_ray_pools(
+        cls, address: str, n_process: int | None = None, **kwargs
+    ):
         # pop `n_io_process` from kwargs as ray doesn't need this
         kwargs.pop("n_io_process", 0)
         pg_name, bundle_index, _ = process_address_to_placement(address)
@@ -78,7 +83,9 @@ class RayActorBackend(BaseActorBackend):
         return pool_handle
 
     @classmethod
-    async def create_actor_pool(cls, address: str, n_process: int = None, **kwargs):
+    async def create_actor_pool(
+        cls, address: str, n_process: int | None = None, **kwargs
+    ):
         with Timer() as timer:
             pool_handle = await cls._create_ray_pools(address, n_process, **kwargs)
         logger.info(
@@ -99,8 +106,8 @@ class RayActorBackend(BaseActorBackend):
 class RayPoolHandle:
     def __init__(
         self,
-        main_pool: "ray.actor.ActorHandle",
-        sub_pools: Dict[str, "ray.actor.ActorHandle"],
+        main_pool: "ray.actor.ActorHandle",  # type: ignore
+        sub_pools: Dict[str, "ray.actor.ActorHandle"],  # type: ignore
     ):
         self.main_pool = main_pool
         # Hold sub_pool actor handles to avoid gc.

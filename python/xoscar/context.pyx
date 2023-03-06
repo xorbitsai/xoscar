@@ -15,8 +15,8 @@
 
 from urllib.parse import urlparse
 
-from .core cimport ActorRef
 from ._utils cimport new_actor_id
+from .core cimport ActorRef
 
 
 cdef dict _backend_context_cls = dict()

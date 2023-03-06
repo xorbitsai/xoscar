@@ -18,10 +18,10 @@ import inspect
 
 import pytest
 
-from ....tests.core import require_ray
-from ....utils import ensure_coverage, lazy_import
 from ....core import ActorRef
 from ....errors import ServerClosed
+from ....tests.core import require_ray
+from ....utils import ensure_coverage, lazy_import
 from ...communication.base import ChannelType
 from ...message import SendMessage
 from ..communication import Channel, ChannelID, RayClient, RayServer, msg_to_simple_str
@@ -57,7 +57,7 @@ class ServerActor:
 
     async def __on_ray_recv__(self, channel_id: ChannelID, message):
         """Method for communication based on ray actors"""
-        return await self.server.__on_ray_recv__(channel_id, message)
+        return await self.server.__on_ray_recv__(channel_id, message)  # type: ignore
 
     async def server(self, method_name, *args, **kwargs):
         result = getattr(self.server, method_name)(*args, **kwargs)

@@ -13,9 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, Type
+from typing import Any, Callable, Coroutine, Type
 
 from ...utils import classproperty, implements
 
@@ -34,10 +36,13 @@ class Channel(ABC):
 
     __slots__ = "local_address", "dest_address", "compression"
 
-    name = None
+    name: str | None = None
 
     def __init__(
-        self, local_address: str = None, dest_address: str = None, compression=None
+        self,
+        local_address: str | None = None,
+        dest_address: str | None = None,
+        compression: str | None = None,
     ):
         self.local_address = local_address
         self.dest_address = dest_address
@@ -92,7 +97,7 @@ class Channel(ABC):
         """
 
     @property
-    def info(self) -> Dict:
+    def info(self) -> dict:
         return {
             "name": self.name,
             "compression": self.compression,
@@ -105,10 +110,12 @@ class Channel(ABC):
 class Server(ABC):
     __slots__ = "address", "channel_handler"
 
-    scheme = None
+    scheme: str | None = None
 
     def __init__(
-        self, address: str, channel_handler: Callable[[Channel], Coroutine] = None
+        self,
+        address: str,
+        channel_handler: Callable[[Channel], Coroutine] | None = None,
     ):
         self.address = address
         self.channel_handler = channel_handler
@@ -139,7 +146,7 @@ class Server(ABC):
 
     @staticmethod
     @abstractmethod
-    async def create(config: Dict) -> "Server":
+    async def create(config: dict) -> "Server":
         """
         Create a server instance according to configuration.
 
@@ -196,7 +203,7 @@ class Server(ABC):
         """
 
     @property
-    def info(self) -> Dict:
+    def info(self) -> dict:
         return {
             "name": self.scheme,
             "address": self.address,
@@ -219,9 +226,11 @@ class Server(ABC):
 class Client(ABC):
     __slots__ = "local_address", "dest_address", "channel"
 
-    scheme = None
+    scheme: str | None = None
 
-    def __init__(self, local_address: str, dest_address: str, channel: Channel):
+    def __init__(
+        self, local_address: str | None, dest_address: str | None, channel: Channel
+    ):
         self.local_address = local_address
         self.dest_address = dest_address
         self.channel = channel
@@ -241,7 +250,7 @@ class Client(ABC):
     @staticmethod
     @abstractmethod
     async def connect(
-        dest_address: str, local_address: str = None, **kwargs
+        dest_address: str, local_address: str | None = None, **kwargs
     ) -> "Client":
         """
         Create a client that is able to connect to some server.
@@ -291,7 +300,7 @@ class Client(ABC):
         return self.channel.closed
 
     @property
-    def info(self) -> Dict:
+    def info(self) -> dict:
         return {
             "local_address": self.local_address,
             "dest_address": self.dest_address,

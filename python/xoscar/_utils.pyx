@@ -21,14 +21,14 @@ import time
 import warnings
 from functools import partial
 from random import getrandbits
-from weakref import WeakSet
 from typing import AsyncGenerator
+from weakref import WeakSet
 
 from libc.stdint cimport uint_fast64_t
 from libc.stdlib cimport free, malloc
 
-from .libcpp cimport mt19937_64
 from .core cimport ActorRef, LocalActorRef
+from .libcpp cimport mt19937_64
 
 
 cdef mt19937_64 _rnd_gen

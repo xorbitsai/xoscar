@@ -53,4 +53,5 @@ _T = TypeVar("_T")
 ActorRefType = Union[ActorRef, _T]
 
 from . import _version
-__version__ = _version.get_versions()['version']
+
+__version__ = _version.get_versions()["version"]

@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 import dataclasses
 import functools
@@ -20,29 +22,18 @@ import importlib
 import inspect
 import io
 import logging
-import numbers
 import os
+import pkgutil
 import random
 import socket
 import sys
 import time
 import uuid
-import pkgutil
 from abc import ABC
 from types import TracebackType
-from typing import (
-    Callable,
-    Dict,
-    Optional,
-    List,
-    Set,
-    Tuple,
-    Type,
-    Union,
-)
+from typing import Callable, Type
 
 from ._utils import to_binary, to_str
-
 
 # Please refer to https://bugs.python.org/issue41451
 try:
@@ -60,8 +51,9 @@ logger = logging.getLogger(__name__)
 
 _memory_size_indices = {"": 0, "k": 1, "m": 2, "g": 3, "t": 4}
 
-def parse_readable_size(value: Union[str, int, float]) -> Tuple[float, bool]:
-    if isinstance(value, numbers.Number):
+
+def parse_readable_size(value: str | int | float) -> tuple[float, bool]:
+    if isinstance(value, (int, float)):
         return float(value), False
 
     value = value.strip().lower()
@@ -82,11 +74,11 @@ def parse_readable_size(value: Union[str, int, float]) -> Tuple[float, bool]:
 
 def wrap_exception(
     exc: BaseException,
-    bases: Tuple[Type] = None,
-    wrap_name: str = None,
-    message: str = None,
-    traceback: Optional[TracebackType] = None,
-    attr_dict: dict = None,
+    bases: tuple[Type] | tuple | None = None,
+    wrap_name: str | None = None,
+    message: str | None = None,
+    traceback: TracebackType | None = None,
+    attr_dict: dict | None = None,
 ) -> BaseException:
     """Generate an exception wraps the cause exception."""
 
@@ -166,23 +158,23 @@ class classproperty:
 
 LOW_PORT_BOUND = 10000
 HIGH_PORT_BOUND = 65535
-_local_occupied_ports = set()
+_local_occupied_ports: set = set()
 
 
-def _get_ports_from_netstat() -> Set[int]:
+def _get_ports_from_netstat() -> set[int]:
     import subprocess
 
     while True:
         p = subprocess.Popen("netstat -a -n -p tcp".split(), stdout=subprocess.PIPE)
         try:
             outs, _ = p.communicate(timeout=5)
-            outs = outs.split(to_binary(os.linesep))
+            lines = outs.split(to_binary(os.linesep))
             occupied = set()
-            for line in outs:
+            for line in lines:
                 if b"." not in line:
                     continue
-                line = to_str(line)
-                for part in line.split():
+                line_str: str = to_str(line)
+                for part in line_str.split():
                     # in windows, netstat uses ':' to separate host and port
                     part = part.replace(":", ".")
                     if "." in part:
@@ -199,7 +191,7 @@ def _get_ports_from_netstat() -> Set[int]:
             continue
 
 
-def get_next_port(typ: int = None, occupy: bool = True) -> int:
+def get_next_port(typ: int | None = None, occupy: bool = True) -> int:
     import psutil
 
     if sys.platform.lower().startswith("win"):
@@ -234,15 +226,15 @@ def get_next_port(typ: int = None, occupy: bool = True) -> int:
 
 def lazy_import(
     name: str,
-    package: str = None,
-    globals: Dict = None,  # pylint: disable=redefined-builtin
-    locals: Dict = None,  # pylint: disable=redefined-builtin
-    rename: str = None,
+    package: str | None = None,
+    globals: dict | None = None,  # pylint: disable=redefined-builtin
+    locals: dict | None = None,  # pylint: disable=redefined-builtin
+    rename: str | None = None,
     placeholder: bool = False,
 ):
     rename = rename or name
     prefix_name = name.split(".", 1)[0]
-    globals = globals or inspect.currentframe().f_back.f_globals
+    globals = globals or inspect.currentframe().f_back.f_globals  # type: ignore
 
     class LazyModule:
         def __init__(self):
@@ -325,7 +317,7 @@ def patch_asyncio_task_create_time():  # pragma: no cover
 
 
 async def asyncio_task_timeout_detector(
-    check_interval: int, task_timeout_seconds: int, task_exclude_filters: List[str]
+    check_interval: int, task_timeout_seconds: int, task_exclude_filters: list[str]
 ):
     task_exclude_filters.append("asyncio_task_timeout_detector")
     while True:  # pragma: no cover
@@ -357,10 +349,10 @@ async def asyncio_task_timeout_detector(
 
 
 def register_asyncio_task_timeout_detector(
-    check_interval: int = None,
-    task_timeout_seconds: int = None,
-    task_exclude_filters: List[str] = None,
-) -> Optional[asyncio.Task]:  # pragma: no cover
+    check_interval: int | None = None,
+    task_timeout_seconds: int | None = None,
+    task_exclude_filters: list[str] | None = None,
+) -> asyncio.Task | None:  # pragma: no cover
     """Register a asyncio task which print timeout task periodically."""
     check_interval = check_interval or int(
         os.environ.get("MARS_DEBUG_ASYNCIO_TASK_TIMEOUT_CHECK_INTERVAL", -1)
@@ -372,10 +364,10 @@ def register_asyncio_task_timeout_detector(
         )
         if not task_exclude_filters:
             # Ignore mars/oscar by default since it has some long-running coroutines.
-            task_exclude_filters = os.environ.get(
-                "MARS_DEBUG_ASYNCIO_TASK_EXCLUDE_FILTERS", "mars/oscar"
+            task_exclude_filter = os.environ.get(
+                "MARS_DEBUG_ASYNCIO_TASK_EXCLUDE_FILTERS", "xoscar"
             )
-            task_exclude_filters = task_exclude_filters.split(";")
+            task_exclude_filters = task_exclude_filter.split(";")
         if sys.version_info[:2] < (3, 7):
             logger.warning(
                 "asyncio tasks timeout detector is not supported under python %s",
@@ -417,7 +409,7 @@ def retry_callable(
     ex_type: type = Exception,
     wait_interval=1,
     max_retries=-1,
-    sync: bool = None,
+    sync: bool | None = None,
 ):
     if inspect.iscoroutinefunction(callable_) or sync is False:
 

@@ -13,20 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
 import re
 import sys
 import time
+from unittest import mock
 
 import pytest
 
-from ....tests.core import mock, require_ucx
-from ....utils import get_next_port
 from .... import Actor, create_actor_ref, kill_actor
 from ....context import get_context
 from ....errors import ActorNotExist, NoIdleSlot, SendMessageFailed, ServerClosed
+from ....tests.core import require_ucx
+from ....utils import get_next_port
 from ...allocate_strategy import (
     AddressSpecified,
     IdleLabel,
@@ -101,7 +104,7 @@ def _add_pool_conf(
     label: str,
     internal_address: str,
     external_address: str,
-    env: dict = None,
+    env: dict | None = None,
 ):
     if sys.platform.startswith("win"):
         config.add_pool_conf(

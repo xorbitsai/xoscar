@@ -12,14 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from __future__ import annotations
+
 import copy
 import logging
 import os
 from numbers import Number
-from typing import Dict
+from typing import Any
 
-from ...utils import lazy_import
 from ...driver import BaseActorDriver
+from ...utils import lazy_import
 from .utils import addresses_to_placement_group_info, process_placement_to_address
 
 ray = lazy_import("ray")
@@ -27,10 +30,10 @@ logger = logging.getLogger(__name__)
 
 
 class RayActorDriver(BaseActorDriver):
-    _cluster_info = dict()
+    _cluster_info: dict[str, Any] = dict()
 
     @classmethod
-    def setup_cluster(cls, address_to_resources: Dict[str, Dict[str, Number]]):
+    def setup_cluster(cls, address_to_resources: dict[str, dict[str, Number]]):
         logger.info("Setup cluster with %s", address_to_resources)
         # Note: Deep copy the dict to keep the origin values, because `bundles`
         # returned by `addresses_to_placement_group_info()` will be modified

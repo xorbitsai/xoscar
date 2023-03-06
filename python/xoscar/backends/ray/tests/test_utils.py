@@ -13,7 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ....tests.core import mock, require_ray
+from unittest import mock
+
+from ....tests.core import require_ray
 from ....utils import lazy_import
 from ..utils import report_event
 

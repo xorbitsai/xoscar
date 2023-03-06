@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import time
 from abc import ABC
 from typing import Dict, Optional, Tuple
@@ -23,7 +25,8 @@ _RECORDED_INTERVAL_SECS = 1
 class AbstractMetric(ABC):
     """Base class of metrics."""
 
-    _type = None
+    _type: str | None = None
+    _tag_keys: tuple[str] | tuple | None
 
     def __init__(
         self, name: str, description: str = "", tag_keys: Optional[Tuple[str]] = None
@@ -124,6 +127,7 @@ class AbstractHistogram(AbstractMetric):
     """A histogram measures the distribution of values in a stream of data."""
 
     _type = "Histogram"
+    _data: list
 
     def __init__(
         self, name: str, description: str = "", tag_keys: Optional[Tuple[str]] = None

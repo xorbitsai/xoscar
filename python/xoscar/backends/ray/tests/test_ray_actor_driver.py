@@ -19,6 +19,7 @@ import os
 import pytest
 
 import xoscar as mo
+
 from ....tests.core import require_ray
 from ....utils import lazy_import
 from ..communication import RayServer

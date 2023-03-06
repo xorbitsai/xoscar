@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures as futures
 import os
@@ -26,9 +28,9 @@ from hashlib import md5
 from typing import Any, Callable, Coroutine, Dict, Type
 from urllib.parse import urlparse
 
+from ..._utils import to_binary
 from ...serialization import AioDeserializer, AioSerializer, deserialize
 from ...utils import classproperty, implements
-from ..._utils import to_binary
 from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server
 from .utils import read_buffers, write_buffers
@@ -45,10 +47,10 @@ class SocketChannel(Channel):
         self,
         reader: StreamReader,
         writer: StreamWriter,
-        local_address: str = None,
-        dest_address: str = None,
-        compression: int = None,
-        channel_type: ChannelType = None,
+        local_address: str | None = None,
+        dest_address: str | None = None,
+        compression: str | None = None,
+        channel_type: ChannelType | None = None,
     ):
         super().__init__(
             local_address=local_address,
@@ -65,7 +67,7 @@ class SocketChannel(Channel):
     @property
     @implements(Channel.type)
     def type(self) -> ChannelType:
-        return self._channel_type
+        return self._channel_type  # type: ignore
 
     @implements(Channel.send)
     async def send(self, message: Any):
@@ -106,11 +108,13 @@ class SocketChannel(Channel):
 class _BaseSocketServer(Server, metaclass=ABCMeta):
     __slots__ = "_aio_server", "_channels"
 
+    _channels: list[ChannelType]
+
     def __init__(
         self,
         address: str,
         aio_server: AbstractServer,
-        channel_handler: Callable[[Channel], Coroutine] = None,
+        channel_handler: Callable[[Channel], Coroutine] | None = None,
     ):
         super().__init__(address, channel_handler)
         # asyncio.Server
@@ -179,7 +183,7 @@ class SocketServer(_BaseSocketServer):
         host: str,
         port: int,
         aio_server: AbstractServer,
-        channel_handler: Callable[[Channel], Coroutine] = None,
+        channel_handler: Callable[[Channel], Coroutine] | None = None,
     ):
         address = f"{host}:{port}"
         super().__init__(address, aio_server, channel_handler=channel_handler)
@@ -243,10 +247,10 @@ class SocketClient(Client):
     @staticmethod
     @implements(Client.connect)
     async def connect(
-        dest_address: str, local_address: str = None, **kwargs
+        dest_address: str, local_address: str | None = None, **kwargs
     ) -> "Client":
-        host, port = dest_address.split(":", 1)
-        port = int(port)
+        host, port_str = dest_address.split(":", 1)
+        port = int(port_str)
         (reader, writer) = await asyncio.open_connection(host=host, port=port, **kwargs)
         channel = SocketChannel(
             reader, writer, local_address=local_address, dest_address=dest_address
@@ -273,7 +277,7 @@ class UnixSocketServer(_BaseSocketServer):
         process_index: int,
         aio_server: AbstractServer,
         path: str,
-        channel_handler: Callable[[Channel], Coroutine] = None,
+        channel_handler: Callable[[Channel], Coroutine] | None = None,
     ):
         address = f"{self.scheme}:///{process_index}"
         super().__init__(address, aio_server, channel_handler=channel_handler)
@@ -349,7 +353,7 @@ class UnixSocketClient(Client):
     @staticmethod
     @implements(Client.connect)
     async def connect(
-        dest_address: str, local_address: str = None, **kwargs
+        dest_address: str, local_address: str | None = None, **kwargs
     ) -> "Client":
         process_index = UnixSocketClient._get_process_index(dest_address)
         path = kwargs.pop("path", _gen_unix_socket_default_path(process_index))
