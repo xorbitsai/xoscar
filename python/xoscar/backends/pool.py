@@ -306,11 +306,11 @@ class AbstractActorPool(ABC):
         self._config = actor_pool_config
         # remove router from global one
         global_router = Router.get_instance()
-        global_router.remove_router(self._router)
+        global_router.remove_router(self._router)  # type: ignore
         # update router
         self._router.set_mapping(actor_pool_config.external_to_internal_address_map)
         # update global router
-        global_router.add_router(self._router)
+        global_router.add_router(self._router)  # type: ignore
 
     async def handle_control_command(
         self, message: ControlMessage

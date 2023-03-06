@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 from typing import Dict
 
 from ...backend import BaseActorBackend, register_backend
@@ -64,9 +66,12 @@ class MarsActorBackend(BaseActorBackend):
         return MarsActorDriver
 
     @classmethod
-    async def create_actor_pool(cls, address: str, n_process: int = None, **kwargs):
+    async def create_actor_pool(
+        cls, address: str, n_process: int | None = None, **kwargs
+    ):
         from ..pool import create_actor_pool
 
+        assert n_process is not None
         n_process, kwargs = build_pool_kwargs(n_process, kwargs)
         return await create_actor_pool(
             address, pool_cls=MainActorPool, n_process=n_process, **kwargs

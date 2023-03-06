@@ -128,6 +128,9 @@ class ProfilingDataOperator:
 
 
 class _CallStats:
+    _call_counter: Counter
+    _slow_calls: list
+
     def __init__(self, options: _ProfilingOptions):
         self._options = options
         self._call_counter = Counter()
@@ -138,7 +141,7 @@ class _CallStats:
         self._call_counter[key] += 1
         if duration < self._options.slow_calls_duration_threshold:
             return
-        key = (
+        slow_call_key = (
             duration,
             message.actor_ref.uid,
             message.actor_ref.address,
@@ -146,9 +149,9 @@ class _CallStats:
         )
         try:
             if len(self._slow_calls) < 10:
-                heapq.heappush(self._slow_calls, key)
+                heapq.heappush(self._slow_calls, slow_call_key)
             else:
-                heapq.heapreplace(self._slow_calls, key)
+                heapq.heapreplace(self._slow_calls, slow_call_key)
         except TypeError:
             pass
 

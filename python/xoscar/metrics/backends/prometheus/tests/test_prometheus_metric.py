@@ -17,9 +17,9 @@ import time
 import pytest
 
 try:
-    import requests
+    import requests  # type: ignore
 except ImportError:
-    requests = None
+    requests = None  # type: ignore
 
 try:
     from prometheus_client import start_http_server

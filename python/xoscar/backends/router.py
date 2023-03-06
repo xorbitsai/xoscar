@@ -13,8 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import threading
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Optional, Type
 
 from .communication import Client, get_client_type
 
@@ -32,7 +34,7 @@ class Router:
         "_cache_local",
     )
 
-    _instance: "Router" = None
+    _instance: "Router" | None = None
 
     @staticmethod
     def set_instance(router: Optional["Router"]):
@@ -40,7 +42,7 @@ class Router:
         Router._instance = router
 
     @staticmethod
-    def get_instance() -> "Router":
+    def get_instance() -> "Router" | None:
         return Router._instance
 
     @staticmethod
@@ -49,10 +51,10 @@ class Router:
 
     def __init__(
         self,
-        external_addresses: List[str],
-        local_address: Optional[str],
-        mapping: Dict[str, str] = None,
-        comm_config: dict = None,
+        external_addresses: list[str],
+        local_address: str | None,
+        mapping: dict[str, str] | None = None,
+        comm_config: dict | None = None,
     ):
         self._curr_external_addresses = external_addresses
         self._local_mapping = dict()
@@ -65,14 +67,14 @@ class Router:
         self._cache_local = threading.local()
 
     @property
-    def _cache(self) -> Dict[Tuple[str, Any], Client]:
+    def _cache(self) -> dict[tuple[str, Any], Client]:
         try:
             return self._cache_local.cache
         except AttributeError:
             cache = self._cache_local.cache = dict()
             return cache
 
-    def set_mapping(self, mapping: Dict[str, str]):
+    def set_mapping(self, mapping: dict[str, str]):
         self._mapping = mapping
         self._cache_local = threading.local()
 
@@ -100,7 +102,7 @@ class Router:
         if self._curr_external_addresses:
             return self._curr_external_addresses[0]
 
-    def get_internal_address(self, external_address: str) -> str:
+    def get_internal_address(self, external_address: str) -> str | None:
         if external_address in self._curr_external_addresses:
             # local address, use dummy address
             return self._local_mapping.get(external_address)

@@ -13,14 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import pickle  # nosec  # pylint: disable=import_pickle
-from typing import Dict, List, Union
 
 from .core import Serializer, buffered, pickle_buffers, unpickle_buffers
 
 
 class UnpickleableError(Exception):
-    def __init__(self, raw_error: Union[str, Exception]):
+    def __init__(self, raw_error: str | Exception):
         if isinstance(raw_error, str):
             super().__init__(raw_error)
         else:
@@ -33,14 +34,14 @@ class UnpickleableError(Exception):
 
 class ExceptionSerializer(Serializer):
     @buffered
-    def serial(self, obj: Exception, context: Dict):
+    def serial(self, obj: Exception, context: dict):
         try:
             buffers = pickle_buffers(obj)
         except (TypeError, pickle.PicklingError):
             buffers = pickle_buffers(UnpickleableError(obj))
         return (), buffers, True
 
-    def deserial(self, serialized: Dict, context: Dict, subs: List):
+    def deserial(self, serialized: tuple, context: dict, subs: list):
         return unpickle_buffers(subs)
 
 

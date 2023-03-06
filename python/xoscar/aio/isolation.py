@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 import atexit
 import threading
@@ -64,7 +66,7 @@ DEFAULT_ISOLATION = "oscar"
 
 def new_isolation(
     name: str = DEFAULT_ISOLATION,
-    loop: asyncio.AbstractEventLoop = None,
+    loop: asyncio.AbstractEventLoop | None = None,
     threaded: bool = True,
 ) -> Isolation:
     if name in _name_to_isolation:

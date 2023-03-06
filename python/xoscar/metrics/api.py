@@ -12,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import logging
 import time
 import weakref
 from contextlib import contextmanager
 from enum import Enum
 from queue import PriorityQueue
-from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
+from typing import Any, Callable, NamedTuple
 
 from .backends.console import console_metric
 from .backends.metric import AbstractMetric
@@ -36,10 +38,10 @@ _backends_cls = {
 }
 
 
-_metrics_to_be_initialized = weakref.WeakSet()
+_metrics_to_be_initialized: weakref.WeakSet = weakref.WeakSet()
 
 
-def init_metrics(backend="console", config: Dict[str, Any] = None):
+def init_metrics(backend="console", config: dict[str, Any] | None = None):
     global _init
     if _init is True:
         return
@@ -82,14 +84,14 @@ def shutdown_metrics():
 
 
 class _MetricWrapper(AbstractMetric):
-    _metric: AbstractMetric
+    _metric: AbstractMetric | None
     _log_not_init_error: bool
 
     def __init__(
         self,
         name: str,
         description: str = "",
-        tag_keys: Optional[Tuple[str, ...]] = None,
+        tag_keys: tuple[str, ...] | None = None,
         metric_type: str = "Counter",
     ):
         self._name = name
@@ -114,7 +116,7 @@ class _MetricWrapper(AbstractMetric):
         assert metric is not None, "Argument metric is None, please check it."
         self._metric = metric
 
-    def record(self, value=1, tags: Optional[Dict[str, str]] = None):
+    def record(self, value=1, tags: dict[str, str] | None = None):
         if self._metric is not None:
             self._metric.record(value, tags)
         elif not self._log_not_init_error:
@@ -125,9 +127,7 @@ class _MetricWrapper(AbstractMetric):
 
 
 def gen_metric(func):
-    def wrapper(
-        name, descriptions: str = "", tag_keys: Optional[Tuple[str, ...]] = None
-    ):
+    def wrapper(name, descriptions: str = "", tag_keys: tuple[str, ...] | None = None):
         if _init is True:
             return func(name, descriptions, tag_keys)
         else:
@@ -170,9 +170,7 @@ class Metrics:
 
     @staticmethod
     @gen_metric
-    def counter(
-        name, description: str = "", tag_keys: Optional[Tuple[str, ...]] = None
-    ):
+    def counter(name, description: str = "", tag_keys: tuple[str, ...] | None = None):
         logger.debug(
             "Initializing a counter with name: %s, tag keys: %s, backend: %s",
             name,
@@ -183,7 +181,7 @@ class Metrics:
 
     @staticmethod
     @gen_metric
-    def gauge(name, description: str = "", tag_keys: Optional[Tuple[str, ...]] = None):
+    def gauge(name, description: str = "", tag_keys: tuple[str, ...] | None = None):
         logger.debug(
             "Initializing a gauge whose name: %s, tag keys: %s, backend: %s",
             name,
@@ -194,7 +192,7 @@ class Metrics:
 
     @staticmethod
     @gen_metric
-    def meter(name, description: str = "", tag_keys: Optional[Tuple[str, ...]] = None):
+    def meter(name, description: str = "", tag_keys: tuple[str, ...] | None = None):
         logger.debug(
             "Initializing a meter whose name: %s, tag keys: %s, backend: %s",
             name,
@@ -205,9 +203,7 @@ class Metrics:
 
     @staticmethod
     @gen_metric
-    def histogram(
-        name, description: str = "", tag_keys: Optional[Tuple[str, ...]] = None
-    ):
+    def histogram(name, description: str = "", tag_keys: tuple[str, ...] | None = None):
         logger.debug(
             "Initializing a histogram whose name: %s, tag keys: %s, backend: %s",
             name,
@@ -222,6 +218,8 @@ class Percentile:
         P99 = 1
         P95 = 2
         P90 = 3
+
+    _min_heap: PriorityQueue
 
     def __init__(self, capacity: int, window: int, callback: Callable[[float], None]):
         self._capacity = capacity
@@ -278,7 +276,7 @@ class PercentileArg(NamedTuple):
 
 
 @contextmanager
-def record_time_cost_percentile(percentile_args: List[PercentileArg]):
+def record_time_cost_percentile(percentile_args: list[PercentileArg]):
     percentile_list = [
         _percentile_builder[percentile_type](callback, window)
         for percentile_type, callback, window in percentile_args

@@ -924,13 +924,13 @@ class TestUCXActor(Actor):
 
     def verify(self, enabled_internal_addr: bool):
         router = Router.get_instance()
-        assert router.external_address.startswith("ucx")
-        assert len(router._mapping) > 0
+        assert router.external_address.startswith("ucx")  # type: ignore
+        assert len(router._mapping) > 0  # type: ignore
         if not enabled_internal_addr:
             # no internal address
-            assert all(v is None for v in router._mapping.values())
+            assert all(v is None for v in router._mapping.values())  # type: ignore
         else:
-            assert all(v is not None for v in router._mapping.values())
+            assert all(v is not None for v in router._mapping.values())  # type: ignore
 
     def add(self, n: int):
         return self._init_val + n
@@ -949,7 +949,7 @@ async def test_ucx(enable_internal_addr: bool):
         if sys.platform != "win32"
         else None
     )
-    pool = await create_actor_pool(
+    pool = await create_actor_pool(  # type: ignore
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,

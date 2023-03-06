@@ -29,8 +29,8 @@ CUDA_CHUNK_SIZE = 16 * 1024**2
 
 
 def _convert_to_cupy_ndarray(
-    cuda_buffer: Union["cupy.ndarray", "rmm.DeviceBuffer"]
-) -> "cupy.ndarray":
+    cuda_buffer: Union["cupy.ndarray", "rmm.DeviceBuffer"]  # type: ignore
+) -> "cupy.ndarray":  # type: ignore
     if isinstance(cuda_buffer, cupy.ndarray):
         return cuda_buffer
 
@@ -42,7 +42,7 @@ def _convert_to_cupy_ndarray(
 
 
 def write_buffers(writer: StreamWriter, buffers: List):
-    def _write_cuda_buffer(cuda_buffer: Union["cupy.ndarray", "rmm.DeviceBuffer"]):
+    def _write_cuda_buffer(cuda_buffer: Union["cupy.ndarray", "rmm.DeviceBuffer"]):  # type: ignore
         # convert cuda buffer to cupy ndarray
         cuda_buffer = _convert_to_cupy_ndarray(cuda_buffer)
 

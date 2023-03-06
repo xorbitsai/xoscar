@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import dataclasses
 import logging
 import os
@@ -144,15 +146,15 @@ def nvmlStructToFriendlyObject(struct):
 
 @dataclasses.dataclass
 class CudaDeviceInfo:
-    uuid: bytes = None
-    device_index: int = None
-    mig_index: int = None
+    uuid: bytes | None = None
+    device_index: int | None = None
+    mig_index: int | None = None
 
 
 @dataclasses.dataclass
 class CudaContext:
     has_context: bool
-    device_info: CudaDeviceInfo = None
+    device_info: CudaDeviceInfo | None = None
 
 
 _is_windows: bool = sys.platform.startswith("win")
@@ -181,7 +183,7 @@ _nvml_device_status = namedtuple(
 _init_pid = None
 _gpu_count = None
 _driver_info = None
-_device_infos = dict()
+_device_infos: dict[int, _cu_device_info] = dict()
 
 _no_device_warned = False
 
@@ -322,7 +324,7 @@ def _init():
         _init_pid = os.getpid()
 
 
-def get_device_count() -> int:
+def get_device_count() -> int | None:
     global _gpu_count
 
     if _gpu_count is not None:
@@ -345,7 +347,7 @@ def get_device_count() -> int:
     return _gpu_count
 
 
-def _get_all_device_count() -> int:
+def _get_all_device_count() -> int | None:
     _init_nvml()
     if _nvml_lib is None:
         return None
@@ -355,7 +357,7 @@ def _get_all_device_count() -> int:
     return n_gpus.value
 
 
-def get_driver_info() -> _nvml_driver_info:
+def get_driver_info() -> _nvml_driver_info | None:
     global _driver_info
 
     _init_nvml()
@@ -379,7 +381,7 @@ def get_driver_info() -> _nvml_driver_info:
     return _driver_info
 
 
-def get_device_info(dev_index: int) -> _cu_device_info:
+def get_device_info(dev_index: int) -> _cu_device_info | None:
     try:
         return _device_infos[dev_index]
     except KeyError:
@@ -397,19 +399,19 @@ def get_device_info(dev_index: int) -> _cu_device_info:
     cores = c_int()
     threads_per_core = c_int()
 
-    _cu_check_error(_cuda_lib.cuDeviceGet(byref(device), c_int(dev_index)))
-    _cu_check_error(_cuda_lib.cuDeviceGetName(name_buf, len(name_buf), device))
-    _cu_check_error(_cuda_lib.cuDeviceGetUuid(byref(uuid_t), device))
+    _cu_check_error(_cuda_lib.cuDeviceGet(byref(device), c_int(dev_index)))  # type: ignore
+    _cu_check_error(_cuda_lib.cuDeviceGetName(name_buf, len(name_buf), device))  # type: ignore
+    _cu_check_error(_cuda_lib.cuDeviceGetUuid(byref(uuid_t), device))  # type: ignore
     _cu_check_error(
-        _cuda_lib.cuDeviceComputeCapability(byref(cc_major), byref(cc_minor), device)
+        _cuda_lib.cuDeviceComputeCapability(byref(cc_major), byref(cc_minor), device)  # type: ignore
     )
     _cu_check_error(
-        _cuda_lib.cuDeviceGetAttribute(
+        _cuda_lib.cuDeviceGetAttribute(  # type: ignore
             byref(cores), CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, device
         )
     )
     _cu_check_error(
-        _cuda_lib.cuDeviceGetAttribute(
+        _cuda_lib.cuDeviceGetAttribute(  # type: ignore
             byref(threads_per_core),
             CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR,
             device,
@@ -435,7 +437,7 @@ def get_device_info(dev_index: int) -> _cu_device_info:
     return info
 
 
-def get_device_status(dev_index: int) -> _nvml_device_status:
+def get_device_status(dev_index: int) -> _nvml_device_status | None:
     _init()
     if _init_pid is None:
         return None
@@ -445,30 +447,30 @@ def get_device_status(dev_index: int) -> _nvml_device_status:
     c_temperature = c_uint()
     c_memory_info = _nvmlBAR1Memory_t()
 
-    dev_uuid = get_device_info(dev_index).uuid
+    dev_uuid = get_device_info(dev_index).uuid  # type: ignore
 
     uuid_str = ("GPU-" + str(dev_uuid)).encode()
 
     if not _is_wsl:
         _nvml_check_error(
-            _nvml_lib.nvmlDeviceGetHandleByUUID(uuid_str, byref(c_device))
+            _nvml_lib.nvmlDeviceGetHandleByUUID(uuid_str, byref(c_device))  # type: ignore
         )
 
         _nvml_check_error(
-            _nvml_lib.nvmlDeviceGetUtilizationRates(c_device, byref(c_utils))
+            _nvml_lib.nvmlDeviceGetUtilizationRates(c_device, byref(c_utils))  # type: ignore
         )
         gpu_util = c_utils.gpu
         mem_util = c_utils.memory
 
         _nvml_check_error(
-            _nvml_lib.nvmlDeviceGetTemperature(
+            _nvml_lib.nvmlDeviceGetTemperature(  # type: ignore
                 c_device, NVML_TEMPERATURE_GPU, byref(c_temperature)
             )
         )
         temperature = c_temperature.value
 
         _nvml_check_error(
-            _nvml_lib.nvmlDeviceGetMemoryInfo(c_device, byref(c_memory_info))
+            _nvml_lib.nvmlDeviceGetMemoryInfo(c_device, byref(c_memory_info))  # type: ignore
         )
         fb_total_mem = c_memory_info.total
         fb_free_mem = c_memory_info.free
@@ -481,7 +483,7 @@ def get_device_status(dev_index: int) -> _nvml_device_status:
             stdout=subprocess.PIPE,
         )
         proc.wait()
-        xml_result = defusedxml.ElementTree.fromstring(proc.stdout.read())
+        xml_result = defusedxml.ElementTree.fromstring(proc.stdout.read())  # type: ignore
         gpu_node = xml_result.find("gpu")
 
         fb_node = gpu_node.find("fb_memory_usage")
@@ -511,7 +513,7 @@ def get_device_status(dev_index: int) -> _nvml_device_status:
     )
 
 
-def get_handle_by_index(index: int) -> _nvmlDevice_t:
+def get_handle_by_index(index: int) -> _nvmlDevice_t:  # type: ignore
     _init_nvml()
     if _nvml_lib is None:
         return None
@@ -522,7 +524,7 @@ def get_handle_by_index(index: int) -> _nvmlDevice_t:
     return device
 
 
-def get_handle_by_uuid(uuid: bytes) -> _nvmlDevice_t:
+def get_handle_by_uuid(uuid: bytes) -> _nvmlDevice_t:  # type: ignore
     _init_nvml()
     if _nvml_lib is None:
         return None
@@ -533,7 +535,7 @@ def get_handle_by_uuid(uuid: bytes) -> _nvmlDevice_t:
     return device
 
 
-def get_mig_mode(device: _nvmlDevice_t) -> Tuple[int, int]:
+def get_mig_mode(device: _nvmlDevice_t) -> Tuple[int, int] | None:  # type: ignore
     _init_nvml()
     if _nvml_lib is None:
         return None
@@ -547,7 +549,7 @@ def get_mig_mode(device: _nvmlDevice_t) -> Tuple[int, int]:
     return c_current_mode.value, c_pending_mode.value
 
 
-def get_max_mig_device_count(device: _nvmlDevice_t) -> int:
+def get_max_mig_device_count(device: _nvmlDevice_t) -> int | None:  # type: ignore
     _init_nvml()
     if _nvml_lib is None:
         return None
@@ -557,7 +559,7 @@ def get_max_mig_device_count(device: _nvmlDevice_t) -> int:
     return c_count.value
 
 
-def get_mig_device_handle_by_index(device: _nvmlDevice_t, index: int) -> _nvmlDevice_t:
+def get_mig_device_handle_by_index(device: _nvmlDevice_t, index: int) -> _nvmlDevice_t:  # type: ignore
     _init_nvml()
     if _nvml_lib is None:
         return None
@@ -572,7 +574,7 @@ def get_mig_device_handle_by_index(device: _nvmlDevice_t, index: int) -> _nvmlDe
     return mig_device
 
 
-def get_index(handle: _nvmlDevice_t) -> int:
+def get_index(handle: _nvmlDevice_t) -> int | None:  # type: ignore
     _init_nvml()
     if _nvml_lib is None:
         return None
@@ -582,7 +584,7 @@ def get_index(handle: _nvmlDevice_t) -> int:
     return c_index.value
 
 
-def get_uuid(handle: _nvmlDevice_t) -> bytes:
+def get_uuid(handle: _nvmlDevice_t) -> bytes | None:  # type: ignore
     _init_nvml()
     if _nvml_lib is None:
         return None
@@ -596,7 +598,7 @@ def get_uuid(handle: _nvmlDevice_t) -> bytes:
     return c_uuid.value
 
 
-def get_index_and_uuid(device: Union[int, bytes, str]) -> CudaDeviceInfo:
+def get_index_and_uuid(device: Union[int, bytes, str]) -> CudaDeviceInfo | None:
     _init_nvml()
     if _nvml_lib is None:
         return None
@@ -606,15 +608,17 @@ def get_index_and_uuid(device: Union[int, bytes, str]) -> CudaDeviceInfo:
         device_handle = get_handle_by_index(device_index)
         uuid = get_uuid(device_handle)
     except ValueError:
-        uuid = device if isinstance(device, bytes) else device.encode()
+        uuid = device if isinstance(device, bytes) else device.encode()  # type: ignore
         uuid_handle = get_handle_by_uuid(uuid)
-        device_index = get_index(uuid_handle)
+        device_index = get_index(uuid_handle)  # type: ignore
         uuid = get_uuid(uuid_handle)
 
     return CudaDeviceInfo(uuid=uuid, device_index=device_index)
 
 
-def get_compute_running_processes(handle: _nvmlDevice_t) -> List[nvmlFriendlyObject]:
+def get_compute_running_processes(  # type: ignore
+    handle: _nvmlDevice_t,  # type: ignore
+) -> List[nvmlFriendlyObject] | None:
     _init_nvml()
     if _nvml_lib is None:
         return None
@@ -652,7 +656,7 @@ def get_compute_running_processes(handle: _nvmlDevice_t) -> List[nvmlFriendlyObj
         _nvml_check_error(ret)
 
 
-def _running_process_matches(handle: _nvmlDevice_t) -> bool:
+def _running_process_matches(handle: _nvmlDevice_t) -> bool:  # type: ignore
     """Check whether the current process is same as that of handle
     Parameters
     ----------
@@ -663,7 +667,7 @@ def _running_process_matches(handle: _nvmlDevice_t) -> bool:
     out : bool
         Whether the device handle has a CUDA context on the running process.
     """
-    return any(os.getpid() == o.pid for o in get_compute_running_processes(handle))
+    return any(os.getpid() == o.pid for o in get_compute_running_processes(handle))  # type: ignore
 
 
 def get_cuda_context() -> CudaContext:
@@ -673,17 +677,17 @@ def get_cuda_context() -> CudaContext:
     if _init_pid is None:
         return CudaContext(has_context=False)
 
-    for index in range(_get_all_device_count()):
+    for index in range(_get_all_device_count()):  # type: ignore
         handle = get_handle_by_index(index)
         try:
-            mig_current_mode, mig_pending_mode = get_mig_mode(handle)
+            mig_current_mode, mig_pending_mode = get_mig_mode(handle)  # type: ignore
         except NVMLAPIError as e:
             if e.errno == NVML_ERROR_NOT_SUPPORTED:
                 mig_current_mode = NVML_DEVICE_MIG_DISABLE
             else:
                 raise
         if mig_current_mode == NVML_DEVICE_MIG_ENABLE:
-            for mig_index in range(get_max_mig_device_count(handle)):
+            for mig_index in range(get_max_mig_device_count(handle)):  # type: ignore
                 try:
                     mig_handle = get_mig_device_handle_by_index(handle, mig_index)
                 except NVMLAPIError as e:

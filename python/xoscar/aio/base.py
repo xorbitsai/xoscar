@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
 
 import asyncio
 import functools
@@ -70,12 +71,15 @@ def proxy_property_directly(*attrs):
 
 class AioBase:
     def __init__(
-        self, file: Any, loop: asyncio.BaseEventLoop = None, executor: Executor = None
+        self,
+        file: Any,
+        loop: asyncio.BaseEventLoop | None = None,
+        executor: Executor | None = None,
     ):
         if loop is None:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_event_loop()  # type: ignore
         if isinstance(file, AioBase):
-            file = file._file
+            file = file._file  # type: ignore
 
         self._file = file
         self._loop = loop

@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures as futures
 import functools
@@ -49,7 +51,7 @@ def synchronize_stream(stream: int = 0):
     ctx = numba_cuda.current_context()
     cu_stream = numba_cuda.driver.drvapi.cu_stream(stream)
     stream = numba_cuda.driver.Stream(ctx, cu_stream, None)
-    stream.synchronize()
+    stream.synchronize()  # type: ignore
 
 
 class UCXInitializer:
@@ -144,6 +146,7 @@ class UCXInitializer:
             pre_existing_cuda_context = get_cuda_context()
             if pre_existing_cuda_context.has_context:
                 dev = pre_existing_cuda_context.device_info
+                assert dev is not None
                 logger.warning(
                     f"A CUDA context for device {dev.device_index} ({str(dev.uuid)}) "
                     f"already exists on process ID {os.getpid()}. {_warning_suffix}"
@@ -157,12 +160,13 @@ class UCXInitializer:
             )
             if (
                 cuda_context_created.has_context
-                and cuda_context_created.device_info.uuid != cuda_visible_device.uuid
+                and cuda_context_created.device_info.uuid != cuda_visible_device.uuid  # type: ignore
             ):  # pragma: no cover
                 cuda_context_created_dev = cuda_context_created.device_info
+                assert cuda_context_created_dev is not None
                 logger.warning(
                     f"Worker with process ID {os.getpid()} should have a CUDA context assigned to device "
-                    f"{cuda_visible_device.device_index} ({str(cuda_visible_device.uuid)}), "
+                    f"{cuda_visible_device.device_index} ({str(cuda_visible_device.uuid)}), "  # type: ignore
                     f"but instead the CUDA context is on device {cuda_context_created_dev.device_index} "
                     f"({str(cuda_context_created_dev.uuid)}). {_warning_suffix}"
                 )
@@ -170,7 +174,7 @@ class UCXInitializer:
         original_environ = os.environ
         new_environ = os.environ.copy()
         new_environ.update(envs)
-        os.environ = new_environ
+        os.environ = new_environ  # type: ignore
         try:
             ucp.init(
                 options=options, env_takes_precedence=True, blocking_progress_mode=False
@@ -200,10 +204,10 @@ class UCXChannel(Channel):
 
     def __init__(
         self,
-        ucp_endpoint: "ucp.Endpoint",
-        local_address: str = None,
-        dest_address: str = None,
-        compression: int = None,
+        ucp_endpoint: "ucp.Endpoint",  # type: ignore
+        local_address: str | None = None,
+        dest_address: str | None = None,
+        compression: str | None = None,
     ):
         super().__init__(
             local_address=local_address,
@@ -335,15 +339,15 @@ class UCXServer(Server):
 
     scheme = "ucx"
 
-    _ucp_listener: "ucp.Listener"
+    _ucp_listener: "ucp.Listener"  # type: ignore
     _channels: List[UCXChannel]
 
     def __init__(
         self,
         host: str,
         port: int,
-        ucp_listener: "ucp.Listener",
-        channel_handler: Callable[[Channel], Coroutine] = None,
+        ucp_listener: "ucp.Listener",  # type: ignore
+        channel_handler: Callable[[Channel], Coroutine] | None = None,
     ):
         super().__init__(f"{UCXServer.scheme}://{host}:{port}", channel_handler)
         self.host = host
@@ -380,7 +384,7 @@ class UCXServer(Server):
         # init
         UCXInitializer.init(config.get("ucx", dict()))
 
-        async def serve_forever(client_ucp_endpoint: "ucp.Endpoint"):
+        async def serve_forever(client_ucp_endpoint: "ucp.Endpoint"):  # type: ignore
             try:
                 await server.on_connected(
                     client_ucp_endpoint, local_address=server.address
@@ -460,13 +464,13 @@ class UCXClient(Client):
     @staticmethod
     @implements(Client.connect)
     async def connect(
-        dest_address: str, local_address: str = None, **kwargs
+        dest_address: str, local_address: str | None = None, **kwargs
     ) -> "Client":
         prefix = f"{UCXClient.scheme}://"
         if dest_address.startswith(prefix):
             dest_address = dest_address[len(prefix) :]
-        host, port = dest_address.split(":", 1)
-        port = int(port)
+        host, port_str = dest_address.split(":", 1)
+        port = int(port_str)
         kwargs = kwargs.copy()
         ucx_config = kwargs.pop("config", dict()).get("ucx", dict())
         UCXInitializer.init(ucx_config)

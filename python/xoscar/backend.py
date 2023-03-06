@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Dict, Type
 
@@ -34,7 +36,9 @@ class BaseActorBackend(ABC):
         pass
 
     @classmethod
-    async def create_actor_pool(cls, address: str, n_process: int = None, **kwargs):
+    async def create_actor_pool(
+        cls, address: str, n_process: int | None = None, **kwargs
+    ):
         pass
 
     @staticmethod

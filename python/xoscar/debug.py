@@ -106,7 +106,9 @@ def debug_async_timeout(option_name: str, msg, *args, **kwargs):
                 timeout_task.cancel()
 
 
-_message_trace_var = contextvars.ContextVar("_message_trace_var")
+_message_trace_var: contextvars.ContextVar = contextvars.ContextVar(
+    "_message_trace_var"
+)
 
 
 @contextmanager

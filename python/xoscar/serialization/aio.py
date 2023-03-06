@@ -41,7 +41,7 @@ class AioSerializer:
             self._obj, spawn_threshold=DEFAULT_SPAWN_THRESHOLD
         )
 
-        def _is_cuda_buffer(buf: Union["rmm.DeviceBuffer", BinaryIO]):
+        def _is_cuda_buffer(buf: Union["rmm.DeviceBuffer", BinaryIO]):  # type: ignore
             return hasattr(buf, "__cuda_array_interface__")
 
         is_cuda_buffers = [_is_cuda_buffer(buf) for buf in buffers]

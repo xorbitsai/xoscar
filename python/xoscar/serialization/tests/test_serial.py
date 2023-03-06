@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import threading
 from collections import OrderedDict, defaultdict
 from typing import Any, Dict, List, Tuple
@@ -33,7 +35,7 @@ except ImportError:
 from ...tests.core import require_cudf, require_cupy
 from ...utils import lazy_import
 from .. import deserialize, serialize, serialize_with_spawn
-from ..core import ListSerializer, Placeholder
+from ..core import ListSerializer, Placeholder  # type: ignore
 
 cupy = lazy_import("cupy")
 cudf = lazy_import("cudf")
@@ -99,7 +101,7 @@ class KeyedDict(dict):
     def __hash__(self):
         return hash(frozenset(self._skeys()))
 
-    def __eq__(self, other: "KeyedDict"):
+    def __eq__(self, other):
         return self._skeys() == other._skeys()
 
 
@@ -288,7 +290,7 @@ def test_deserial_errors():
 
 
 class MockSerializerForSpawn(ListSerializer):
-    thread_calls = defaultdict(lambda: 0)
+    thread_calls: defaultdict[int | None, int] = defaultdict(lambda: 0)
 
     def serial(self, obj: Any, context: Dict):
         self.thread_calls[threading.current_thread().ident] += 1

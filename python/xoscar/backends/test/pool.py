@@ -13,9 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 import multiprocessing
-from typing import Dict, List
+from typing import Any
 
 from ..communication import DummyServer, gen_local_address
 from ..config import ActorPoolConfig
@@ -28,9 +30,9 @@ class TestMainActorPool(MainActorPool):
     def get_external_addresses(
         cls,
         address: str,
-        n_process: int = None,
-        ports: List[int] = None,
-        schemes: List[str] = None,
+        n_process: int | None = None,
+        ports: list[int] | None = None,
+        schemes: list[str] | None = None,
     ):
         if "://" in address:
             address = address.split("://", 1)[1]
@@ -38,7 +40,7 @@ class TestMainActorPool(MainActorPool):
 
     @classmethod
     def gen_internal_address(
-        cls, process_index: int, external_address: str = None
+        cls, process_index: int, external_address: str | None = None
     ) -> str:
         return f"dummy://{process_index}"
 
@@ -47,9 +49,9 @@ class TestMainActorPool(MainActorPool):
         cls,
         actor_pool_config: ActorPoolConfig,
         process_index: int,
-        start_method: str = None,
+        start_method: str | None = None,
     ):
-        status_queue = multiprocessing.Queue()
+        status_queue: multiprocessing.Queue = multiprocessing.Queue()
         return (
             asyncio.create_task(
                 cls._create_sub_pool(actor_pool_config, process_index, status_queue)
@@ -58,7 +60,7 @@ class TestMainActorPool(MainActorPool):
         )
 
     @classmethod
-    async def wait_sub_pools_ready(cls, create_pool_tasks: List[asyncio.Task]):
+    async def wait_sub_pools_ready(cls, create_pool_tasks: list[asyncio.Task]):
         addresses = []
         tasks = []
         for t in create_pool_tasks:
@@ -75,7 +77,7 @@ class TestMainActorPool(MainActorPool):
         process_index: int,
         status_queue: multiprocessing.Queue,
     ):
-        pool = await TestSubActorPool.create(
+        pool: TestSubActorPool = await TestSubActorPool.create(
             {"actor_pool_config": actor_config, "process_index": process_index}
         )
         await pool.start()
@@ -92,10 +94,10 @@ class TestMainActorPool(MainActorPool):
     async def kill_sub_pool(
         self, process: multiprocessing.Process, force: bool = False
     ):
-        process.cancel()
+        process.cancel()  # type: ignore
 
     async def is_sub_pool_alive(self, process: multiprocessing.Process):
-        return not process.cancelled()
+        return not process.cancelled()  # type: ignore
 
 
 class TestSubActorPool(SubActorPool):
@@ -104,8 +106,8 @@ class TestSubActorPool(SubActorPool):
         pass
 
     @classmethod
-    async def create(cls, config: Dict) -> ActorPoolType:
-        kw = dict()
+    async def create(cls, config: dict) -> ActorPoolType:
+        kw: dict[str, Any] = dict()
         cls._parse_config(config, kw)
         process_index: int = kw["process_index"]
         actor_pool_config = kw["config"]  # type: ActorPoolConfig
@@ -126,7 +128,7 @@ class TestSubActorPool(SubActorPool):
 
         # create pool
         pool = cls(**kw)
-        return pool
+        return pool  # type: ignore
 
     async def stop(self):
         # do not close dummy server

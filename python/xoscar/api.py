@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 from collections import defaultdict
 from numbers import Number
 from typing import Any, Dict, Tuple, Type
@@ -48,7 +50,7 @@ async def kill_actor(actor_ref):
     return await ctx.kill_actor(actor_ref)
 
 
-async def create_actor_pool(address: str, n_process: int = None, **kwargs):
+async def create_actor_pool(address: str, n_process: int | None = None, **kwargs):
     if address is None:
         raise ValueError("address has to be provided")
     if "://" not in address:
@@ -61,7 +63,7 @@ async def create_actor_pool(address: str, n_process: int = None, **kwargs):
     )
 
 
-async def wait_actor_pool_recovered(address: str, main_pool_address: str = None):
+async def wait_actor_pool_recovered(address: str, main_pool_address: str | None = None):
     ctx = get_context()
     return await ctx.wait_actor_pool_recovered(address, main_pool_address)
 
@@ -72,7 +74,7 @@ async def get_pool_config(address: str):
 
 
 def setup_cluster(address_to_resources: Dict[str, Dict[str, Number]]):
-    scheme_to_address_resources = defaultdict(dict)
+    scheme_to_address_resources: defaultdict[str | None, dict] = defaultdict(dict)
     for address, resources in address_to_resources.items():
         if address is None:
             raise ValueError("address has to be provided")
@@ -118,7 +120,7 @@ class AsyncActorMixin:
         message : tuple
             Message shall be (method_name,) + args + (kwargs,)
         """
-        return await super().__on_receive__(message)
+        return await super().__on_receive__(message)  # type: ignore
 
 
 class Actor(AsyncActorMixin, _Actor):

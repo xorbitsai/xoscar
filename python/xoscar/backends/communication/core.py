@@ -13,26 +13,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Type
+from __future__ import annotations
+
+from typing import Type
 from urllib.parse import urlparse
 
 from .base import Client, Server
 
-_scheme_to_client_types: Dict[str, Type[Client]] = dict()
-_scheme_to_server_types: Dict[str, Type[Server]] = dict()
+_scheme_to_client_types: dict[str, Type[Client]] = dict()
+_scheme_to_server_types: dict[str, Type[Server]] = dict()
 
 
 def register_client(client_type: Type[Client]):
-    _scheme_to_client_types[client_type.scheme] = client_type
+    _scheme_to_client_types[client_type.scheme] = client_type  # type: ignore
     return client_type
 
 
 def register_server(server_type: Type[Server]):
-    _scheme_to_server_types[server_type.scheme] = server_type
+    _scheme_to_server_types[server_type.scheme] = server_type  # type: ignore
     return server_type
 
 
-def _check_scheme(scheme: str, types: Dict):
+def _check_scheme(scheme: str | None, types: dict):
     if scheme == "":
         scheme = None
     if scheme not in types:  # pragma: no cover
@@ -45,7 +47,7 @@ def _check_scheme(scheme: str, types: Dict):
     return scheme
 
 
-def get_scheme(address: str) -> str:
+def get_scheme(address: str) -> str | None:
     if "://" not in address:
         scheme = None
     else:

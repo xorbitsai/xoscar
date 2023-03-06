@@ -149,7 +149,7 @@ def placement_group_info_to_addresses(pg_name, bundles):
 
 
 async def kill_and_wait(
-    actor_handle: "ray.actor.ActorHandle", no_restart=False, timeout: float = 30
+    actor_handle: "ray.actor.ActorHandle", no_restart=False, timeout: float = 30  # type: ignore
 ):
     if "COV_CORE_SOURCE" in os.environ:  # pragma: no cover
         try:

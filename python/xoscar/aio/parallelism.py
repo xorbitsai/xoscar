@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 import multiprocessing
 import threading
@@ -20,7 +22,7 @@ from typing import Union
 
 from .base import AioBase, delegate_to_executor, proxy_method_directly
 
-event_types = Union[threading.Event, multiprocessing.Event]
+event_types = Union[threading.Event, multiprocessing.Event]  # type: ignore
 
 
 @delegate_to_executor("wait")
@@ -28,9 +30,9 @@ event_types = Union[threading.Event, multiprocessing.Event]
 class AioEvent(AioBase):
     def __init__(
         self,
-        event: event_types = None,
-        loop: asyncio.BaseEventLoop = None,
-        executor: Executor = None,
+        event: event_types | None = None,
+        loop: asyncio.BaseEventLoop | None = None,
+        executor: Executor | None = None,
     ):
         if event is None:
             event = threading.Event()

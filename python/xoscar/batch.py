@@ -13,15 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 import inspect
 import textwrap
 from collections import namedtuple
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional, Tuple
+from typing import Any, Callable
 
 
-def build_args_binder(func, remove_self: bool = True) -> Optional[Callable]:
+def build_args_binder(func, remove_self: bool = True) -> Callable | None:
     try:
         spec = inspect.getfullargspec(func)
     except TypeError:  # pragma: no cover
@@ -45,7 +47,7 @@ def build_args_binder(func, remove_self: bool = True) -> Optional[Callable]:
         sig_list.append(f"**{spec.varkw}")
         args_list.append(spec.varkw)
 
-    if getattr(func, "__name__", None).isidentifier():
+    if getattr(func, "__name__").isidentifier():
         ret_func_name = f"{func.__name__}_binder"
         ret_type_name = f"_Args_{func.__name__}"
     else:
@@ -61,7 +63,7 @@ def build_args_binder(func, remove_self: bool = True) -> Optional[Callable]:
 
     glob_vars = globals().copy()
     glob_vars[ret_type_name] = namedtuple(ret_type_name, args_list)
-    loc_vars = dict()
+    loc_vars: dict[str, Any] = dict()
     exec(func_str, glob_vars, loc_vars)
     ext_func = loc_vars[ret_func_name]
     ext_func.__defaults__ = spec.defaults
@@ -72,13 +74,13 @@ def build_args_binder(func, remove_self: bool = True) -> Optional[Callable]:
 
 @dataclass
 class _DelayedArgument:
-    args: Tuple
-    kwargs: Dict
+    args: tuple
+    kwargs: dict
 
 
 class _ExtensibleCallable:
     func: Callable
-    batch_func: Optional[Callable]
+    batch_func: Callable | None
     is_async: bool
     has_single_func: bool
 
@@ -116,8 +118,8 @@ class _ExtensibleWrapper(_ExtensibleCallable):
     def __init__(
         self,
         func: Callable,
-        batch_func: Optional[Callable] = None,
-        bind_func: Optional[Callable] = None,
+        batch_func: Callable | None = None,
+        bind_func: Callable | None = None,
         is_async: bool = False,
     ):
         self.func = func
@@ -189,7 +191,7 @@ class _ExtensibleWrapper(_ExtensibleCallable):
 
 class _ExtensibleAccessor(_ExtensibleCallable):
     func: Callable
-    batch_func: Optional[Callable]
+    batch_func: Callable | None
 
     def __init__(self, func: Callable):
         self.func = func

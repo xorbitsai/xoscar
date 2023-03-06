@@ -23,7 +23,7 @@ from .core import Serializer, buffered, pickle_buffers, unpickle_buffers
 class NDArraySerializer(Serializer):
     @buffered
     def serial(self, obj: np.ndarray, context: Dict):
-        header = {}
+        header: dict = {}
         if obj.dtype.hasobject:
             header["pickle"] = True
             buffers = pickle_buffers(obj)
@@ -54,7 +54,7 @@ class NDArraySerializer(Serializer):
                 order=order,
             )
         )
-        return (header,), [memoryview(obj.ravel(order=order).view("uint8").data)], True
+        return (header,), [memoryview(obj.ravel(order=order).view("uint8").data)], True  # type: ignore
 
     def deserial(self, serialized: Tuple, context: Dict, subs: List[Any]):
         header = serialized[0]

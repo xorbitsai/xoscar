@@ -237,7 +237,7 @@ def pickle_buffers(obj):
     return buffers
 
 
-def unpickle_buffers(buffers):
+def unpickle_buffers(list buffers):
     result = cloudpickle.loads(buffers[0], buffers=buffers[1:])
 
     # as pandas prior to 1.1.0 use _data instead of _mgr to hold BlockManager,

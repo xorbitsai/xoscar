@@ -48,7 +48,7 @@ cudf = lazy_import("cudf")
 ucp = lazy_import("ucp")
 
 
-def gen_params():
+def gen_params() -> List[Tuple[Type[Server], Dict, str]]:
     # server_type, config, con
     params: List[Tuple[Type[Server], Dict, str]] = [
         (SocketServer, dict(host="127.0.0.1", port=port), f"127.0.0.1:{port}"),

@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, List, Union
+from __future__ import annotations
 
-from .core import Serializer, buffered
+from typing import Any, Union
 
 try:
     import pyarrow as pa
@@ -23,12 +23,14 @@ try:
     pa_types = Union[pa.Table, pa.RecordBatch]
 except ImportError:  # pragma: no cover
     pa = None
-    pa_types = Any
+    pa_types = Any  # type: ignore
+
+from .core import Serializer, buffered
 
 
 class ArrowBatchSerializer(Serializer):
     @buffered
-    def serial(self, obj: pa_types, context: Dict):
+    def serial(self, obj: pa_types, context: dict):
         sink = pa.BufferOutputStream()
         writer = pa.RecordBatchStreamWriter(sink, obj.schema)
         if isinstance(obj, pa.Table):
@@ -43,7 +45,7 @@ class ArrowBatchSerializer(Serializer):
         buffers = [buf]
         return (batch_type,), buffers, True
 
-    def deserial(self, serialized: Dict, context: Dict, subs: List):
+    def deserial(self, serialized: tuple, context: dict, subs: list):
         reader = pa.RecordBatchStreamReader(pa.BufferReader(subs[0]))
         if serialized[0] == "T":
             return reader.read_all()
