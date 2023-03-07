@@ -115,7 +115,7 @@ class AbstractMeter(AbstractMetric):
     def record(self, value=1, tags: Optional[Dict[str, str]] = None):
         self._count += value
         now = time.time()
-        past = now - self._last_time
+        past = max(now - self._last_time, 1e-9)
         if self._count >= _THRESHOLD or past >= _RECORDED_INTERVAL_SECS:
             qps = self._count / past
             self._record(qps, tags)
