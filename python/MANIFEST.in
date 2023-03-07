@@ -1,0 +1,12 @@
+global-include *.pyx
+global-include *.pxd
+global-include xoscar/**/*.yml
+global-exclude *.c
+global-exclude *.cpp
+global-exclude */**/tests/*.yml
+include setup.cfg
+include pyproject.toml
+global-exclude .DS_Store
+include versioneer.py
+include xoscar/_version.py
+global-exclude conftest.py
