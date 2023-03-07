@@ -24,7 +24,7 @@ import pytest
 
 from ....aio import AioEvent
 from ....tests.core import require_cudf, require_cupy
-from ....utils import get_next_port, lazy_import
+from ....utils import ensure_coverage, get_next_port, lazy_import
 from .. import (
     Channel,
     DummyChannel,
@@ -183,6 +183,7 @@ def _wrap_cuda_test(server_started_event, conf, tp):
         conf["handle_channel"] = check_data
 
         # create server
+        ensure_coverage()
         server = await tp.create(conf)
         await server.start()
         server_started_event.set()
@@ -202,7 +203,11 @@ async def test_multiprocess_cuda_comm(server_type):
     port = get_next_port()
     p = mp_ctx.Process(
         target=_wrap_cuda_test,
-        args=(server_started, dict(host="127.0.0.1", port=port), server_type),
+        args=(
+            server_started,
+            dict(host="127.0.0.1", port=port),
+            server_type,
+        ),
     )
     p.daemon = True
     p.start()
