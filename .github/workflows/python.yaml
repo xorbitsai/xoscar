@@ -70,6 +70,7 @@ jobs:
           - { os: windows-latest, python-version: 3.10}
         include:
           - { os: ubuntu-latest, module: ray-deploy, python-version: 3.9 }
+          - { os: xoscar, module: gpu, python-version: 3.9}
 
     steps:
     - name: Check out code
@@ -80,6 +81,7 @@ jobs:
 
     - name: Set up conda ${{ matrix.python-version }}
       uses: conda-incubator/setup-miniconda@v2
+      if: ${{ matrix.module != 'gpu' }}
       with:
         python-version: ${{ matrix.python-version }}
         activate-environment: ${{ env.CONDA_ENV }}
@@ -87,6 +89,7 @@ jobs:
     - name: Install dependencies
       env:
         MODULE: ${{ matrix.module }}
+      if: ${{ matrix.module != 'gpu' }}
       run: |
         pip install numpy scipy cython coverage flaky
         
@@ -97,6 +100,12 @@ jobs:
         pip install -e ".[dev,extra]"
       working-directory: ./python
 
+    - name: Install on GPU
+      if: ${{ matrix.module == 'gpu' }}
+      run: |
+        python setup.py build_ext -i
+      working-directory: ./python
+
     - name: Test with pytest
       env:
         MODULE: ${{ matrix.module }}
@@ -105,6 +114,8 @@ jobs:
           pytest --timeout=1500 \
             -W ignore::PendingDeprecationWarning \
             --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar
+        elif [ "$MODULE" == "gpu" ]; then
+          pytest -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar
         else
           pytest --cov-config=setup.cfg --cov-report=xml --cov=xoscar --durations=0 \
             --log-level=DEBUG --timeout=200 xoscar -m ray
