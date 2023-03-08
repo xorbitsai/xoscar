@@ -16,7 +16,6 @@ import asyncio
 import sys
 
 from .file import AioFileObject
-from .isolation import Isolation, get_isolation, new_isolation, stop_isolation
 from .lru import alru_cache
 from .parallelism import AioEvent
 
