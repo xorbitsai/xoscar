@@ -21,7 +21,7 @@ import os
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import List, Optional  # noqa: F401
+from typing import List, Optional, Type  # noqa: F401
 
 from .utils import dataslots
 
@@ -42,7 +42,6 @@ class DebugOptions:
     actor_call_timeout: int = 10
     process_message_timeout: int = 30
     actor_lock_timeout: int = 30
-    ray_object_retrieval_timeout: int = 10
     log_unhandled_errors: bool = True
     log_cycle_send: bool = True
 
@@ -64,14 +63,18 @@ def set_debug_options(options: Optional[DebugOptions]):
     core_set_debug_options(options)
 
 
-def reload_debug_opts_from_env():
+def _reload_debug_opts_from_env(cls: Type):
     config_str = os.environ.get("DEBUG_OSCAR", "0")
     if config_str == "0":
         set_debug_options(None)
         return
     config_str = os.environ["DEBUG_OSCAR"]
     config_json = {} if config_str == "1" else json.loads(config_str)
-    set_debug_options(DebugOptions(**config_json))
+    set_debug_options(cls(**config_json))
+
+
+def reload_debug_opts_from_env():
+    _reload_debug_opts_from_env(DebugOptions)
 
 
 async def _log_timeout(timeout, msg, *args, **kwargs):

@@ -25,7 +25,7 @@ import os
 import threading
 import traceback
 from abc import ABC, ABCMeta, abstractmethod
-from typing import Any, Callable, Coroutine, Optional, Type, TypeVar, Union
+from typing import Any, Callable, Coroutine, Optional, Type, TypeVar
 
 from .._utils import TypeDispatcher, create_actor_ref, to_binary
 from ..api import Actor
@@ -40,7 +40,7 @@ from ..errors import (
     ServerClosed,
 )
 from ..metrics import init_metrics
-from ..utils import implements, lazy_import, register_asyncio_task_timeout_detector
+from ..utils import implements, register_asyncio_task_timeout_detector
 from .allocate_strategy import AddressSpecified, allocated_type
 from .communication import Channel, Server, gen_local_address, get_server_type
 from .communication.errors import ChannelClosed
@@ -66,7 +66,6 @@ from .message import (
 from .router import Router
 
 logger = logging.getLogger(__name__)
-ray = lazy_import("ray")
 
 
 @contextlib.contextmanager
@@ -765,7 +764,7 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
 
 ActorPoolType = TypeVar("ActorPoolType", bound=AbstractActorPool)
 MainActorPoolType = TypeVar("MainActorPoolType", bound="MainActorPoolBase")
-SubProcessHandle = Union[multiprocessing.Process, "ray.actor.ActorHandle"]  # type: ignore
+SubProcessHandle = multiprocessing.Process
 
 
 class SubActorPoolBase(ActorPoolBase):

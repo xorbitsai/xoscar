@@ -239,7 +239,7 @@ class UCXChannel(Channel):
 
     @property
     @implements(Channel.type)
-    def type(self) -> ChannelType:
+    def type(self) -> int:
         return ChannelType.remote
 
     @implements(Channel.send)
@@ -363,7 +363,7 @@ class UCXServer(Server):
 
     @property
     @implements(Server.channel_type)
-    def channel_type(self) -> ChannelType:
+    def channel_type(self) -> int:
         return ChannelType.remote
 
     @staticmethod

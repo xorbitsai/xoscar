@@ -48,9 +48,6 @@ def test_init_metrics():
     init_metrics(backend="prometheus", config={"port": 0})
     assert api._metric_backend == "prometheus"
     shutdown_metrics()
-    init_metrics("ray")
-    assert api._metric_backend == "ray"
-    shutdown_metrics()
     with pytest.raises(NotImplementedError):
         init_metrics("not_exist")
 
