@@ -83,13 +83,13 @@ def _patch_spawn_get_preparation_data():
         def _patched_get_preparation_data(*args, **kw):
             ret = _raw_get_preparation_data(*args, **kw)
             if getattr(_init_main_suspended_local, "value", False):
-                # make sure user module is not imported when start Mars cluster
+                # make sure user module is not imported when start cluster
                 ret.pop("init_main_from_name", None)
                 ret.pop("init_main_from_path", None)
             return ret
 
-        _patched_get_preparation_data._mars_patched = True
-        if not getattr(mp_spawn.get_preparation_data, "_mars_patched", False):
+        _patched_get_preparation_data._indigen_patched = True
+        if not getattr(mp_spawn.get_preparation_data, "_indigen_patched", False):
             mp_spawn.get_preparation_data = _patched_get_preparation_data
     except (ImportError, AttributeError):  # pragma: no cover
         pass
@@ -187,7 +187,7 @@ class MainActorPool(MainActorPoolBase):
                 process = ctx.Process(
                     target=cls._start_sub_pool,
                     args=(actor_pool_config, process_index, status_queue),
-                    name=f"MarsActorPool{process_index}",
+                    name=f"IndigenActorPool{process_index}",
                 )
                 process.daemon = True
                 process.start()

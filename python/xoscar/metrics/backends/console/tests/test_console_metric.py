@@ -21,8 +21,8 @@ def test_counter():
     assert c.description == "A test counter"
     assert c.tag_keys == ("service", "tenant")
     assert c.type == "Counter"
-    c.record(1, {"service": "mars", "tenant": "test"})
-    c.record(2, {"service": "mars", "tenant": "test"})
+    c.record(1, {"service": "indigen", "tenant": "test"})
+    c.record(2, {"service": "indigen", "tenant": "test"})
     assert c.value == 3
 
 

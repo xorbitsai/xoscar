@@ -71,10 +71,7 @@ class AioSerializer:
         return await self._get_buffers()
 
 
-MALFORMED_MSG = """\
-Received malformed data, please check Mars version on both side,
-if error occurs when using `mars.new_session('http://web_ip:web_port'),
-please check if web port is right."""
+MALFORMED_MSG = "Received malformed data, please check Xoscar version on both side."
 
 
 def get_header_length(header_bytes: bytes):

@@ -329,7 +329,7 @@ cdef class LocalActorRefMethod:
 
 cdef class _BaseActor:
     """
-    Base Mars actor class, user methods implemented as methods
+    Base Indigen actor class, user methods implemented as methods
     """
     def __cinit__(self, *args, **kwargs):
         self._lock = self._create_lock()

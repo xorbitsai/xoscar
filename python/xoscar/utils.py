@@ -307,7 +307,7 @@ def patch_asyncio_task_create_time():  # pragma: no cover
 
     def new_loop_create_task(*args, **kwargs):
         task = loop_create_task(*args, **kwargs)
-        task.__mars_asyncio_task_create_time__ = time.time()
+        task.__xoscar_asyncio_task_create_time__ = time.time()
         return task
 
     if loop_create_task is not new_loop_create_task:
@@ -329,7 +329,7 @@ async def asyncio_task_timeout_detector(
         for task in asyncio.all_tasks(loop=loop):
             # Some task may be create before `patch_asyncio_task_create_time` applied, take them as never timeout.
             create_time = getattr(
-                task, "__mars_asyncio_task_create_time__", current_time
+                task, "__xoscar_asyncio_task_create_time__", current_time
             )
             if current_time - create_time >= task_timeout_seconds:
                 stack = io.StringIO()
@@ -355,17 +355,17 @@ def register_asyncio_task_timeout_detector(
 ) -> asyncio.Task | None:  # pragma: no cover
     """Register a asyncio task which print timeout task periodically."""
     check_interval = check_interval or int(
-        os.environ.get("MARS_DEBUG_ASYNCIO_TASK_TIMEOUT_CHECK_INTERVAL", -1)
+        os.environ.get("XOSCAR_DEBUG_ASYNCIO_TASK_TIMEOUT_CHECK_INTERVAL", -1)
     )
     if check_interval > 0:
         patch_asyncio_task_create_time()
         task_timeout_seconds = task_timeout_seconds or int(
-            os.environ.get("MARS_DEBUG_ASYNCIO_TASK_TIMEOUT_SECONDS", check_interval)
+            os.environ.get("XOSCAR_DEBUG_ASYNCIO_TASK_TIMEOUT_SECONDS", check_interval)
         )
         if not task_exclude_filters:
-            # Ignore mars/oscar by default since it has some long-running coroutines.
+            # Ignore Xoscar by default since it has some long-running coroutines.
             task_exclude_filter = os.environ.get(
-                "MARS_DEBUG_ASYNCIO_TASK_EXCLUDE_FILTERS", "xoscar"
+                "XOSCAR_DEBUG_ASYNCIO_TASK_EXCLUDE_FILTERS", "xoscar"
             )
             task_exclude_filters = task_exclude_filter.split(";")
         if sys.version_info[:2] < (3, 7):

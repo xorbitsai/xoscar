@@ -63,8 +63,8 @@ def test_counter(init_firstly):
     assert c.type == "Counter"
     if not init_firstly:
         init_metrics()
-    c.record(1, {"service": "mars", "tenant": "test"})
-    c.record(2, {"service": "mars", "tenant": "test"})
+    c.record(1, {"service": "indigen", "tenant": "test"})
+    c.record(2, {"service": "indigen", "tenant": "test"})
     assert c.value == 3
 
 
