@@ -21,7 +21,7 @@ from typing import Any
 
 from ..communication import DummyServer, gen_local_address
 from ..config import ActorPoolConfig
-from ..mars.pool import MainActorPool, SubActorPool, SubpoolStatus
+from ..indigen.pool import MainActorPool, SubActorPool, SubpoolStatus
 from ..pool import ActorPoolType
 
 

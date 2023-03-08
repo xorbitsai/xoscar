@@ -41,7 +41,7 @@ class _ProfilingOptionDescriptor:
             return self
         v = obj._options.get(self._name)
         if v is None:
-            v = os.environ.get(f"MARS_PROFILING_{self._name.upper()}", self._default)
+            v = os.environ.get(f"XOSCAR_PROFILING_{self._name.upper()}", self._default)
         if v is not None:
             v = self._type(v)
         # Cache the value.

@@ -67,7 +67,7 @@ def test_counter():
     assert c.description == "A test counter"
     assert c.tag_keys == ("service", "tenant")
     assert c.type == "Counter"
-    assert c.record(1, {"service": "mars", "tenant": "test"}) is None
+    assert c.record(1, {"service": "indigen", "tenant": "test"}) is None
 
 
 def test_gauge():

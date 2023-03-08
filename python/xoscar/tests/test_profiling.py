@@ -100,7 +100,7 @@ async def test_profiling_options():
         ProfilingData.init("abc", {"debug_interval_seconds": "abc"})
 
     # Test the priority, options first, then env var.
-    env_key = "MARS_PROFILING_DEBUG_INTERVAL_SECONDS"
+    env_key = "XOSCAR_PROFILING_DEBUG_INTERVAL_SECONDS"
     try:
         os.environ[env_key] = "2"
         options = _ProfilingOptions(True)

@@ -18,11 +18,11 @@ from __future__ import annotations
 from typing import Dict
 
 from ...backend import BaseActorBackend, register_backend
-from ..context import MarsActorContext
-from .driver import MarsActorDriver
+from ..context import IndigenActorContext
+from .driver import IndigenActorDriver
 from .pool import MainActorPool
 
-__all__ = ["MarsActorBackend"]
+__all__ = ["IndigenActorBackend"]
 
 
 def build_pool_kwargs(n_process: int, kwargs: Dict):
@@ -50,20 +50,20 @@ def build_pool_kwargs(n_process: int, kwargs: Dict):
 
 
 @register_backend
-class MarsActorBackend(BaseActorBackend):
+class IndigenActorBackend(BaseActorBackend):
     @staticmethod
     def name():
-        # None means Mars is default scheme
-        # ucx can be recognized as Mars backend as well
+        # None means Indigen is default scheme
+        # ucx can be recognized as Indigen backend as well
         return [None, "ucx"]
 
     @staticmethod
     def get_context_cls():
-        return MarsActorContext
+        return IndigenActorContext
 
     @staticmethod
     def get_driver_cls():
-        return MarsActorDriver
+        return IndigenActorDriver
 
     @classmethod
     async def create_actor_pool(
