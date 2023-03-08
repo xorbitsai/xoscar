@@ -69,7 +69,6 @@ jobs:
           - { os: windows-latest, python-version: 3.9}
           - { os: windows-latest, python-version: 3.10}
         include:
-          - { os: ubuntu-latest, module: ray-deploy, python-version: 3.9 }
           - { os: xoscar, module: gpu, python-version: 3.9}
 
     steps:
@@ -92,11 +91,6 @@ jobs:
       if: ${{ matrix.module != 'gpu' }}
       run: |
         pip install numpy scipy cython coverage flaky
-        
-        if [[ "$MODULE" == "ray-deploy" ]]; then
-          pip install "xgboost_ray<0.1.14" "protobuf<4" "sqlalchemy<2"
-        fi
-
         pip install -e ".[dev,extra]"
       working-directory: ./python
 
@@ -114,11 +108,8 @@ jobs:
           pytest --timeout=1500 \
             -W ignore::PendingDeprecationWarning \
             --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar
-        elif [ "$MODULE" == "gpu" ]; then
-          pytest -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar
         else
-          pytest --cov-config=setup.cfg --cov-report=xml --cov=xoscar --durations=0 \
-            --log-level=DEBUG --timeout=200 xoscar -m ray
+          pytest -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar
         fi
       working-directory: ./python
 

@@ -59,7 +59,7 @@ class DummyChannel(Channel):
 
     @property
     @implements(Channel.type)
-    def type(self) -> ChannelType:
+    def type(self) -> int:
         return ChannelType.local
 
     @implements(Channel.send)
@@ -125,7 +125,7 @@ class DummyServer(Server):
 
     @property
     @implements(Server.channel_type)
-    def channel_type(self) -> ChannelType:
+    def channel_type(self) -> int:
         return ChannelType.local
 
     @staticmethod

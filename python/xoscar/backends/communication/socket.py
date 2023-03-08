@@ -50,7 +50,7 @@ class SocketChannel(Channel):
         local_address: str | None = None,
         dest_address: str | None = None,
         compression: str | None = None,
-        channel_type: ChannelType | None = None,
+        channel_type: int | None = None,
     ):
         super().__init__(
             local_address=local_address,
@@ -66,7 +66,7 @@ class SocketChannel(Channel):
 
     @property
     @implements(Channel.type)
-    def type(self) -> ChannelType:
+    def type(self) -> int:
         return self._channel_type  # type: ignore
 
     @implements(Channel.send)
@@ -197,7 +197,7 @@ class SocketServer(_BaseSocketServer):
 
     @property
     @implements(Server.channel_type)
-    def channel_type(self) -> ChannelType:
+    def channel_type(self) -> int:
         return ChannelType.remote
 
     @staticmethod
@@ -291,7 +291,7 @@ class UnixSocketServer(_BaseSocketServer):
 
     @property
     @implements(Server.channel_type)
-    def channel_type(self) -> ChannelType:
+    def channel_type(self) -> int:
         return ChannelType.ipc
 
     @staticmethod

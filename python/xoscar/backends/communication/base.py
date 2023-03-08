@@ -16,17 +16,17 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from enum import Enum
+from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, Type
 
 from ...utils import classproperty, implements
 
 
-class ChannelType(Enum):
+@dataclass
+class ChannelType:
     local = 0  # for local communication
     ipc = 1  # inproc
     remote = 2  # remote
-    ray = 3  # for ray actors communication
 
 
 class Channel(ABC):
@@ -86,13 +86,13 @@ class Channel(ABC):
 
     @property
     @abstractmethod
-    def type(self) -> ChannelType:
+    def type(self) -> int:
         """
         Channel is used for, can be dummy, ipc or remote.
 
         Returns
         -------
-        channel_type: ChannelType
+        channel_type: int
             type that can be dummy, ipc or remote.
         """
 
@@ -134,13 +134,13 @@ class Server(ABC):
 
     @property
     @abstractmethod
-    def channel_type(self) -> ChannelType:
+    def channel_type(self) -> int:
         """
         Channel type, can be dummy, ipc or remote.
 
         Returns
         -------
-        channel_type: ChannelType
+        channel_type: int
             type that can be dummy, ipc or remote.
         """
 
@@ -236,13 +236,13 @@ class Client(ABC):
         self.channel = channel
 
     @property
-    def channel_type(self) -> ChannelType:
+    def channel_type(self) -> int:
         """
         Channel type, can be dummy, ipc or remote.
 
         Returns
         -------
-        channel_type: ChannelType
+        channel_type: int
             type that can be dummy, ipc or remote.
         """
         return self.channel.type

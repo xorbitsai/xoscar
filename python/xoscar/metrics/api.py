@@ -25,7 +25,6 @@ from typing import Any, Callable, NamedTuple
 from .backends.console import console_metric
 from .backends.metric import AbstractMetric
 from .backends.prometheus import prometheus_metric
-from .backends.ray import ray_metric
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,6 @@ _metric_backend = "console"
 _backends_cls = {
     "console": console_metric,
     "prometheus": prometheus_metric,
-    "ray": ray_metric,
 }
 
 
