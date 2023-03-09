@@ -52,7 +52,7 @@ class ProfilingContext:
     task_id: str
 
 
-class MarsActorContext(BaseActorContext):
+class IndigenActorContext(BaseActorContext):
     __slots__ = ("_caller",)
 
     support_allocate_strategy = True

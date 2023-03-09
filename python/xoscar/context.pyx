@@ -25,7 +25,7 @@ cdef object _context = None
 
 
 cdef class BaseActorContext:
-    # allocate strategy is for Mars backend only
+    # allocate strategy is for Indigen backend only
     support_allocate_strategy = False
 
     """

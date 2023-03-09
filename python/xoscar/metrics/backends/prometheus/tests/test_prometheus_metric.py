@@ -58,9 +58,9 @@ def test_counter(start_prometheus_http_server):
     assert set(["host", "pid"]).issubset(set(c.tag_keys))
     assert set(["service", "tenant"]).issubset(set(c.tag_keys))
     assert c.type == "Counter"
-    c.record(1, {"service": "mars", "tenant": "test"})
+    c.record(1, {"service": "indigen", "tenant": "test"})
     verify_metric("test_counter", 1.0)
-    c.record(2, {"service": "mars", "tenant": "test"})
+    c.record(2, {"service": "indigen", "tenant": "test"})
     verify_metric("test_counter", 3.0)
 
 

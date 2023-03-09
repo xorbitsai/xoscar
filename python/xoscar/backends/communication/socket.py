@@ -263,7 +263,7 @@ TEMPDIR = tempfile.gettempdir()
 
 @lru_cache(100)
 def _gen_unix_socket_default_path(process_index):
-    return f"{TEMPDIR}/mars/{md5(to_binary(str(process_index))).hexdigest()}"  # nosec
+    return f"{TEMPDIR}/xoscar/{md5(to_binary(str(process_index))).hexdigest()}"  # nosec
 
 
 @register_server

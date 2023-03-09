@@ -19,8 +19,8 @@ from typing import Dict
 from ...driver import BaseActorDriver
 
 
-class MarsActorDriver(BaseActorDriver):
+class IndigenActorDriver(BaseActorDriver):
     @classmethod
     def setup_cluster(cls, address_to_resources: Dict[str, Dict[str, Number]]):
-        # nothing need to be done in driver of Mars backend
+        # nothing need to be done in driver of Indigen backend
         pass

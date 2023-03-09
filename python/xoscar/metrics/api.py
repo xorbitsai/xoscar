@@ -154,7 +154,7 @@ class Metrics:
     >>> c1.record(1)
 
     >>> c2 = counter('counter2', 'A counter', ('service', 'tenant'))
-    >>> c2.record(1, {'service': 'mars', 'tenant': 'test'})
+    >>> c2.record(1, {'service': 'indigen', 'tenant': 'test'})
 
     >>> g1 = gauge('gauge1')
     >>> g1.record(1)

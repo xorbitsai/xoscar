@@ -45,9 +45,9 @@ from .errors import (
 from ._utils import create_actor_ref
 
 # make sure methods are registered
-from .backends import mars, test
+from .backends import indigen, test
 
-del mars, test
+del indigen, test
 
 _T = TypeVar("_T")
 ActorRefType = Union[ActorRef, _T]

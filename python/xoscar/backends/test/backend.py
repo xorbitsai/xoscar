@@ -16,12 +16,12 @@
 from __future__ import annotations
 
 from ...backend import register_backend
-from ..mars.backend import MarsActorBackend, build_pool_kwargs
+from ..indigen.backend import IndigenActorBackend, build_pool_kwargs
 from .pool import TestMainActorPool
 
 
 @register_backend
-class TestActorBackend(MarsActorBackend):
+class TestActorBackend(IndigenActorBackend):
     @staticmethod
     def name():
         return "test"

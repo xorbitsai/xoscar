@@ -287,7 +287,7 @@ async def test_simple_local_actor_pool(actor_pool):
 
 
 @pytest.mark.asyncio
-async def test_mars_post_create_pre_destroy(actor_pool):
+async def test_indigen_post_create_pre_destroy(actor_pool):
     rec_ref = await mo.create_actor(
         RecordActor, uid=RecordActor.default_uid(), address=actor_pool.external_address
     )
@@ -303,7 +303,7 @@ async def test_mars_post_create_pre_destroy(actor_pool):
 
 
 @pytest.mark.asyncio
-async def test_mars_create_actor(actor_pool):
+async def test_indigen_create_actor(actor_pool):
     actor_ref = await mo.create_actor(
         DummyActor, 1, address=actor_pool.external_address
     )
@@ -323,7 +323,7 @@ async def test_mars_create_actor(actor_pool):
 
 
 @pytest.mark.asyncio
-async def test_mars_create_actor_error(actor_pool):
+async def test_indigen_create_actor_error(actor_pool):
     ref1 = await mo.create_actor(
         DummyActor, 1, uid="dummy1", address=actor_pool.external_address
     )
@@ -341,7 +341,7 @@ async def test_mars_create_actor_error(actor_pool):
 
 
 @pytest.mark.asyncio
-async def test_mars_send(actor_pool):
+async def test_indigen_send(actor_pool):
     ref1 = await mo.create_actor(DummyActor, 1, address=actor_pool.external_address)
     ref2 = await mo.actor_ref(
         await ref1.create(DummyActor, 2, address=actor_pool.external_address)
@@ -359,7 +359,7 @@ async def test_mars_send(actor_pool):
 
 
 @pytest.mark.asyncio
-async def test_mars_send_error(actor_pool):
+async def test_indigen_send_error(actor_pool):
     ref1 = await mo.create_actor(DummyActor, 1, address=actor_pool.external_address)
     with pytest.raises(TypeError):
         await ref1.add(1.0)
@@ -373,7 +373,7 @@ async def test_mars_send_error(actor_pool):
 
 
 @pytest.mark.asyncio
-async def test_mars_tell(actor_pool):
+async def test_indigen_tell(actor_pool):
     ref1 = await mo.create_actor(DummyActor, 1, address=actor_pool.external_address)
     ref2 = await mo.actor_ref(await ref1.create(DummyActor, 2))
     await ref1.tell(ref2, "add", 3)
@@ -392,7 +392,7 @@ async def test_mars_tell(actor_pool):
 
 
 @pytest.mark.asyncio
-async def test_mars_batch_method(actor_pool):
+async def test_indigen_batch_method(actor_pool):
     ref1 = await mo.create_actor(DummyActor, 1, address=actor_pool.external_address)
     batch_result = await ref1.add_ret.batch(
         ref1.add_ret.delay(1), ref1.add_ret.delay(2), ref1.add_ret.delay(3)
@@ -447,7 +447,7 @@ async def test_gather_exception(actor_pool):
 
 
 @pytest.mark.asyncio
-async def test_mars_destroy_has_actor(actor_pool):
+async def test_indigen_destroy_has_actor(actor_pool):
     ref1 = await mo.create_actor(DummyActor, 1, address=actor_pool.external_address)
     ref2 = await mo.actor_ref(ref1)
     ref2_add_method = ref2.add
@@ -512,7 +512,7 @@ async def test_mars_destroy_has_actor(actor_pool):
 
 
 @pytest.mark.asyncio
-async def test_mars_resource_lock(actor_pool):
+async def test_indigen_resource_lock(actor_pool):
     ref = await mo.create_actor(ResourceLockActor, address=actor_pool.external_address)
     event_list = []
 
