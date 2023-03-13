@@ -46,12 +46,14 @@ from ._utils import create_actor_ref
 
 # make sure methods are registered
 from .backends import indigen, test
+from .entrypoints import init_extension_entrypoints
+from . import _version
 
 del indigen, test
+init_extension_entrypoints()
+del init_extension_entrypoints
 
 _T = TypeVar("_T")
 ActorRefType = Union[ActorRef, _T]
-
-from . import _version
 
 __version__ = _version.get_versions()["version"]
