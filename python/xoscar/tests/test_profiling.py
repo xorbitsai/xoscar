@@ -57,8 +57,6 @@ def test_profiling_data():
                 "serialization": {"a": 1, "b": 1, "c": {}},
                 "most_calls": {},
                 "slow_calls": {},
-                "band_subtasks": {},
-                "slow_subtasks": {},
             },
         )
 
@@ -124,9 +122,7 @@ async def test_profiling_options():
 
 
 def test_collect():
-    options = _ProfilingOptions(
-        {"slow_calls_duration_threshold": 0, "slow_subtasks_duration_threshold": 0}
-    )
+    options = _ProfilingOptions({"slow_calls_duration_threshold": 0})
 
     # Test collect message with incomparable arguments.
     from ..core import ActorRef

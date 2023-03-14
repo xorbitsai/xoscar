@@ -189,8 +189,6 @@ class _ProfilingData:
             "serialization": {},
             "most_calls": {},
             "slow_calls": {},
-            "band_subtasks": {},
-            "slow_subtasks": {},
         }
         self._call_stats[task_id] = _CallStats(options)
 
