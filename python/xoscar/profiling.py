@@ -172,6 +172,18 @@ class _CallStats:
 
 
 class _ProfilingData:
+    _instance = None
+
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    @classmethod
+    def set_instance(cls, inst: "_ProfilingData"):
+        cls._instance = inst
+
     def __init__(self):
         self._data = {}
         self._call_stats = {}
@@ -242,4 +254,8 @@ class _ProfilingData:
         return DummyOperator if v is None else ProfilingDataOperator(v)
 
 
-ProfilingData = _ProfilingData()
+def get_profiling_data() -> _ProfilingData:
+    return _ProfilingData.get_instance()
+
+
+ProfilingData = get_profiling_data()
