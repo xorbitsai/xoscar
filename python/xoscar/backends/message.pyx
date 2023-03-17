@@ -234,8 +234,8 @@ cdef class ErrorMessage(_MessageBase):
     def as_instanceof_cause(self):
         # Check the as_instanceof_cause is not recursive.
         #
-        # e.g. SubtaskRunnerActor.run_subtask will reraise the exception raised
-        # from SubtaskProcessorActor.run. But these two actors are in the same
+        # e.g. actor_a.method1 will reraise the exception raised
+        # from actor_b.method2. But these two actors are in the same
         # process, so we don't want to append duplicated address and pid in the
         # error message.
         if issubclass(self.error_type, _AsCauseBase):

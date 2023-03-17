@@ -22,7 +22,7 @@ from typing import Union
 
 from .._utils import Timer
 from ..errors import ServerClosed
-from ..profiling import ProfilingData
+from ..profiling import get_profiling_data
 from .communication import Client
 from .message import DeserializeMessageFailed, ErrorMessage, ResultMessage, _MessageBase
 from .router import Router
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class ActorCaller:
-    __slots__ = "_client_to_message_futures", "_clients"
+    __slots__ = "_client_to_message_futures", "_clients", "_profiling_data"
 
     _client_to_message_futures: dict[Client, dict[bytes, asyncio.Future]]
     _clients: dict[Client, asyncio.Task]
@@ -40,6 +40,7 @@ class ActorCaller:
     def __init__(self):
         self._client_to_message_futures = dict()
         self._clients = dict()
+        self._profiling_data = get_profiling_data()
 
     async def get_client(self, router: Router, dest_address: str) -> Client:
         client = await router.get_client(dest_address, from_who=self)
@@ -129,7 +130,7 @@ class ActorCaller:
             else:
                 r = await wait_response
 
-        ProfilingData.collect_actor_call(message, timer.duration)
+        self._profiling_data.collect_actor_call(message, timer.duration)
         return r
 
     async def stop(self):
