@@ -63,7 +63,6 @@ class _ProfilingOptionsMeta(type):
 class _ProfilingOptions(metaclass=_ProfilingOptionsMeta):
     debug_interval_seconds = _ProfilingOptionDescriptor(float, default=None)
     slow_calls_duration_threshold = _ProfilingOptionDescriptor(int, default=1)
-    slow_subtasks_duration_threshold = _ProfilingOptionDescriptor(int, default=10)
 
     def __init__(self, options):
         if isinstance(options, Mapping):
