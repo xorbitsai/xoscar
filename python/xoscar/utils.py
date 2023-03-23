@@ -33,7 +33,13 @@ from abc import ABC
 from types import TracebackType
 from typing import Callable, Type
 
-from ._utils import to_binary, to_str
+from ._utils import (  # noqa: F401 # pylint: disable=unused-import
+    NamedType,
+    Timer,
+    TypeDispatcher,
+    to_binary,
+    to_str,
+)
 
 # Please refer to https://bugs.python.org/issue41451
 try:
