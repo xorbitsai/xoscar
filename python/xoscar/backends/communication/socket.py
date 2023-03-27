@@ -21,6 +21,7 @@ import os
 import socket
 import sys
 import tempfile
+import warnings
 from abc import ABCMeta
 from asyncio import AbstractServer, StreamReader, StreamWriter
 from functools import lru_cache
@@ -267,7 +268,13 @@ def _get_or_create_default_unix_socket_dir():
     else:
         unix_socket_dir = XOSCAR_UNIX_SOCKET_DIR
     os.makedirs(unix_socket_dir, exist_ok=True)
-    os.chmod(unix_socket_dir, mode=0o777)
+    try:
+        os.chmod(unix_socket_dir, mode=0o777)
+    except PermissionError as e:
+        warnings.warn(
+            "Lack of permission on the socket dir %s" % unix_socket_dir,
+            RuntimeWarning
+        )
     return unix_socket_dir
 
 
