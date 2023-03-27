@@ -20,7 +20,6 @@ import concurrent.futures as futures
 import os
 import socket
 import sys
-import tempfile
 import warnings
 from abc import ABCMeta
 from asyncio import AbstractServer, StreamReader, StreamWriter
@@ -30,7 +29,7 @@ from typing import Any, Callable, Coroutine, Dict, Type
 from urllib.parse import urlparse
 
 from ..._utils import to_binary
-from ...constants import XOSCAR_UNIX_SOCKET_DIR_WIN, XOSCAR_UNIX_SOCKET_DIR
+from ...constants import XOSCAR_UNIX_SOCKET_DIR, XOSCAR_UNIX_SOCKET_DIR_WIN
 from ...serialization import AioDeserializer, AioSerializer, deserialize
 from ...utils import classproperty, implements
 from .base import Channel, ChannelType, Client, Server
@@ -270,10 +269,9 @@ def _get_or_create_default_unix_socket_dir():
     os.makedirs(unix_socket_dir, exist_ok=True)
     try:
         os.chmod(unix_socket_dir, mode=0o777)
-    except PermissionError as e:
+    except PermissionError:
         warnings.warn(
-            "Lack of permission on the socket dir %s" % unix_socket_dir,
-            RuntimeWarning
+            "Lack of permission on the socket dir %s" % unix_socket_dir, RuntimeWarning
         )
     return unix_socket_dir
 
