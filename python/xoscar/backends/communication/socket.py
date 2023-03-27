@@ -269,7 +269,7 @@ def _get_or_create_default_unix_socket_dir():
     os.makedirs(unix_socket_dir, exist_ok=True)
     try:
         os.chmod(unix_socket_dir, mode=0o777)
-    except PermissionError:
+    except PermissionError:  # pragma: no cover
         warnings.warn(
             "Lack of permission on the socket dir %s" % unix_socket_dir, RuntimeWarning
         )
