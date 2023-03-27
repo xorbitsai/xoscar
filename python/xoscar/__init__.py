@@ -50,10 +50,11 @@ from .entrypoints import init_extension_entrypoints
 from . import _version
 
 del indigen, test
-init_extension_entrypoints()
-del init_extension_entrypoints
 
 _T = TypeVar("_T")
 ActorRefType = Union[ActorRef, _T]
 
 __version__ = _version.get_versions()["version"]
+
+init_extension_entrypoints()
+del init_extension_entrypoints
