@@ -279,7 +279,7 @@ def _get_or_create_default_unix_socket_dir():
 @lru_cache(100)
 def _gen_unix_socket_default_path(process_index):
     return (
-        f"{_get_or_create_default_unix_socket_dir()}/xoscar/"
+        f"{_get_or_create_default_unix_socket_dir()}/"
         f"{md5(to_binary(str(process_index))).hexdigest()}"
     )  # nosec
 
