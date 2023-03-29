@@ -29,7 +29,7 @@ from typing import Any, Callable, Coroutine, Dict, Type
 from urllib.parse import urlparse
 
 from ..._utils import to_binary
-from ...constants import XOSCAR_UNIX_SOCKET_DIR, XOSCAR_UNIX_SOCKET_DIR_WIN
+from ...constants import XOSCAR_UNIX_SOCKET_DIR
 from ...serialization import AioDeserializer, AioSerializer, deserialize
 from ...utils import classproperty, implements
 from .base import Channel, ChannelType, Client, Server
@@ -260,20 +260,15 @@ class SocketClient(Client):
 
 
 def _get_or_create_default_unix_socket_dir():
-    import sys
-
-    if sys.platform.startswith("win"):
-        unix_socket_dir = XOSCAR_UNIX_SOCKET_DIR_WIN
-    else:
-        unix_socket_dir = XOSCAR_UNIX_SOCKET_DIR
-    os.makedirs(unix_socket_dir, exist_ok=True)
+    os.makedirs(XOSCAR_UNIX_SOCKET_DIR, exist_ok=True)
     try:
-        os.chmod(unix_socket_dir, mode=0o777)
+        os.chmod(XOSCAR_UNIX_SOCKET_DIR, mode=0o777)
     except PermissionError:  # pragma: no cover
         warnings.warn(
-            "Lack of permission on the socket dir %s" % unix_socket_dir, RuntimeWarning
+            "Lack of permission on the socket dir %s" % XOSCAR_UNIX_SOCKET_DIR,
+            RuntimeWarning,
         )
-    return unix_socket_dir
+    return XOSCAR_UNIX_SOCKET_DIR
 
 
 @lru_cache(100)

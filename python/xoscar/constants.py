@@ -15,8 +15,6 @@
 import os
 
 XOSCAR_TEMP_DIR = "/tmp/xoscar"
-XOSCAR_TEMP_DIR_WIN = "C:\\Temp\\xoscar"
 
 # unix socket.
 XOSCAR_UNIX_SOCKET_DIR = os.path.join(XOSCAR_TEMP_DIR, "socket")
-XOSCAR_UNIX_SOCKET_DIR_WIN = os.path.join(XOSCAR_TEMP_DIR_WIN, "socket")
