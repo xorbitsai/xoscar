@@ -14,7 +14,9 @@
 
 import os
 
-XOSCAR_TEMP_DIR = "/tmp/xoscar"
+from .utils import get_current_user
+
+XOSCAR_TEMP_DIR = f"/tmp/{get_current_user()}/xoscar"
 
 # unix socket.
 XOSCAR_UNIX_SOCKET_DIR = os.path.join(XOSCAR_TEMP_DIR, "socket")

@@ -20,7 +20,6 @@ import concurrent.futures as futures
 import os
 import socket
 import sys
-import warnings
 from abc import ABCMeta
 from asyncio import AbstractServer, StreamReader, StreamWriter
 from functools import lru_cache
@@ -261,13 +260,6 @@ class SocketClient(Client):
 
 def _get_or_create_default_unix_socket_dir():
     os.makedirs(XOSCAR_UNIX_SOCKET_DIR, exist_ok=True)
-    try:
-        os.chmod(XOSCAR_UNIX_SOCKET_DIR, mode=0o777)
-    except PermissionError:  # pragma: no cover
-        warnings.warn(
-            "Lack of permission on the socket dir %s" % XOSCAR_UNIX_SOCKET_DIR,
-            RuntimeWarning,
-        )
     return XOSCAR_UNIX_SOCKET_DIR
 
 
