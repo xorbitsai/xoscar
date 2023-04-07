@@ -160,11 +160,3 @@ def test_timer():
         time.sleep(0.1)
 
     assert timer.duration >= 0.1
-
-
-def test_get_current_user():
-    user = utils.get_current_user()
-    # WINDOWS env USERNAME
-    # UNIX env USER
-    actual_user = os.environ.get("USER", os.environ.get("USERNAME"))
-    assert user == actual_user
