@@ -18,7 +18,6 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import functools
-import getpass
 import importlib
 import inspect
 import io
@@ -447,11 +446,3 @@ def retry_callable(
             raise ex  # pylint: disable-msg=E0702
 
     return retry_call
-
-
-def get_current_user() -> str:
-    """
-    Get current login user.
-    Compatible for unix and windows.
-    """
-    return getpass.getuser()
