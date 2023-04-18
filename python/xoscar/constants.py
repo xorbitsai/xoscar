@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import getpass
 import os
-import tempfile
+from pathlib import Path
 
-TEMPDIR = tempfile.gettempdir()
-XOSCAR_TEMP_DIR = os.path.join(TEMPDIR, getpass.getuser(), "xoscar")
+XOSCAR_TEMP_DIR = Path.home() / ".xoscar"
 
 # unix socket.
 XOSCAR_UNIX_SOCKET_DIR = os.path.join(XOSCAR_TEMP_DIR, "socket")
