@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 from ...backend import register_backend
-from ..indigen.backend import IndigenActorBackend, build_pool_kwargs
+from ..indigen.backend import IndigenActorBackend
 from .pool import TestMainActorPool
 
 
@@ -33,7 +33,6 @@ class TestActorBackend(IndigenActorBackend):
         from ..pool import create_actor_pool
 
         assert n_process is not None
-        n_process, kwargs = build_pool_kwargs(n_process, kwargs)
         return await create_actor_pool(
             address, pool_cls=TestMainActorPool, n_process=n_process, **kwargs
         )

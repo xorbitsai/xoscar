@@ -15,38 +15,12 @@
 
 from __future__ import annotations
 
-from typing import Dict
-
 from ...backend import BaseActorBackend, register_backend
 from ..context import IndigenActorContext
 from .driver import IndigenActorDriver
 from .pool import MainActorPool
 
 __all__ = ["IndigenActorBackend"]
-
-
-def build_pool_kwargs(n_process: int, kwargs: Dict):
-    n_io_process = kwargs.pop("n_io_process", 0)
-    if n_io_process:
-        n_process += n_io_process
-
-        labels = kwargs["labels"]
-        envs = kwargs["envs"]
-        external_address_schemes = kwargs["external_address_schemes"]
-        enable_internal_addresses = kwargs["enable_internal_addresses"]
-        # sub-pools for IO(transfer and spill)
-        for _ in range(n_io_process):
-            if envs:  # pragma: no cover
-                envs.append(dict())
-            labels.append("io")
-            if external_address_schemes:
-                # just use main process' scheme for IO process
-                external_address_schemes.append(external_address_schemes[0])
-            if enable_internal_addresses:
-                # just use main process' setting for IO process
-                enable_internal_addresses.append(enable_internal_addresses[0])
-
-    return n_process, kwargs
 
 
 @register_backend
@@ -72,7 +46,6 @@ class IndigenActorBackend(BaseActorBackend):
         from ..pool import create_actor_pool
 
         assert n_process is not None
-        n_process, kwargs = build_pool_kwargs(n_process, kwargs)
         return await create_actor_pool(
             address, pool_cls=MainActorPool, n_process=n_process, **kwargs
         )
