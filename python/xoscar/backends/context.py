@@ -284,12 +284,10 @@ class IndigenActorContext(BaseActorContext):
     def _gen_copy_to_message(content: Any):
         return CopyToBuffersMessage(message_id=new_message_id(), content=content)  # type: ignore
 
-    async def _assign_client(self, router, address) -> Tuple[Client, bool]:
+    async def _assign_client(self, router, address) -> Client:
         client = await self._caller.get_client(router, address)
-        if isinstance(client, DummyClient):
-            return client, False
-        if hasattr(client, "send_buffers"):
-            return client, True
+        if isinstance(client, DummyClient) or hasattr(client, "send_buffers"):
+            return client
         client_types = router.get_all_client_types(address)
         try:
             client_type = next(
@@ -298,12 +296,9 @@ class IndigenActorContext(BaseActorContext):
                 if hasattr(client_type, "send_buffers")
             )
         except StopIteration:
-            return client, False
+            return client
         else:
-            client = await self._caller.get_client_via_type(
-                router, address, client_type
-            )
-            return client, True
+            return await self._caller.get_client_via_type(router, address, client_type)
 
     async def copy_to(self, local_buffers: list, remote_buffer_refs: List[BufferRef]):
         assert (
@@ -317,8 +312,8 @@ class IndigenActorContext(BaseActorContext):
         router = Router.get_instance()
         assert router is not None, "`copy_to` can only be used inside pools"
         address = remote_buffer_refs[0].address
-        client, is_ucx = await self._assign_client(router, address)
-        if is_ucx:
+        client = await self._assign_client(router, address)
+        if isinstance(client, UCXClient):
             message = [(buf.address, buf.uid) for buf in remote_buffer_refs]
             await self._call_send_buffers(
                 client,
