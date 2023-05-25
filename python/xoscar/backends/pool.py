@@ -29,7 +29,7 @@ from typing import Any, Callable, Coroutine, Optional, Type, TypeVar
 
 from .._utils import TypeDispatcher, create_actor_ref, to_binary
 from ..api import Actor
-from ..core import ActorRef, register_local_pool
+from ..core import ActorRef, BufferRef, register_local_pool
 from ..debug import debug_async_timeout, record_message_trace
 from ..entrypoints import init_extension_entrypoints
 from ..errors import (
@@ -42,7 +42,13 @@ from ..errors import (
 from ..metrics import init_metrics
 from ..utils import implements, register_asyncio_task_timeout_detector
 from .allocate_strategy import AddressSpecified, allocated_type
-from .communication import Channel, Server, gen_local_address, get_server_type
+from .communication import (
+    Channel,
+    Server,
+    UCXChannel,
+    gen_local_address,
+    get_server_type,
+)
 from .communication.errors import ChannelClosed
 from .config import ActorPoolConfig
 from .core import ActorCaller, ResultMessageType
@@ -117,6 +123,7 @@ def _register_message_handler(pool_type: Type["AbstractActorPool"]):
         (MessageType.tell, pool_type.tell),
         (MessageType.cancel, pool_type.cancel),
         (MessageType.control, pool_type.handle_control_command),
+        (MessageType.copy_to_buffers, pool_type.handle_copy_to_message),
     ]:
         pool_type._message_handler[message_type] = handler  # type: ignore
     return pool_type
@@ -493,9 +500,34 @@ class AbstractActorPool(ABC):
         finally:
             self._stopped.set()
 
+    async def handle_copy_to_message(self, message) -> ResultMessage:
+        for addr, uid, start, _len, data in message.content:
+            buffer = BufferRef.get_buffer(BufferRef(addr, uid))
+            buffer[start : start + _len] = data
+        return ResultMessage(message_id=message.message_id, result=True)
+
     @property
     def stopped(self) -> bool:
         return self._stopped.is_set()
+
+    @staticmethod
+    async def _handle_ucx_meta_message(message: _MessageBase, channel: Channel) -> bool:
+        if (
+            isinstance(message, ControlMessage)
+            and message.message_type == MessageType.control
+            and message.control_message_type == ControlMessageType.switch_to_transfer
+            and isinstance(channel, UCXChannel)
+        ):
+            buffers = [
+                BufferRef.get_buffer(BufferRef(addr, uid))
+                for addr, uid in message.content
+            ]
+            await channel.recv_buffers(buffers)
+            asyncio.create_task(
+                channel.send(ResultMessage(message_id=message.message_id, result=True))
+            )
+            return True
+        return False
 
     async def on_new_channel(self, channel: Channel):
         while not self._stopped.is_set():
@@ -509,6 +541,8 @@ class AbstractActorPool(ABC):
                     # close failed, ignore
                     pass
                 return
+            if await self._handle_ucx_meta_message(message, channel):
+                continue
             asyncio.create_task(self.process_message(message, channel))
             # delete to release the reference of message
             del message
@@ -1381,7 +1415,7 @@ class MainActorPoolBase(ActorPoolBase):
         address: str,
         n_process: int | None = None,
         ports: list[int] | None = None,
-        schemes: list[str] | None = None,
+        schemes: list[Optional[str]] | None = None,
     ):
         """Returns external addresses for n pool processes"""
 
@@ -1401,7 +1435,7 @@ async def create_actor_pool(
     labels: list[str] | None = None,
     ports: list[int] | None = None,
     envs: list[dict] | None = None,
-    external_address_schemes: list[str] | None = None,
+    external_address_schemes: list[Optional[str]] | None = None,
     enable_internal_addresses: list[bool] | None = None,
     subprocess_start_method: str | None = None,
     auto_recover: str | bool = "actor",

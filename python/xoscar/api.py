@@ -17,12 +17,12 @@ from __future__ import annotations
 
 from collections import defaultdict
 from numbers import Number
-from typing import TYPE_CHECKING, Any, Dict, Tuple, Type
+from typing import TYPE_CHECKING, Any, Dict, Tuple, Type, List
 from urllib.parse import urlparse
 
 from .backend import get_backend
 from .context import get_context
-from .core import ActorRef, _Actor, _StatelessActor
+from .core import ActorRef, BufferRef, _Actor, _StatelessActor
 
 if TYPE_CHECKING:
     from .backends.config import ActorPoolConfig
@@ -105,7 +105,7 @@ async def actor_ref(*args, **kwargs) -> ActorRef:
     return await ctx.actor_ref(*args, **kwargs)
 
 
-async def kill_actor(actor_ref):
+async def kill_actor(actor_ref: ActorRef):
     # TODO: explain the meaning of 'kill'
     """
     Forcefully kill an actor.
@@ -159,6 +159,16 @@ async def create_actor_pool(
     return await get_backend(scheme).create_actor_pool(
         address, n_process=n_process, **kwargs
     )
+
+
+def buffer_ref(address: str, buffer: Any) -> BufferRef:
+    ctx = get_context()
+    return ctx.buffer_ref(address, buffer)
+
+
+async def copy_to(local_buffers: list, remote_buffer_refs: List[BufferRef]):
+    ctx = get_context()
+    return await ctx.copy_to(local_buffers, remote_buffer_refs)
 
 
 async def wait_actor_pool_recovered(address: str, main_pool_address: str | None = None):

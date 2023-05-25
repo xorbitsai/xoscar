@@ -17,9 +17,9 @@ from __future__ import annotations
 
 from enum import Enum
 from types import TracebackType
-from typing import Any, Type
+from typing import Any, List, Type
 
-from ..core import ActorRef
+from ..core import ActorRef, BufferRef
 
 DEFAULT_PROTOCOL: int = 0
 
@@ -34,6 +34,7 @@ class MessageType(Enum):
     send = 7
     tell = 8
     cancel = 9
+    copy_to_buffers = 10
 
 class ControlMessageType(Enum):
     stop = 0
@@ -42,6 +43,8 @@ class ControlMessageType(Enum):
     get_config = 3
     wait_pool_recovered = 4
     add_sub_pool_actor = 5
+    # the new channel created is for data transfer only
+    switch_to_transfer = 6
 
 class _MessageBase:
     message_type: MessageType
@@ -58,6 +61,19 @@ class _MessageBase:
         profiling_context: Any = None,
     ): ...
     def __repr__(self): ...
+
+class CopyToBuffersMessage(_MessageBase):
+    message_type = MessageType.copy_to_buffers
+
+    content: object
+
+    def __int__(
+        self,
+        message_id: bytes | None = None,
+        content: object = None,
+        protocol: int = DEFAULT_PROTOCOL,
+        message_trace: list | None = None,
+    ): ...
 
 class ControlMessage(_MessageBase):
     message_type = MessageType.control

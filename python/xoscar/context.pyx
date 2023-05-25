@@ -12,11 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from typing import Any, List
 from urllib.parse import urlparse
 
-from ._utils cimport new_actor_id
-from .core cimport ActorRef
+from ._utils cimport new_actor_id, new_random_id
+from .core cimport ActorRef, BufferRef
 
 
 cdef dict _backend_context_cls = dict()
@@ -179,6 +179,35 @@ cdef class BaseActorContext:
         """
         raise NotImplementedError
 
+    def buffer_ref(self, str address, object buf) -> BufferRef:
+        """
+        Create a reference to a buffer
+
+        Parameters
+        ----------
+        address
+            address of the actor pool
+        buf
+            buffer object
+
+        Returns
+        -------
+        BufferRef
+        """
+        return BufferRef.create(buf, address, new_random_id(32))
+
+    async def copy_to(self, local_buffers: List[bytes], remote_buffer_refs: List[BufferRef]):
+        """
+        Copy local buffers to remote buffers.
+        Parameters
+        ----------
+        local_buffers
+            Local buffers.
+        remote_buffer_refs
+            Remote buffer refs
+        """
+        raise NotImplementedError
+
 
 cdef class ClientActorContext(BaseActorContext):
     """
@@ -258,6 +287,16 @@ cdef class ClientActorContext(BaseActorContext):
     def get_pool_config(self, str address):
         context = self._get_backend_context(address)
         return context.get_pool_config(address)
+
+    def buffer_ref(self, str address, buf: Any) -> BufferRef:
+        context = self._get_backend_context(address)
+        return context.buffer_ref(address, buf)
+
+    def copy_to(self, local_buffers: List[bytes], remote_buffer_refs: List[BufferRef]):
+        if remote_buffer_refs:
+            address = remote_buffer_refs[0].address
+            context = self._get_backend_context(address)
+            return context.copy_to(local_buffers, remote_buffer_refs)
 
 
 def register_backend_context(scheme, cls):

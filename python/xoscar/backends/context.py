@@ -17,16 +17,17 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Tuple, Type, Union
+from typing import Any, List, Tuple, Type, Union
 
 from .._utils import create_actor_ref, to_binary
 from ..api import Actor
 from ..context import BaseActorContext
-from ..core import ActorRef, create_local_actor_ref
+from ..core import ActorRef, BufferRef, create_local_actor_ref
 from ..debug import debug_async_timeout, detect_cycle_send
 from ..errors import CannotCancelTask
 from ..utils import dataslots
 from .allocate_strategy import AddressSpecified, AllocateStrategy
+from .communication import Client, DummyClient, UCXClient
 from .core import ActorCaller
 from .message import (
     DEFAULT_PROTOCOL,
@@ -34,6 +35,7 @@ from .message import (
     CancelMessage,
     ControlMessage,
     ControlMessageType,
+    CopyToBuffersMessage,
     CreateActorMessage,
     DestroyActorMessage,
     ErrorMessage,
@@ -45,6 +47,8 @@ from .message import (
 )
 from .router import Router
 
+DEFAULT_TRANSFER_BLOCK_SIZE = 4 * 1024**2
+
 
 @dataslots
 @dataclass
@@ -53,13 +57,14 @@ class ProfilingContext:
 
 
 class IndigenActorContext(BaseActorContext):
-    __slots__ = ("_caller",)
+    __slots__ = ("_caller", "_lock")
 
     support_allocate_strategy = True
 
     def __init__(self, address: str | None = None):
         BaseActorContext.__init__(self, address)
         self._caller = ActorCaller()
+        self._lock = asyncio.Lock()
 
     def __del__(self):
         self._caller.cancel_tasks()
@@ -69,6 +74,22 @@ class IndigenActorContext(BaseActorContext):
     ) -> Union[ResultMessage, ErrorMessage, asyncio.Future]:
         return await self._caller.call(
             Router.get_instance_or_empty(), address, message, wait=wait
+        )
+
+    async def _call_with_client(
+        self, client: Client, message: _MessageBase, wait: bool = True
+    ) -> Union[ResultMessage, ErrorMessage, asyncio.Future]:
+        return await self._caller.call_with_client(client, message, wait)
+
+    async def _call_send_buffers(
+        self,
+        client: UCXClient,
+        local_buffers: list,
+        meta_message: _MessageBase,
+        wait: bool = True,
+    ) -> Union[ResultMessage, ErrorMessage, asyncio.Future]:
+        return await self._caller.call_send_buffers(
+            client, local_buffers, meta_message, wait
         )
 
     @staticmethod
@@ -250,3 +271,91 @@ class IndigenActorContext(BaseActorContext):
             protocol=DEFAULT_PROTOCOL,
         )
         return self._process_result_message(await self._call(address, control_message))  # type: ignore
+
+    @staticmethod
+    def _gen_switch_to_transfer_control_message(content: Any):
+        return ControlMessage(
+            message_id=new_message_id(),
+            control_message_type=ControlMessageType.switch_to_transfer,
+            content=content,
+        )
+
+    @staticmethod
+    def _gen_copy_to_message(content: Any):
+        return CopyToBuffersMessage(message_id=new_message_id(), content=content)  # type: ignore
+
+    async def _assign_client(self, router, address) -> Tuple[Client, bool]:
+        client = await self._caller.get_client(router, address)
+        if isinstance(client, DummyClient):
+            return client, False
+        if hasattr(client, "send_buffers"):
+            return client, True
+        client_types = router.get_all_client_types(address)
+        try:
+            client_type = next(
+                client_type
+                for client_type in client_types
+                if hasattr(client_type, "send_buffers")
+            )
+        except StopIteration:
+            return client, False
+        else:
+            client = await self._caller.get_client_via_type(
+                router, address, client_type
+            )
+            return client, True
+
+    async def copy_to(self, local_buffers: list, remote_buffer_refs: List[BufferRef]):
+        assert (
+            len({ref.address for ref in remote_buffer_refs}) == 1
+        ), "remote buffers for `copy_via_buffers` can support only 1 destination"
+        assert len(local_buffers) == len(remote_buffer_refs), (
+            f"Buffers from local and remote must have same size, "
+            f"local: {len(local_buffers)}, remote: {len(remote_buffer_refs)}"
+        )
+
+        router = Router.get_instance()
+        assert router is not None, "`copy_to` can only be used inside pools"
+        address = remote_buffer_refs[0].address
+        client, is_ucx = await self._assign_client(router, address)
+        if is_ucx:
+            message = [(buf.address, buf.uid) for buf in remote_buffer_refs]
+            await self._call_send_buffers(
+                client,
+                local_buffers,
+                self._gen_switch_to_transfer_control_message(message),
+            )
+        else:
+            current_buf_size = 0
+            one_block_data = []
+            for i, (l_buf, r_buf) in enumerate(zip(local_buffers, remote_buffer_refs)):
+                if current_buf_size + len(l_buf) < DEFAULT_TRANSFER_BLOCK_SIZE:
+                    one_block_data.append(
+                        (r_buf.address, r_buf.uid, 0, len(l_buf), l_buf)
+                    )
+                    current_buf_size += len(l_buf)
+                    continue
+                last_start = 0
+                while current_buf_size + len(l_buf) > DEFAULT_TRANSFER_BLOCK_SIZE:
+                    remain = DEFAULT_TRANSFER_BLOCK_SIZE - current_buf_size
+                    one_block_data.append(
+                        (r_buf.address, r_buf.uid, last_start, remain, l_buf[:remain])
+                    )
+                    await self._call_with_client(
+                        client, self._gen_copy_to_message(one_block_data)
+                    )
+                    one_block_data = []
+                    current_buf_size = 0
+                    last_start += remain
+                    l_buf = l_buf[remain:]
+
+                if len(l_buf) > 0:
+                    one_block_data.append(
+                        (r_buf.address, r_buf.uid, last_start, len(l_buf), l_buf)
+                    )
+                    current_buf_size = len(l_buf)
+
+            if one_block_data:
+                await self._call_with_client(
+                    client, self._gen_copy_to_message(one_block_data)
+                )
