@@ -164,12 +164,12 @@ class Router:
         if external_address in self._curr_external_addresses:
             # local address, use dummy address
             addr = self._local_mapping.get(external_address)
-            client_type = get_client_type(addr)
+            client_type = get_client_type(addr)  # type: ignore
             client_type_to_addresses[client_type] = addr  # type: ignore
         if external_address in self._mapping:
             # try to lookup inner address from address mapping
             addr = self._mapping.get(external_address)
-            client_type = get_client_type(addr)
+            client_type = get_client_type(addr)  # type: ignore
             client_type_to_addresses[client_type] = addr  # type: ignore
         return client_type_to_addresses
 
