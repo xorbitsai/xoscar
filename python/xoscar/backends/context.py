@@ -321,6 +321,9 @@ class IndigenActorContext(BaseActorContext):
                 self._gen_switch_to_transfer_control_message(message),
             )
         else:
+            # ``local_buffers`` will be divided into buffers of the specified block size for transmission.
+            # Smaller buffers will be accumulated and sent together,
+            # while larger buffers will be divided and sent.
             current_buf_size = 0
             one_block_data = []
             for i, (l_buf, r_buf) in enumerate(zip(local_buffers, remote_buffer_refs)):

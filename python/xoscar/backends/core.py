@@ -154,7 +154,7 @@ class ActorCaller:
         with Timer() as timer:
             try:
                 await client.send_buffers(local_buffers, meta_message)
-            except ConnectionError:
+            except ConnectionError:  # pragma: no cover
                 try:
                     await client.close()
                 except ConnectionError:
@@ -162,7 +162,7 @@ class ActorCaller:
                     pass
                 raise ServerClosed(f"Remote server {client.dest_address} closed")
 
-            if not wait:
+            if not wait:  # pragma: no cover
                 r = wait_response
             else:
                 r = await wait_response

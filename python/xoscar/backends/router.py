@@ -161,7 +161,7 @@ class Router:
     ) -> Dict[Type[Client], str]:
         client_type_to_addresses = dict()
         client_type_to_addresses[get_client_type(external_address)] = external_address
-        if external_address in self._curr_external_addresses:
+        if external_address in self._curr_external_addresses:  # pragma: no cover
             # local address, use dummy address
             addr = self._local_mapping.get(external_address)
             client_type = get_client_type(addr)  # type: ignore
@@ -187,7 +187,7 @@ class Router:
         async with self._lock:
             if cached and (external_address, from_who, client_type) in self._cache:
                 cached_client = self._cache[external_address, from_who, client_type]
-                if cached_client.closed:
+                if cached_client.closed:  # pragma: no cover
                     # closed before, ignore it
                     del self._cache[external_address, from_who, client_type]
                 else:

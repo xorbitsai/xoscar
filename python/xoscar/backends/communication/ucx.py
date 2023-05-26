@@ -519,6 +519,3 @@ class UCXClient(Client):
 
     async def send_buffers(self, buffers: list, meta: _MessageBase):
         return await self.channel.send_buffers(buffers, meta)
-
-    async def recv_buffers(self, buffers: list):
-        return await self.channel.recv_buffers(buffers)
