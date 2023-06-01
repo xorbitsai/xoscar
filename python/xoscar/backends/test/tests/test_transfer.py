@@ -89,7 +89,7 @@ class BufferTransferActor(Actor):
             xp.testing.assert_array_equal(a1, a2)
 
 
-async def _copy_test(scheme: str, cpu: bool):
+async def _copy_test(scheme1: Optional[str], scheme2: Optional[str], cpu: bool):
     start_method = (
         os.environ.get("POOL_START_METHOD", "forkserver")
         if sys.platform != "win32"
@@ -100,14 +100,14 @@ async def _copy_test(scheme: str, cpu: bool):
         pool_cls=MainActorPool,
         n_process=2,
         subprocess_start_method=start_method,
-        external_address_schemes=[None, scheme, scheme],
+        external_address_schemes=[None, scheme1, scheme2],
     )
     pool2: MainActorPool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
         subprocess_start_method=start_method,
-        external_address_schemes=[None, scheme, scheme],
+        external_address_schemes=[None, scheme1, scheme2],
     )
 
     async with pool:
@@ -182,10 +182,16 @@ if ucp is not None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scheme", schemes)
 async def test_copy(scheme):
-    await _copy_test(scheme, True)
+    await _copy_test(scheme, scheme, True)
+    if "ucx" == scheme:
+        await _copy_test(None, "ucx", True)
+        await _copy_test("ucx", None, True)
 
 
 @require_cupy
 @pytest.mark.parametrize("scheme", schemes)
 async def tests_gpu_copy(scheme):
-    await _copy_test(scheme, False)
+    await _copy_test(scheme, scheme, False)
+    if "ucx" == scheme:
+        await _copy_test(None, "ucx", False)
+        await _copy_test("ucx", None, False)
