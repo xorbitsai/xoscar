@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, List
+from typing import Any, List, Optional
 from urllib.parse import urlparse
 
 from ._utils cimport new_actor_id, new_random_id
@@ -196,7 +196,7 @@ cdef class BaseActorContext:
         """
         return BufferRef.create(buf, address, new_random_id(32))
 
-    async def copy_to(self, local_buffers: List[bytes], remote_buffer_refs: List[BufferRef]):
+    async def copy_to(self, local_buffers: List[bytes], remote_buffer_refs: List[BufferRef], block_size: Optional[int] = None):
         """
         Copy local buffers to remote buffers.
         Parameters
@@ -205,6 +205,8 @@ cdef class BaseActorContext:
             Local buffers.
         remote_buffer_refs
             Remote buffer refs
+        block_size
+            Transfer block size when non-ucx
         """
         raise NotImplementedError
 
@@ -292,11 +294,11 @@ cdef class ClientActorContext(BaseActorContext):
         context = self._get_backend_context(address)
         return context.buffer_ref(address, buf)
 
-    def copy_to(self, local_buffers: List[bytes], remote_buffer_refs: List[BufferRef]):
+    def copy_to(self, local_buffers: List[bytes], remote_buffer_refs: List[BufferRef], block_size: Optional[int] = None):
         if remote_buffer_refs:
             address = remote_buffer_refs[0].address
             context = self._get_backend_context(address)
-            return context.copy_to(local_buffers, remote_buffer_refs)
+            return context.copy_to(local_buffers, remote_buffer_refs, block_size)
 
 
 def register_backend_context(scheme, cls):

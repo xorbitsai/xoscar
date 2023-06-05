@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any, List, Tuple, Type, Union
+from typing import Any, List, Optional, Tuple, Type, Union
 
 from .._utils import create_actor_ref, to_binary
 from ..api import Actor
@@ -300,7 +300,12 @@ class IndigenActorContext(BaseActorContext):
         else:
             return await self._caller.get_client_via_type(router, address, client_type)
 
-    async def copy_to(self, local_buffers: list, remote_buffer_refs: List[BufferRef]):
+    async def copy_to(
+        self,
+        local_buffers: list,
+        remote_buffer_refs: List[BufferRef],
+        block_size: Optional[int] = None,
+    ):
         assert (
             len({ref.address for ref in remote_buffer_refs}) == 1
         ), "remote buffers for `copy_via_buffers` can support only 1 destination"
@@ -326,16 +331,17 @@ class IndigenActorContext(BaseActorContext):
             # while larger buffers will be divided and sent.
             current_buf_size = 0
             one_block_data = []
+            block_size = block_size or DEFAULT_TRANSFER_BLOCK_SIZE
             for i, (l_buf, r_buf) in enumerate(zip(local_buffers, remote_buffer_refs)):
-                if current_buf_size + len(l_buf) < DEFAULT_TRANSFER_BLOCK_SIZE:
+                if current_buf_size + len(l_buf) < block_size:
                     one_block_data.append(
                         (r_buf.address, r_buf.uid, 0, len(l_buf), l_buf)
                     )
                     current_buf_size += len(l_buf)
                     continue
                 last_start = 0
-                while current_buf_size + len(l_buf) > DEFAULT_TRANSFER_BLOCK_SIZE:
-                    remain = DEFAULT_TRANSFER_BLOCK_SIZE - current_buf_size
+                while current_buf_size + len(l_buf) > block_size:
+                    remain = block_size - current_buf_size
                     one_block_data.append(
                         (r_buf.address, r_buf.uid, last_start, remain, l_buf[:remain])
                     )

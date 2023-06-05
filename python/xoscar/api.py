@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from numbers import Number
-from typing import TYPE_CHECKING, Any, Dict, Tuple, Type, List
+from typing import TYPE_CHECKING, Any, Dict, Tuple, Type, List, Optional
 from urllib.parse import urlparse
 
 from .backend import get_backend
@@ -145,6 +145,7 @@ async def create_actor_pool(
     kwargs : dict
         Other keyword arguments for the actor pool.
 
+<<<<<<< HEAD
     Returns
     -------
     MainActorPoolType
@@ -166,9 +167,13 @@ def buffer_ref(address: str, buffer: Any) -> BufferRef:
     return ctx.buffer_ref(address, buffer)
 
 
-async def copy_to(local_buffers: list, remote_buffer_refs: List[BufferRef]):
+async def copy_to(
+    local_buffers: list,
+    remote_buffer_refs: List[BufferRef],
+    block_size: Optional[int] = None,
+):
     ctx = get_context()
-    return await ctx.copy_to(local_buffers, remote_buffer_refs)
+    return await ctx.copy_to(local_buffers, remote_buffer_refs, block_size)
 
 
 async def wait_actor_pool_recovered(address: str, main_pool_address: str | None = None):
