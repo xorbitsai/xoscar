@@ -189,6 +189,7 @@ async def test_copy(scheme):
 
 
 @require_cupy
+@pytest.mark.asyncio
 @pytest.mark.parametrize("scheme", schemes)
 async def tests_gpu_copy(scheme):
     await _copy_test(scheme, scheme, False)

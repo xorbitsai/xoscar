@@ -92,6 +92,7 @@ jobs:
       run: |
         pip install numpy scipy cython coverage flaky
         pip install -e ".[dev,extra]"
+        conda install -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
       working-directory: ./python
 
     - name: Install on GPU
