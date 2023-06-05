@@ -313,6 +313,10 @@ class IndigenActorContext(BaseActorContext):
             f"Buffers from local and remote must have same size, "
             f"local: {len(local_buffers)}, remote: {len(remote_buffer_refs)}"
         )
+        if block_size is not None:
+            assert (
+                block_size > 0
+            ), f"`block_size` option must be greater than 0, current value: {block_size}."
 
         router = Router.get_instance()
         assert router is not None, "`copy_to` can only be used inside pools"
