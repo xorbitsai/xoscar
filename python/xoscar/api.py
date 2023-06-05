@@ -163,6 +163,20 @@ async def create_actor_pool(
 
 
 def buffer_ref(address: str, buffer: Any) -> BufferRef:
+    """
+    Init buffer ref according address and buffer.
+
+    Parameters
+    ----------
+    address
+        The address of the buffer.
+    buffer
+        CPU / GPU buffer. Need to support for slicing and retrieving the length.
+
+    Returns
+    ----------
+    BufferRef obj.
+    """
     ctx = get_context()
     return ctx.buffer_ref(address, buffer)
 
@@ -172,6 +186,18 @@ async def copy_to(
     remote_buffer_refs: List[BufferRef],
     block_size: Optional[int] = None,
 ):
+    """
+    Copy data from local buffers to remote buffers.
+
+    Parameters
+    ----------
+    local_buffers
+        Local buffers.
+    remote_buffer_refs
+        Remote buffer refs.
+    block_size
+        Transfer block size when non-ucx
+    """
     ctx = get_context()
     return await ctx.copy_to(local_buffers, remote_buffer_refs, block_size)
 
