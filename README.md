@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/pypi/l/xoscar.svg?style=for-the-badge)](https://github.com/xprobe-inc/xoscar/blob/main/LICENSE)
 
 ## What is actor
-Writing parallel and distributed programs is often very challenging and requires a lot of time to deal with concurrency
+Writing parallel and distributed programs is often challenging and requires a lot of time to deal with concurrency
 issues. Actor model provides a high-level, scalable and robust abstraction for building distributed applications. 
 It provides several benefits:
 - Scalability: Actors easily scale across nodes. The asynchronous, non-blocking nature of actors allows them to handle huge volumes of concurrent tasks efficiently.
@@ -19,23 +19,23 @@ It provides several benefits:
 ## Why Xoscar
 Xoscar implements the actor model in Python and provides user-friendly APIs that offer significant benefits for building 
 applications on heterogeneous hardware:
-- Abstraction over low-level communication details: Xoscar handles all communication between actors transparently,
+- **Abstraction over low-level communication details**: Xoscar handles all communication between actors transparently,
 whether on CPUs, GPUs, or across nodes. Developers focus on application logic rather than managing hardware resources 
 and optimizing data transfer.
-- Flexible actor models: Xoscar supports both stateful and stateless actors. Stateful actors ensure thread safety for 
+- **Flexible actor models**: Xoscar supports both stateful and stateless actors. Stateful actors ensure thread safety for 
 concurrent systems while stateless actors can handle massive volumes of concurrent messages. Developers choose the 
 appropriate actor model for their needs.
-- Batch method: Xoscar provides a batch interface to significantly improve call efficiency when an actor interface is 
+- **Batch method**: Xoscar provides a batch interface to significantly improve call efficiency when an actor interface is 
 invoked a large number of times.
-- Advanced debugging support: Xoscar can detect potential issues like deadlocks, long-running calls, and performance
+- **Advanced debugging support**: Xoscar can detect potential issues like deadlocks, long-running calls, and performance
 bottlenecks that would otherwise be nearly impossible to troubleshoot in a heterogeneous environment.
-- Automated recovery: If an actor fails for any reason, Xoscar will automatically restart it if you want. It can monitor 
+- **Automated recovery**: If an actor fails for any reason, Xoscar will automatically restart it if you want. It can monitor 
 actors and restart them upon failure, enabling fault-tolerant systems.
 
 ## Overview 
 ![architecture.png](doc/source/architecture.png)
-Xoscar allows you to create multiple actor pools on each worker node, typically binding an actor pool to a process or 
-GPU device. Xoscar provides allocation policies so that whenever an actor is created, it will be instantiated in the
+Xoscar allows you to create multiple actor pools on each worker node, typically binding an actor pool to a CPU core or 
+a GPU card. Xoscar provides allocation policies so that whenever an actor is created, it will be instantiated in the
 appropriate pool based on the specified policy.
 
 When actors communicate, Xoscar will choose the optimal communication mechanism based on which pools the actors 
@@ -47,6 +47,11 @@ The source code is currently hosted on GitHub at: https://github.com/xprobe-inc/
 
 Binary installers for the latest released version are available at the [Python
 Package Index (PyPI)](https://pypi.org/project/xoscar).
+
+```shell
+# PyPI
+pip install xorbits
+```
 
 ## Xoscar APIs
 Here are basic APIs for Xoscar.
@@ -96,7 +101,7 @@ actor_ref = await xo.actor_ref(worker_addr, actor_id)
 await actor_ref.method_a.send(1, 2, a=1, b=2)
 # equivalent to actor_ref.method_a.send
 await actor_ref.method_a(1, 2, a=1, b=2)
-# tell
+# tell, it sends a message asynchronously and does not wait for a response.
 await actor_ref.method_a.tell(1, 2, a=1, b=2)
 ```
 ### Batch method
