@@ -17,7 +17,7 @@ It provides several benefits:
 - Modularity: An actor system decomposes naturally into a collection of actors that can be understood independently. Actor logic is encapsulated within the actor itself.
 
 ## Why Xoscar
-Xoscar implements actor model in Python and provides user-friendly APIs that provides significant benefits for building 
+Xoscar implements the actor model in Python and provides user-friendly APIs that offer significant benefits for building 
 applications on heterogeneous hardware:
 - Abstraction over low-level communication details: Xoscar handles all communication between actors transparently,
 whether on CPUs, GPUs, or across nodes. Developers focus on application logic rather than managing hardware resources 
@@ -130,7 +130,7 @@ class ExampleActor(xo.Actor):
 In a batch method, users can define how to more efficiently process a batch of requests.
 
 #### Call batch methods
-Calling batch methods is easy. You can use `<method_name>.delay` to make a batched call and `use <method_name>.batch` to send them:
+Calling batch methods is easy. You can use `<method_name>.delay` to make a batched call and use `<method_name>.batch` to send them:
 ```python
 ref = await xo.actor_ref(uid='ExampleActor', address='127.0.0.1:13425')
 results = await ref.batch_method.batch(
