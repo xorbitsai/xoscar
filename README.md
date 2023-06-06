@@ -55,7 +55,7 @@ pip install xorbits
 
 ## Xoscar APIs
 Here are basic APIs for Xoscar.
-#### Actor definition
+#### Define an actor
 ```python
 import xoscar as xo
 
@@ -79,7 +79,7 @@ class MyActor(xo.Actor):
         pass
 ```
 
-#### Creating actors
+#### Create an actor
 ```python
 import xoscar as xo
 
@@ -88,14 +88,14 @@ actor_ref = await xo.create_actor(
     address='<ip>:<port>', uid='UniqueActorName')
 ```
 
-#### Getting actor reference
+#### Get an actor reference
 ```python
 import xoscar as xo
 
 actor_ref = await xo.actor_ref(address, actor_id)
 ```
 
-#### Calling actor method
+#### Invoke a method
 ```python
 # send
 await actor_ref.method_a.send(1, 2, a=1, b=2)
@@ -107,7 +107,7 @@ await actor_ref.method_a.tell(1, 2, a=1, b=2)
 ### Batch method
 Xoscar provides a set of APIs to write batch methods. You can simply add a `@extensible` decorator to your actor method
 and create a batch version. All calls wrapped in a batch will be sent together, reducing possible RPC cost.
-#### Create a batch method
+#### Define a batch method
 ```python
 import xoscar as xo
 
@@ -134,7 +134,7 @@ class ExampleActor(xo.Actor):
 ```
 In a batch method, users can define how to more efficiently process a batch of requests.
 
-#### Call batch methods
+#### Invoke a batch method
 Calling batch methods is easy. You can use `<method_name>.delay` to make a batched call and use `<method_name>.batch` to send them:
 ```python
 ref = await xo.actor_ref(uid='ExampleActor', address='127.0.0.1:13425')
