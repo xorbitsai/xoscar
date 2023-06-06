@@ -92,7 +92,7 @@ actor_ref = await xo.create_actor(
 ```python
 import xoscar as xo
 
-actor_ref = await xo.actor_ref(worker_addr, actor_id)
+actor_ref = await xo.actor_ref(address, actor_id)
 ```
 
 #### Calling actor method
