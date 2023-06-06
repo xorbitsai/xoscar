@@ -295,10 +295,11 @@ cdef class ClientActorContext(BaseActorContext):
         return context.buffer_ref(address, buf)
 
     def copy_to(self, local_buffers: List[bytes], remote_buffer_refs: List[BufferRef], block_size: Optional[int] = None):
-        if remote_buffer_refs:
-            address = remote_buffer_refs[0].address
-            context = self._get_backend_context(address)
-            return context.copy_to(local_buffers, remote_buffer_refs, block_size)
+        if len(local_buffers) == 0 or len(remote_buffer_refs) == 0:
+            raise ValueError("Nothing to transfer since the length of `local_buffers` or `remote_buffer_refs` is 0.")
+        address = remote_buffer_refs[0].address
+        context = self._get_backend_context(address)
+        return context.copy_to(local_buffers, remote_buffer_refs, block_size)
 
 
 def register_backend_context(scheme, cls):

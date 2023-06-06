@@ -73,9 +73,16 @@ class BufferTransferActor(Actor):
             buffers1 = arrays1
             buffers2 = arrays2
 
+        with pytest.raises(ValueError):
+            await copy_to([], [])
+
         ref = await actor_ref(ref)
         buf_refs1 = await ref.create_buffers(sizes, cpu=cpu)
         buf_refs2 = await ref.create_buffers(sizes, cpu=cpu)
+
+        with pytest.raises(AssertionError):
+            await copy_to(buffers1, buf_refs1, block_size=-1)
+
         tasks = [copy_to(buffers1, buf_refs1), copy_to(buffers2, buf_refs2)]
         await asyncio.gather(*tasks)
 
