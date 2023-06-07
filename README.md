@@ -50,10 +50,10 @@ Package Index (PyPI)](https://pypi.org/project/xoscar).
 
 ```shell
 # PyPI
-pip install xorbits
+pip install xoscar
 ```
 
-## Xoscar APIs
+## APIs
 Here are basic APIs for Xoscar.
 #### Define an actor
 ```python
