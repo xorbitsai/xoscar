@@ -50,7 +50,7 @@ Package Index (PyPI)](https://pypi.org/project/xoscar).
 
 ```shell
 # PyPI
-pip install xorbits
+pip install xoscar
 ```
 
 ## APIs
