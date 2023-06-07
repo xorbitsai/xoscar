@@ -72,7 +72,7 @@ Binary installers for the latest released version are available at the
 ::
 
    # PyPI
-   pip install xorbits
+   pip install xoscar
 
 License
 -------

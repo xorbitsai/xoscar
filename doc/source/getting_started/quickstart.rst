@@ -28,7 +28,7 @@ To begin, we need to create actor pools, each of which will run within its own i
 
    dop = 4 # degree of parallelism
    loop = asyncio.get_event_loop()
-   loop.run_until_complete(xo.create_actor_pool(address="localhost:10000", n_process=dop))
+   loop.run_until_complete(xo.create_actor_pool(address="localhost:9999", n_process=dop))
 
 
 After successfully creating the actor pools, we gather the address of each pool for following
@@ -36,7 +36,7 @@ steps.
 
 .. code-block:: python
 
-   pool_config = await xo.get_pool_config("localhost:10000")
+   pool_config = await xo.get_pool_config("localhost:9999")
    pool_addresses = pool_config.get_external_addresses()
 
 Define an actor
@@ -68,8 +68,7 @@ the circle. Since this actor doesn't have any internal state, it inherits from
 Create actors
 -------------
 
-Finally, we create an actor within each actor pool, leveraging the parallelism provided by Xoscar
-for efficient computation and distribution of the estimation task.
+Finally, we create an actor within each actor pool.
 
 .. code-block:: python
 
@@ -85,8 +84,7 @@ for efficient computation and distribution of the estimation task.
 Compute Pi
 ----------
 
-Finally, we invoke the ``estimate`` method on each actor, gathering their individual outputs to
-calculate the value of Pi.
+Finally, we invoke the ``estimate`` method on each actor, leveraging the parallelism provided by Xoscar for efficient computation and distribution of the estimation task, and finally gather their individual outputs to calculate the value of Pi.
 
 .. code-block:: python
 
