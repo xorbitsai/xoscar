@@ -88,3 +88,11 @@ You can invoke an actor's method by its reference.
 
    await actor_ref.method_a(1, 2, a=1, b=2)
 
+Destroy an actor
+----------------
+
+You can destroy an actor and release corresponding resources by its reference.
+
+.. code-block:: python
+
+   await xo.destroy_actor(actor_ref)
