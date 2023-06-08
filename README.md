@@ -37,6 +37,7 @@ actors and restart them upon failure, enabling fault-tolerant systems.
 Xoscar allows you to create multiple actor pools on each worker node, typically binding an actor pool to a CPU core or 
 a GPU card. Xoscar provides allocation policies so that whenever an actor is created, it will be instantiated in the
 appropriate pool based on the specified policy.
+
 When actors communicate, Xoscar will choose the optimal communication mechanism based on which pools the actors 
 belong to. This allows Xoscar to optimize communication in heterogeneous environments with multiple processing 
 units and accelerators.

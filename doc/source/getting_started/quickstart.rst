@@ -53,7 +53,7 @@ the circle. Since this actor doesn't have any internal state, it inherits from
 .. code-block:: python
 
    class MyActor(xo.StatelessActor):
-       async def estimate(self, n):
+       def estimate(self, n):
            import random
            from math import sqrt
 
