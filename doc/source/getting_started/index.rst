@@ -9,3 +9,4 @@ Getting Started
 
    installation
    quickstart
+   llm-inference
