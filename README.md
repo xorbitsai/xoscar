@@ -32,8 +32,8 @@ bottlenecks that would otherwise be nearly impossible to troubleshoot in a heter
 - **Automated recovery**: If an actor fails for any reason, Xoscar will automatically restart it if you want. It can monitor 
 actors and restart them upon failure, enabling fault-tolerant systems.
 
-## Overview 
-![architecture.png](doc/source/architecture.png)
+## Overview
+![architecture.png](doc/source/_static/architecture.png)
 Xoscar allows you to create multiple actor pools on each worker node, typically binding an actor pool to a CPU core or 
 a GPU card. Xoscar provides allocation policies so that whenever an actor is created, it will be instantiated in the
 appropriate pool based on the specified policy.
