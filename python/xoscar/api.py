@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from numbers import Number
-from typing import TYPE_CHECKING, Any, Dict, Tuple, Type, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type
 from urllib.parse import urlparse
 
 from .backend import get_backend
@@ -145,7 +145,6 @@ async def create_actor_pool(
     kwargs : dict
         Other keyword arguments for the actor pool.
 
-<<<<<<< HEAD
     Returns
     -------
     MainActorPoolType
