@@ -20,9 +20,10 @@ import sys
 from typing import List, Optional
 
 from .api import create_actor_pool
-from .utils import get_next_port
+from .utils import ensure_coverage, get_next_port
 
 logger = logging.getLogger(__name__)
+ensure_coverage()
 
 
 class CommandRunner:
