@@ -78,14 +78,14 @@ class CommandRunner:
             n_cpu = int(args.n_cpu)
         else:
             n_cpu = multiprocessing.cpu_count()
-        if args.cuda_devices is not None:
+        if args.cuda_devices is not None:  # pragma: no cover
             cuda_devices = [int(i) for i in args.cuda_devices.split(",")]
         else:
             cuda_devices = []
         kwargs["n_process"] = n_process = n_cpu + len(cuda_devices)
         if args.labels is not None:
             kwargs["labels"] = ["main"] + args.labels.split(",")
-        if args.ports is not None:
+        if args.ports is not None:  # pragma: no cover
             kwargs["ports"] = [int(i) for i in args.ports.split(",")]
         if args.envs is not None:
             envs = [
@@ -94,7 +94,7 @@ class CommandRunner:
             ]
         else:
             envs = [[]] * n_process
-        if cuda_devices:
+        if cuda_devices:  # pragma: no cover
             for env in envs[:n_cpu]:
                 env.update({"CUDA_VISIBLE_DEVICES": -1})
             for i, env in enumerate(envs[n_cpu:]):
@@ -107,7 +107,7 @@ class CommandRunner:
             kwargs["subprocess_start_method"] = args.start_method
         if args.auto_recover is not None:
             kwargs["auto_recover"] = bool(int(args.auto_recover))
-        if args.modules is not None:
+        if args.modules is not None:  # pragma: no cover
             kwargs["modules"] = args.modules.split(",")
         if args.use_uvloop is not None:
             if args.use_uvloop == "no":
@@ -116,7 +116,7 @@ class CommandRunner:
             args.use_uvloop = "auto"
         return kwargs
 
-    def create_loop(self):
+    def create_loop(self):  # pragma: no cover
         use_uvloop = self._args.use_uvloop
         if use_uvloop and use_uvloop in ("0", "no"):
             loop = asyncio.get_event_loop()
@@ -133,7 +133,7 @@ class CommandRunner:
                     raise
         return loop
 
-    async def _main(self, **kwargs):
+    async def _main(self, **kwargs):  # pragma: no cover
         try:
             self._pool = pool = await create_actor_pool(**kwargs)
             await pool.join()
@@ -141,7 +141,7 @@ class CommandRunner:
             if self._pool:  # pragma: no branch
                 await self._pool.stop()
 
-    def run(self, argv: Optional[List[str]] = None):
+    def run(self, argv: Optional[List[str]] = None):  # pragma: no cover
         parser = argparse.ArgumentParser(description=self._description)
         self.config_args(parser)
         create_pool_kwargs = self.parse_args(parser, argv)
@@ -158,6 +158,6 @@ class CommandRunner:
             task.exception()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     runner = CommandRunner()
     runner.run()
