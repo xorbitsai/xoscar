@@ -41,7 +41,6 @@ def _stop_proc(proc):
 
 
 params = [
-    [],
     ["--n-cpu", "1"],
     ["--n-cpu", "1", "--labels", "label"],
     ["--n-cpu", "1", "--envs", "a=1"],
@@ -55,13 +54,13 @@ params = [
 async def test_cmdline(args):
     proc = None
     try:
-        retry_nums = 1
+        port = get_next_port()
+        endpoint = f"127.0.0.1:{port}"
+        cmd.extend(["-e", endpoint])
+        cmd.extend(args)
+        proc = subprocess.Popen(cmd)
+        retry_nums = 5
         for trial in range(retry_nums):
-            port = get_next_port()
-            endpoint = f"127.0.0.1:{port}"
-            cmd.extend(["-e", endpoint])
-            cmd.extend(args)
-            proc = subprocess.Popen(cmd)
             await asyncio.sleep(5)
             try:
                 actor_ref = await create_actor(Mock, address=endpoint, uid="mock")

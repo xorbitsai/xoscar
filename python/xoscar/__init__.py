@@ -45,11 +45,12 @@ from .errors import (
 from ._utils import create_actor_ref
 
 # make sure methods are registered
+from . import aio
 from .backends import indigen, test
 from .entrypoints import init_extension_entrypoints
 from . import _version
 
-del indigen, test
+del aio, indigen, test
 
 _T = TypeVar("_T")
 ActorRefType = Union[ActorRef, _T]

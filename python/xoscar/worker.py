@@ -111,6 +111,8 @@ class CommandRunner:
         if args.use_uvloop is not None:
             if args.use_uvloop == "no":
                 kwargs["use_uvloop"] = False
+        else:
+            args.use_uvloop = "auto"
         return kwargs
 
     def create_loop(self):
