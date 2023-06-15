@@ -510,23 +510,35 @@ class AbstractActorPool(ABC):
     def stopped(self) -> bool:
         return self._stopped.is_set()
 
-    @staticmethod
-    async def _handle_ucx_meta_message(message: _MessageBase, channel: Channel) -> bool:
+    async def _handle_ucx_meta_message(
+        self, message: _MessageBase, channel: Channel
+    ) -> bool:
         if (
             isinstance(message, ControlMessage)
             and message.message_type == MessageType.control
-            and message.control_message_type == ControlMessageType.switch_to_transfer
+            and message.control_message_type == ControlMessageType.switch_to_copy_to
             and isinstance(channel, UCXChannel)
         ):
-            buffers = [
-                BufferRef.get_buffer(BufferRef(addr, uid))
-                for addr, uid in message.content
-            ]
-            await channel.recv_buffers(buffers)
-            asyncio.create_task(
-                channel.send(ResultMessage(message_id=message.message_id, result=True))
-            )
-            return True
+            with _ErrorProcessor(
+                self.external_address, message.message_id, message.protocol
+            ) as processor:
+                # use `%.500` to avoid print too long messages
+                with debug_async_timeout(
+                    "process_message_timeout",
+                    "Process message %.500s of channel %s timeout.",
+                    message,
+                    channel,
+                ):
+                    buffers = [
+                        BufferRef.get_buffer(BufferRef(addr, uid))
+                        for addr, uid in message.content
+                    ]
+                    await channel.recv_buffers(buffers)
+                    processor.result = ResultMessage(
+                        message_id=message.message_id, result=True
+                    )
+                    asyncio.create_task(self._send_channel(processor.result, channel))
+                    return True
         return False
 
     async def on_new_channel(self, channel: Channel):

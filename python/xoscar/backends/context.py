@@ -273,10 +273,10 @@ class IndigenActorContext(BaseActorContext):
         return self._process_result_message(await self._call(address, control_message))  # type: ignore
 
     @staticmethod
-    def _gen_switch_to_transfer_control_message(content: Any):
+    def _gen_switch_to_copy_to_control_message(content: Any):
         return ControlMessage(
             message_id=new_message_id(),
-            control_message_type=ControlMessageType.switch_to_transfer,
+            control_message_type=ControlMessageType.switch_to_copy_to,
             content=content,
         )
 
@@ -284,11 +284,13 @@ class IndigenActorContext(BaseActorContext):
     def _gen_copy_to_message(content: Any):
         return CopyToBuffersMessage(message_id=new_message_id(), content=content)  # type: ignore
 
-    async def _assign_client(self, router, address) -> Client:
+    async def _get_copy_to_client(self, router, address) -> Client:
         client = await self._caller.get_client(router, address)
         if isinstance(client, DummyClient) or hasattr(client, "send_buffers"):
             return client
         client_types = router.get_all_client_types(address)
+        # For inter-process communication, the ``self._caller.get_client`` interface would not look for UCX Client,
+        # we still try to find UCXClient for this case.
         try:
             client_type = next(
                 client_type
@@ -321,13 +323,13 @@ class IndigenActorContext(BaseActorContext):
         router = Router.get_instance()
         assert router is not None, "`copy_to` can only be used inside pools"
         address = remote_buffer_refs[0].address
-        client = await self._assign_client(router, address)
+        client = await self._get_copy_to_client(router, address)
         if isinstance(client, UCXClient):
             message = [(buf.address, buf.uid) for buf in remote_buffer_refs]
             await self._call_send_buffers(
                 client,
                 local_buffers,
-                self._gen_switch_to_transfer_control_message(message),
+                self._gen_switch_to_copy_to_control_message(message),
             )
         else:
             # ``local_buffers`` will be divided into buffers of the specified block size for transmission.

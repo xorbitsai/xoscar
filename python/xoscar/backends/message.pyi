@@ -43,8 +43,8 @@ class ControlMessageType(Enum):
     get_config = 3
     wait_pool_recovered = 4
     add_sub_pool_actor = 5
-    # the new channel created is for data transfer only
-    switch_to_transfer = 6
+    # indicate that the following data will be used for copy_to
+    switch_to_copy_to = 6
 
 class _MessageBase:
     message_type: MessageType
