@@ -537,8 +537,8 @@ class AbstractActorPool(ABC):
                     processor.result = ResultMessage(
                         message_id=message.message_id, result=True
                     )
-                    asyncio.create_task(self._send_channel(processor.result, channel))
-                    return True
+            asyncio.create_task(self._send_channel(processor.result, channel))
+            return True
         return False
 
     async def on_new_channel(self, channel: Channel):
