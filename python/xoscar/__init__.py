@@ -23,6 +23,8 @@ from .api import (
     has_actor,
     destroy_actor,
     kill_actor,
+    buffer_ref,
+    copy_to,
     Actor,
     StatelessActor,
     create_actor_pool,

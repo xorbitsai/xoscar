@@ -18,12 +18,12 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
-from typing import Union
+from typing import Type, Union
 
 from .._utils import Timer
 from ..errors import ServerClosed
 from ..profiling import get_profiling_data
-from .communication import Client
+from .communication import Client, UCXClient
 from .message import DeserializeMessageFailed, ErrorMessage, ResultMessage, _MessageBase
 from .router import Router
 
@@ -42,8 +42,7 @@ class ActorCaller:
         self._clients = dict()
         self._profiling_data = get_profiling_data()
 
-    async def get_client(self, router: Router, dest_address: str) -> Client:
-        client = await router.get_client(dest_address, from_who=self)
+    def _listen_client(self, client: Client):
         if client not in self._clients:
             self._clients[client] = asyncio.create_task(self._listen(client))
             self._client_to_message_futures[client] = dict()
@@ -55,6 +54,19 @@ class ActorCaller:
                         "the global router may not be set.",
                         client_count,
                     )
+
+    async def get_client_via_type(
+        self, router: Router, dest_address: str, client_type: Type[Client]
+    ) -> Client:
+        client = await router.get_client_via_type(
+            dest_address, client_type, from_who=self
+        )
+        self._listen_client(client)
+        return client
+
+    async def get_client(self, router: Router, dest_address: str) -> Client:
+        client = await router.get_client(dest_address, from_who=self)
+        self._listen_client(client)
         return client
 
     async def _listen(self, client: Client):
@@ -102,14 +114,9 @@ class ActorCaller:
         for future in message_futures.values():
             future.set_exception(copy.copy(error))
 
-    async def call(
-        self,
-        router: Router,
-        dest_address: str,
-        message: _MessageBase,
-        wait: bool = True,
+    async def call_with_client(
+        self, client: Client, message: _MessageBase, wait: bool = True
     ) -> ResultMessage | ErrorMessage | asyncio.Future:
-        client = await self.get_client(router, dest_address)
         loop = asyncio.get_running_loop()
         wait_response = loop.create_future()
         self._client_to_message_futures[client][message.message_id] = wait_response
@@ -132,6 +139,46 @@ class ActorCaller:
 
         self._profiling_data.collect_actor_call(message, timer.duration)
         return r
+
+    async def call_send_buffers(
+        self,
+        client: UCXClient,
+        local_buffers: list,
+        meta_message: _MessageBase,
+        wait: bool = True,
+    ) -> ResultMessage | ErrorMessage | asyncio.Future:
+        loop = asyncio.get_running_loop()
+        wait_response = loop.create_future()
+        self._client_to_message_futures[client][meta_message.message_id] = wait_response
+
+        with Timer() as timer:
+            try:
+                await client.send_buffers(local_buffers, meta_message)
+            except ConnectionError:  # pragma: no cover
+                try:
+                    await client.close()
+                except ConnectionError:
+                    # close failed, ignore it
+                    pass
+                raise ServerClosed(f"Remote server {client.dest_address} closed")
+
+            if not wait:  # pragma: no cover
+                r = wait_response
+            else:
+                r = await wait_response
+
+        self._profiling_data.collect_actor_call(meta_message, timer.duration)
+        return r
+
+    async def call(
+        self,
+        router: Router,
+        dest_address: str,
+        message: _MessageBase,
+        wait: bool = True,
+    ) -> ResultMessage | ErrorMessage | asyncio.Future:
+        client = await self.get_client(router, dest_address)
+        return await self.call_with_client(client, message, wait)
 
     async def stop(self):
         try:

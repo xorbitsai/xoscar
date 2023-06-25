@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import multiprocessing
-from typing import Any
+from typing import Any, Optional
 
 from ..communication import DummyServer, gen_local_address
 from ..config import ActorPoolConfig
@@ -32,7 +32,7 @@ class TestMainActorPool(MainActorPool):
         address: str,
         n_process: int | None = None,
         ports: list[int] | None = None,
-        schemes: list[str] | None = None,
+        schemes: list[Optional[str]] | None = None,
     ):
         if "://" in address:
             address = address.split("://", 1)[1]
