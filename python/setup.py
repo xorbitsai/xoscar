@@ -14,13 +14,17 @@
 
 import os
 import platform
+import re
+import subprocess
 import sys
+from pathlib import Path
 from sysconfig import get_config_vars
 
 import numpy as np
 from Cython.Build import cythonize
 from pkg_resources import parse_version
 from setuptools import Extension, setup
+
 try:
     import distutils.ccompiler
 
@@ -116,6 +120,45 @@ def build_long_description():
         return f.read()
 
 
+def build_cpp():
+    source_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    debug = int(os.environ.get("DEBUG", 0))
+    cfg = "Debug" if debug else "Release"
+
+    # Set Python_EXECUTABLE instead if you use PYBIND11_FINDPYTHON
+    # EXAMPLE_VERSION_INFO shows you how to pass a value into the C++ code
+    # from Python.
+    output_directory = Path(source_dir) / "python" / "xoscar" / "collective" / "rendezvous"
+    cmake_args = [
+        f"-DLIBRARY_OUTPUT_DIRECTORY={output_directory}",
+        f"-DPYTHON_EXECUTABLE={sys.executable}",
+        f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
+    ]
+
+    build_args = []
+    # Adding CMake arguments set as environment variable
+    # (needed e.g. to build for ARM OSx on conda-forge)
+    if "CMAKE_ARGS" in os.environ:
+        cmake_args += [item for item in os.environ["CMAKE_ARGS"].split(" ") if item]
+
+    if sys.platform.startswith("darwin"):
+        # Cross-compile support for macOS - respect ARCHFLAGS if set
+        archs = re.findall(r"-arch (\S+)", os.environ.get("ARCHFLAGS", ""))
+        if archs:
+            cmake_args += ["-DCMAKE_OSX_ARCHITECTURES={}".format(";".join(archs))]
+
+    build_temp = Path(source_dir) / "build"
+    if not build_temp.exists():
+        build_temp.mkdir(parents=True)
+
+    subprocess.run(
+        ["cmake", source_dir, *cmake_args], cwd=build_temp, check=True
+    )
+    subprocess.run(
+        ["cmake", "--build", ".", *build_args], cwd=build_temp, check=True
+    )
+
+
 setup_options = dict(
     version=versioneer.get_version(),
     ext_modules=extensions,
@@ -123,3 +166,4 @@ setup_options = dict(
     long_description_content_type="text/markdown",
 )
 setup(**setup_options)
+build_cpp()
