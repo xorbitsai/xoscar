@@ -17,6 +17,7 @@ import platform
 import re
 import subprocess
 import sys
+from distutils.command.build_ext import build_ext as _du_build_ext
 from distutils.file_util import copy_file
 from pathlib import Path
 from sysconfig import get_config_vars
@@ -27,7 +28,6 @@ from pkg_resources import parse_version
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 from setuptools.extension import Library
-from distutils.command.build_ext import build_ext as _du_build_ext
 
 try:
     import distutils.ccompiler
@@ -42,6 +42,7 @@ except ImportError:
 try:
     # Attempt to use Cython for building extensions, if available
     from Cython.Distutils.build_ext import build_ext as _build_ext
+
     # Additionally, assert that the compiler module will load
     # also. Ref #1229.
     __import__('Cython.Compiler.Main')
