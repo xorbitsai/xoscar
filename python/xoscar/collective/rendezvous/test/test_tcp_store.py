@@ -16,7 +16,11 @@ import multiprocessing
 import pytest
 
 from ....tests.core import require_unix
-from .. import xoscar_store as xs
+
+try:
+    from .. import xoscar_store as xs
+except ImportError:  # windows case
+    xs = None  # type: ignore
 
 
 @require_unix
