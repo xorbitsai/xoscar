@@ -15,9 +15,11 @@ import multiprocessing
 
 import pytest
 
+from ....tests.core import require_unix
 from .. import xoscar_store as xs
 
 
+@require_unix
 def test_tcp_store_options():
     opt = xs.TCPStoreOptions()
     assert opt.numWorkers is None
@@ -51,6 +53,7 @@ def worker():
     store.set("test_key", b"test_12345")
 
 
+@require_unix
 def test_tcp_store():
     process1 = multiprocessing.Process(target=server)
     process1.start()

@@ -454,3 +454,7 @@ _rmm = lazy_import("rmm")
 
 def is_cuda_buffer(cuda_buffer: Union["_cupy.ndarray", "_rmm.DeviceBuffer"]) -> bool:  # type: ignore
     return hasattr(cuda_buffer, "__cuda_array_interface__")
+
+
+def is_windows():
+    return sys.platform.startswith("win")

@@ -177,8 +177,12 @@ class CMakeBuild(build_ext):
                     self.write_stub(package_dir or os.curdir, ext, True)
 
     def build_extension(self, ext):
-        if isinstance(ext, XoscarStoreExtension):
+        # TODO: support windows compilation
+        is_windows = sys.platform.startswith('win')
+        if isinstance(ext, XoscarStoreExtension) and not is_windows:
             self.build_store(ext)
+        elif isinstance(ext, XoscarStoreExtension) and is_windows:
+            pass
         else:
             ext._convert_pyx_sources_to_lang()
             _compiler = self.compiler
