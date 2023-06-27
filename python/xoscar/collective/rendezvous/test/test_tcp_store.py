@@ -17,14 +17,11 @@ import pytest
 
 from ....tests.core import require_unix
 
-try:
-    from .. import xoscar_store as xs
-except ImportError:  # windows case
-    xs = None  # type: ignore
-
 
 @require_unix
 def test_tcp_store_options():
+    from .. import xoscar_store as xs
+
     opt = xs.TCPStoreOptions()
     assert opt.numWorkers is None
     assert opt.isServer is False
@@ -37,6 +34,8 @@ def test_tcp_store_options():
 
 
 def server():
+    from .. import xoscar_store as xs
+
     opt = xs.TCPStoreOptions()
     opt.port = 25001
     opt.numWorkers = 2
@@ -48,6 +47,8 @@ def server():
 
 
 def worker():
+    from .. import xoscar_store as xs
+
     opt = xs.TCPStoreOptions()
     opt.port = 25001
     opt.numWorkers = 2
