@@ -60,9 +60,9 @@ jobs:
           pip install cpplint
           cpplint --recursive cpp
       - name: cmake-format
-        uses: PuneetMatharu/cmake-format-lint-action@v1.0.2
-        with:
-          args: --config-files .cmake-format.yaml --check
+        run: |
+          pip install cmakelang
+          find . -name "CMakeLists.txt" -not -path "*third_party/*" | xargs cmake-format -c .cmake-format.yaml --check
 
   build_test_job:
     runs-on: ${{ matrix.os }}
