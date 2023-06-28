@@ -61,7 +61,7 @@ jobs:
           cpplint --recursive cpp
       - name: cmake-format
         run: |
-          pip install cmakelang
+          pip install cmakelang[YAML]
           find . -name "CMakeLists.txt" -not -path "*third_party/*" | xargs cmake-format -c .cmake-format.yaml --check
 
   build_test_job:
