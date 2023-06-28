@@ -14,9 +14,8 @@ limitations under the License. */
 
 #pragma once
 
-#include "third_party/fmt/include/fmt/format.h"
-
 #include <cstring>
+#include <fmt/format.h>
 #include <system_error>
 
 namespace fmt {
