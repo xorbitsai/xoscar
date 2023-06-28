@@ -24,6 +24,7 @@ limitations under the License. */
 #include <unordered_map>
 #include <utility>
 
+// TODO: Currently not support windows
 #ifdef _WIN32
 #    include <io.h>
 #    include <winsock2.h>
@@ -33,7 +34,7 @@ limitations under the License. */
 #endif
 
 #ifdef _WIN32
-#    include <torch/csrc/distributed/xoscar/WinSockUtils.hpp>
+// #    include <WinSockUtils.hpp>
 #else
 #    include "unix_sock_utils.hpp"
 #endif
@@ -120,10 +121,6 @@ void BackgroundThread::stop() { SetEvent(ghStopEvent_); }
 #else
 void BackgroundThread::initStopSignal() {
     if (pipe(controlPipeFd_.data()) == -1) {
-        //    TORCH_CHECK(
-        //        false,
-        //        "Failed to create the control pipe to start the "
-        //        "BackgroundThread run");
         throw std::runtime_error("Failed to create the control pipe to start "
                                  "the BackgroundThread run");
     }
@@ -323,7 +320,6 @@ void TCPStoreMasterDaemon::query(int socket) {
     } else if (qt == QueryType::MULTI_SET) {
         multiSetHandler(socket);
     } else {
-        //    TORCH_CHECK(false, "Unexpected query type");
         throw std::runtime_error("Unexpected query type");
     }
 }
@@ -1226,7 +1222,6 @@ bool TCPStore::check(const std::vector<std::string> &keys) {
     if (response == detail::CheckResponseType::NOT_READY) {
         return false;
     }
-    //  TORCH_CHECK(false, "ready or not_ready response expected");
     throw std::runtime_error("ready or not_ready response expected");
 }
 
@@ -1260,7 +1255,6 @@ void TCPStore::doWait(std::vector<std::string> keys,
 
     auto response = client_->receiveValue<detail::WaitResponseType>();
     if (response != detail::WaitResponseType::STOP_WAITING) {
-        //    TORCH_CHECK(false, "Stop_waiting response is expected");
         throw std::runtime_error("Stop_waiting response is expected");
     }
 }
@@ -1301,9 +1295,6 @@ TCPStore::multiGet(const std::vector<std::string> &keys) {
 
 void TCPStore::multiSet(const std::vector<std::string> &keys,
                         const std::vector<std::vector<uint8_t>> &values) {
-    //  TORCH_CHECK(
-    //      keys.size() == values.size(),
-    //      "multiSet keys and values vectors must be of same size");
     assert(keys.size() == values.size());
     const std::lock_guard<std::mutex> lock(activeOpLock_);
 

@@ -56,7 +56,6 @@ public:
     compareSet(const std::string &key,
                const std::vector<uint8_t> &currentValue,
                const std::vector<uint8_t> &newValue) {
-        //    TORCH_INTERNAL_ASSERT(false, "Not implemented.");
         throw std::runtime_error("Not implemented.");
     }
 
@@ -91,10 +90,6 @@ public:
     // DELETE: callback(currentValue, c10::nullopt) // null newValue
     virtual void watchKey(const std::string & /* unused */,
                           WatchKeyCallback /* unused */) {
-        //    TORCH_CHECK(
-        //        false,
-        //        "watchKey only implemented for TCPStore and PrefixStore that
-        //        wraps TCPStore.");
         throw std::runtime_error("watchKey only implemented for TCPStore and "
                                  "PrefixStore that wraps TCPStore.");
     }
