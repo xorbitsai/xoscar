@@ -57,10 +57,10 @@ jobs:
           check-path: 'cpp'
       - name: cpplint
         run: |
-          pip install cpplint pyyaml
+          pip install cpplint
           cpplint --recursive cpp
       - name: cmake-format
-        uses: PuneetMatharu/cmake-format-lint-action@v1.0.0
+        uses: PuneetMatharu/cmake-format-lint-action@v1.0.2
         with:
           args: --config-files .cmake-format.yaml --check
 
