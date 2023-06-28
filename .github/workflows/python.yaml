@@ -55,14 +55,14 @@ jobs:
           clang-format-version: '14'
           fallback-style: 'LLVM'
           check-path: 'cpp'
+      - name: cpplint
+        run: |
+          pip install cpplint pyyaml
+          cpplint --recursive cpp
       - name: cmake-format
         uses: PuneetMatharu/cmake-format-lint-action@v1.0.0
         with:
           args: --config-files .cmake-format.yaml --check
-      - name: cpplint
-        run: |
-          pip install cpplint
-          cpplint --recursive cpp
 
   build_test_job:
     runs-on: ${{ matrix.os }}
