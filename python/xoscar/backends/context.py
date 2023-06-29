@@ -379,7 +379,7 @@ class IndigenActorContext(BaseActorContext):
         # TODO here
         for file_obj, remote_ref in zip(local_fileobjs, remote_fileobj_refs):
             while True:
-                file_data = await file_obj.read(block_size)
+                file_data = await file_obj.read(block_size)  # type: ignore
                 if file_data:
                     message = self._gen_copy_to_fileobjs_message(
                         (remote_ref.address, remote_ref.uid, file_data)

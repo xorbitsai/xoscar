@@ -243,7 +243,7 @@ class FileobjTransferActor(Actor):
         ref = await actor_ref(ref)
         file_obj_refs = await ref.create_file_objects(names2)
         await copy_to(fobjs, file_obj_refs)
-        _ = [await f.close() for f in fobjs]
+        _ = [await f.close() for f in fobjs]  # type: ignore
         await ref.close()
 
         for n1, n2 in zip(names1, names2):
