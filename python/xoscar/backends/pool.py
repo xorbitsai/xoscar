@@ -508,9 +508,9 @@ class AbstractActorPool(ABC):
         return ResultMessage(message_id=message.message_id, result=True)
 
     async def handle_copy_to_fileobjs_message(self, message) -> ResultMessage:
-        addr, uid, data = message.content
-        file_obj = FileObjectRef.get_file_object(FileObjectRef(addr, uid))
-        await file_obj.write(data)
+        for addr, uid, data in message.content:
+            file_obj = FileObjectRef.get_file_object(FileObjectRef(addr, uid))
+            await file_obj.write(data)
         return ResultMessage(message_id=message.message_id, result=True)
 
     @property

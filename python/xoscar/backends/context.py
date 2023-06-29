@@ -376,14 +376,25 @@ class IndigenActorContext(BaseActorContext):
         address = remote_fileobj_refs[0].address
         client = await self._get_client(address)
         block_size = block_size or DEFAULT_TRANSFER_BLOCK_SIZE
-        # TODO here
+        one_block_data = []
+        current_file_size = 0
         for file_obj, remote_ref in zip(local_fileobjs, remote_fileobj_refs):
             while True:
                 file_data = await file_obj.read(block_size)  # type: ignore
                 if file_data:
-                    message = self._gen_copy_to_fileobjs_message(
+                    one_block_data.append(
                         (remote_ref.address, remote_ref.uid, file_data)
                     )
-                    await self._call_with_client(client, message)
+                    current_file_size += len(file_data)
+                    if current_file_size >= block_size:
+                        message = self._gen_copy_to_fileobjs_message(one_block_data)
+                        await self._call_with_client(client, message)
+                        one_block_data.clear()
+                        current_file_size = 0
                 else:
                     break
+
+        if current_file_size > 0:
+            message = self._gen_copy_to_fileobjs_message(one_block_data)
+            await self._call_with_client(client, message)
+            one_block_data.clear()
