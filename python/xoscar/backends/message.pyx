@@ -43,6 +43,7 @@ class MessageType(Enum):
     tell = 8
     cancel = 9
     copy_to_buffers = 10
+    copy_to_fileobjs = 11
 
 
 class ControlMessageType(Enum):
@@ -520,6 +521,10 @@ cdef class CopyToBuffersMessage(_MessageBase):
         self.content = subs[0]
 
 
+cdef class CopyToFileObjectsMessage(CopyToBuffersMessage):
+    message_type = MessageType.copy_to_fileobjs
+
+
 cdef dict _message_type_to_message_cls = {
     MessageType.control.value: ControlMessage,
     MessageType.result.value: ResultMessage,
@@ -532,6 +537,7 @@ cdef dict _message_type_to_message_cls = {
     MessageType.tell.value: TellMessage,
     MessageType.cancel.value: CancelMessage,
     MessageType.copy_to_buffers.value: CopyToBuffersMessage,
+    MessageType.copy_to_fileobjs.value: CopyToFileObjectsMessage
 }
 
 

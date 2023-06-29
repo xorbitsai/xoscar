@@ -31,6 +31,11 @@ cdef class BufferRef:
     cdef public bytes uid
 
 
+cdef class FileObjectRef:
+    cdef public str address
+    cdef public bytes uid
+
+
 cdef class _BaseActor:
     cdef object __weakref__
     cdef str _address
