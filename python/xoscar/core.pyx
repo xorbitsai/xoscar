@@ -586,7 +586,7 @@ cdef class BufferRef:
         return self.address == other.address and self.uid == other.uid
 
     def __repr__(self):
-        return f'BufferRef(uid={self.uid}, address={self.address})'
+        return f'BufferRef(uid={self.uid.hex()}, address={self.address})'
 
 
 cdef class FileObjectRef:
@@ -606,7 +606,7 @@ cdef class FileObjectRef:
         return ref
 
     @classmethod
-    def get_file_object(cls, ref: "FileObjectRef") -> AioFileObject:
+    def get_local_file_object(cls, ref: "FileObjectRef") -> AioFileObject:
         return cls._ref_to_fileobjs[ref]
 
     def __getstate__(self):
@@ -624,4 +624,4 @@ cdef class FileObjectRef:
         return self.address == other.address and self.uid == other.uid
 
     def __repr__(self):
-        return f'FileObjectRef(uid={self.uid}, address={self.address}'
+        return f'FileObjectRef(uid={self.uid.hex()}, address={self.address})'
