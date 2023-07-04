@@ -49,6 +49,21 @@ jobs:
       - name: codespell
         run: pip install codespell && cd python && codespell xoscar
 
+      - name: clang-format
+        uses: jidicula/clang-format-action@v4.11.0
+        with:
+          clang-format-version: '14'
+          fallback-style: 'LLVM'
+          check-path: 'cpp'
+      - name: cpplint
+        run: |
+          pip install cpplint
+          cpplint --recursive cpp
+      - name: cmake-format
+        run: |
+          pip install cmakelang[YAML]
+          find . -name "CMakeLists.txt" -not -path "*third_party/*" | xargs cmake-format -c .cmake-format.yaml --check
+
   build_test_job:
     runs-on: ${{ matrix.os }}
     needs: lint
@@ -84,6 +99,12 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
         activate-environment: ${{ env.CONDA_ENV }}
+
+    # Fix "version `GLIBCXX_3.4.30' not found (required by xoscar_store.cpython-311-x86_64-linux-gnu.so)" issue in Python 3.11
+    - name: Install libstdcxx-ng for Python 3.11
+      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version == '3.11') }}
+      run: |
+        conda install -c conda-forge libstdcxx-ng
 
     - name: Install dependencies
       env:
