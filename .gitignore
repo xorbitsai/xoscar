@@ -132,3 +132,10 @@ dmypy.json
 
 # cython compiled files
 python/xoscar/**/*.c*
+
+# cmake
+cmake-*
+CMakeFiles
+CMakeCache.txt
+*.cmake
+Makefile
