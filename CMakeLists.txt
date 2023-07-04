@@ -2,8 +2,10 @@ cmake_minimum_required(VERSION 3.11...3.21)
 
 project(XoscarCollective)
 
-if(NOT ${PYTHON_EXECUTABLE})
+if(NOT DEFINED PYTHON_PATH)
   find_package(Python COMPONENTS Interpreter Development)
+else()
+  set(PYTHON_EXECUTABLE ${PYTHON_PATH})
 endif()
 
 set(CMAKE_CXX_STANDARD 20)

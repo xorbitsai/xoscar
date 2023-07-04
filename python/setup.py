@@ -218,7 +218,7 @@ class CMakeBuild(build_ext):
         # from Python.
         cmake_args = [
             f"-DLIBRARY_OUTPUT_DIRECTORY={output_directory}",
-            f"-DPYTHON_EXECUTABLE={sys.executable}",
+            f"-DPYTHON_PATH={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
         ]
         build_args = []
