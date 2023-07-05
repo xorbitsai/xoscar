@@ -146,7 +146,7 @@ PLAT_TO_CMAKE = {
 # A CMakeExtension needs a sourcedir instead of a file list.
 # The name must be the _single_ output extension from the CMake build.
 # If you need multiple extensions, see scikit-build.
-class XoscarStoreExtension(Extension):
+class XoscarCmakeExtension(Extension):
     def __init__(self, name: str, sourcedir: str = "") -> None:
         super().__init__(name, sources=[])
         self.sourcedir = os.fspath(Path(sourcedir).resolve())
@@ -156,7 +156,7 @@ class CMakeBuild(build_ext):
     def copy_extensions_to_source(self):
         build_py = self.get_finalized_command('build_py')
         for ext in self.extensions:
-            if not isinstance(ext, XoscarStoreExtension):
+            if not isinstance(ext, XoscarCmakeExtension):
                 fullname = self.get_ext_fullname(ext.name)
                 filename = self.get_ext_filename(fullname)
                 modpath = fullname.split('.')
@@ -179,9 +179,9 @@ class CMakeBuild(build_ext):
     def build_extension(self, ext):
         # TODO: support windows compilation
         is_windows = sys.platform.startswith('win')
-        if isinstance(ext, XoscarStoreExtension) and not is_windows:
-            self.build_store(ext)
-        elif isinstance(ext, XoscarStoreExtension) and is_windows:
+        if isinstance(ext, XoscarCmakeExtension) and not is_windows:
+            self.build_Cmake(ext)
+        elif isinstance(ext, XoscarCmakeExtension) and is_windows:
             pass
         else:
             ext._convert_pyx_sources_to_lang()
@@ -196,12 +196,13 @@ class CMakeBuild(build_ext):
             finally:
                 self.compiler = _compiler
 
-    def build_store(self, ext: XoscarStoreExtension) -> None:
+    def build_Cmake(self, ext: XoscarCmakeExtension) -> None:
         # Must be in this form due to bug in .resolve() only fixed in Python 3.10+
         ext_fullpath = Path.cwd() / self.get_ext_fullpath(ext.name)
         extdir = ext_fullpath.parent.resolve()
         source_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        output_directory = Path(source_dir) / "python" / "xoscar" / "collective" / "rendezvous"
+        output_directory_store = Path(source_dir) / "python" / "xoscar" / "collective" / "rendezvous"
+        output_directory_gloo = Path(source_dir) / "python" / "xoscar" / "collective" / "gloo"
 
         # Using this requires trailing slash for auto-detection & inclusion of
         # auxiliary "native" libs
@@ -217,7 +218,8 @@ class CMakeBuild(build_ext):
         # EXAMPLE_VERSION_INFO shows you how to pass a value into the C++ code
         # from Python.
         cmake_args = [
-            f"-DLIBRARY_OUTPUT_DIRECTORY={output_directory}",
+            f"-DLIBRARY_OUTPUT_DIRECTORY_STORE={output_directory_store}",
+            f"-DLIBRARY_OUTPUT_DIRECTORY_GLOO={output_directory_gloo}",
             f"-DPYTHON_PATH={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
         ]
@@ -294,7 +296,7 @@ class CMakeBuild(build_ext):
 
 setup_options = dict(
     version=versioneer.get_version(),
-    ext_modules=extensions + [XoscarStoreExtension("xoscar_store")],
+    ext_modules=extensions + [XoscarCmakeExtension("xoscar_cmake")],
     cmdclass={"build_ext": CMakeBuild},
     long_description=build_long_description(),
     long_description_content_type="text/markdown",
