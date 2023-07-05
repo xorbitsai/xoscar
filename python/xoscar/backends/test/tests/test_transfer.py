@@ -14,18 +14,21 @@
 # limitations under the License.
 import asyncio
 import os
+import shutil
 import sys
+import tempfile
 from typing import List, Optional
 
 import numpy as np
 import pytest
 
 from .... import Actor, ActorRefType
-from ....api import actor_ref, buffer_ref, copy_to
+from ....aio import AioFileObject
+from ....api import actor_ref, buffer_ref, copy_to, file_object_ref
 from ....backends.allocate_strategy import ProcessIndex
 from ....backends.indigen.pool import MainActorPool
 from ....context import get_context
-from ....core import BufferRef
+from ....core import BufferRef, FileObjectRef
 from ....tests.core import require_cupy
 from ....utils import lazy_import
 from ...pool import create_actor_pool
@@ -203,3 +206,92 @@ async def tests_gpu_copy(scheme):
     if "ucx" == scheme:
         await _copy_test(None, "ucx", False)
         await _copy_test("ucx", None, False)
+
+
+class FileobjTransferActor(Actor):
+    def __init__(self):
+        self._fileobjs = []
+
+    async def create_file_objects(self, names: List[str]) -> List[FileObjectRef]:
+        refs = []
+        for name in names:
+            fobj = open(name, "w+b")
+            afobj = AioFileObject(fobj)
+            self._fileobjs.append(afobj)
+            refs.append(file_object_ref(self.address, afobj))
+        return refs
+
+    async def close(self):
+        for fobj in self._fileobjs:
+            assert await fobj.tell() > 0
+            await fobj.close()
+
+    async def copy_data(
+        self,
+        ref: ActorRefType["FileobjTransferActor"],
+        names1: List[str],
+        names2: List[str],
+        sizes: List[int],
+    ):
+        fobjs = []
+        for name, size in zip(names1, sizes):
+            fobj = open(name, "w+b")
+            fobj.write(np.random.bytes(size))
+            fobj.seek(0)
+            fobjs.append(AioFileObject(fobj))
+
+        ref = await actor_ref(ref)
+        file_obj_refs = await ref.create_file_objects(names2)
+        await copy_to(fobjs, file_obj_refs)
+        _ = [await f.close() for f in fobjs]  # type: ignore
+        await ref.close()
+
+        for n1, n2 in zip(names1, names2):
+            with open(n1, "rb") as f1, open(n2, "rb") as f2:
+                b1 = f1.read()
+                b2 = f2.read()
+                assert b1 == b2
+
+
+@pytest.mark.asyncio
+async def test_copy_to_file_objects():
+    start_method = (
+        os.environ.get("POOL_START_METHOD", "forkserver")
+        if sys.platform != "win32"
+        else None
+    )
+    pool = await create_actor_pool(
+        "127.0.0.1",
+        pool_cls=MainActorPool,
+        n_process=2,
+        subprocess_start_method=start_method,
+    )
+
+    d = tempfile.mkdtemp()
+    async with pool:
+        ctx = get_context()
+
+        # actor on main pool
+        actor_ref1 = await ctx.create_actor(
+            FileobjTransferActor,
+            uid="test-1",
+            address=pool.external_address,
+            allocate_strategy=ProcessIndex(1),
+        )
+        actor_ref2 = await ctx.create_actor(
+            FileobjTransferActor,
+            uid="test-2",
+            address=pool.external_address,
+            allocate_strategy=ProcessIndex(2),
+        )
+        sizes = [10 * 1024**2, 3 * 1024**2, 0.5 * 1024**2, 0.25 * 1024**2]
+        names = []
+        for _ in range(2 * len(sizes)):
+            _, p = tempfile.mkstemp(dir=d)
+            names.append(p)
+
+        await actor_ref1.copy_data(actor_ref2, names[::2], names[1::2], sizes=sizes)
+    try:
+        shutil.rmtree(d)
+    except PermissionError:
+        pass

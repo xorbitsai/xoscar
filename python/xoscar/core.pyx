@@ -22,6 +22,7 @@ from typing import Any, AsyncGenerator
 
 cimport cython
 
+from .aio import AioFileObject
 from .context cimport get_context
 
 from .errors import ActorNotExist, Return
@@ -585,4 +586,42 @@ cdef class BufferRef:
         return self.address == other.address and self.uid == other.uid
 
     def __repr__(self):
-        return f'BufferRef(uid={self.uid}, address={self.address})'
+        return f'BufferRef(uid={self.uid.hex()}, address={self.address})'
+
+
+cdef class FileObjectRef:
+    """
+    Reference of a file obj
+    """
+    _ref_to_fileobjs = weakref.WeakValueDictionary()
+
+    def __init__(self, str address, bytes uid):
+        self.uid = uid
+        self.address = address
+
+    @classmethod
+    def create(cls, fileobj: AioFileObject, address: str, uid: bytes) -> "FileObjectRef":
+        ref = FileObjectRef(address, uid)
+        cls._ref_to_fileobjs[ref] = fileobj
+        return ref
+
+    @classmethod
+    def get_local_file_object(cls, ref: "FileObjectRef") -> AioFileObject:
+        return cls._ref_to_fileobjs[ref]
+
+    def __getstate__(self):
+        return self.uid, self.address
+
+    def __setstate__(self, state):
+        self.uid, self.address = state
+
+    def __hash__(self):
+        return hash((self.address, self.uid))
+
+    def __eq__(self, other):
+        if type(other) != FileObjectRef:
+            return False
+        return self.address == other.address and self.uid == other.uid
+
+    def __repr__(self):
+        return f'FileObjectRef(uid={self.uid.hex()}, address={self.address})'

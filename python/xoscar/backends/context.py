@@ -20,9 +20,10 @@ from dataclasses import dataclass
 from typing import Any, List, Optional, Tuple, Type, Union
 
 from .._utils import create_actor_ref, to_binary
+from ..aio import AioFileObject
 from ..api import Actor
 from ..context import BaseActorContext
-from ..core import ActorRef, BufferRef, create_local_actor_ref
+from ..core import ActorRef, BufferRef, FileObjectRef, create_local_actor_ref
 from ..debug import debug_async_timeout, detect_cycle_send
 from ..errors import CannotCancelTask
 from ..utils import dataslots
@@ -36,6 +37,7 @@ from .message import (
     ControlMessage,
     ControlMessageType,
     CopyToBuffersMessage,
+    CopyToFileObjectsMessage,
     CreateActorMessage,
     DestroyActorMessage,
     ErrorMessage,
@@ -281,8 +283,12 @@ class IndigenActorContext(BaseActorContext):
         )
 
     @staticmethod
-    def _gen_copy_to_message(content: Any):
+    def _gen_copy_to_buffers_message(content: Any):
         return CopyToBuffersMessage(message_id=new_message_id(), content=content)  # type: ignore
+
+    @staticmethod
+    def _gen_copy_to_fileobjs_message(content: Any):
+        return CopyToFileObjectsMessage(message_id=new_message_id(), content=content)  # type: ignore
 
     async def _get_copy_to_client(self, router, address) -> Client:
         client = await self._caller.get_client(router, address)
@@ -302,28 +308,19 @@ class IndigenActorContext(BaseActorContext):
         else:
             return await self._caller.get_client_via_type(router, address, client_type)
 
-    async def copy_to(
+    async def _get_client(self, address: str) -> Client:
+        router = Router.get_instance()
+        assert router is not None, "`copy_to` can only be used inside pools"
+        return await self._get_copy_to_client(router, address)
+
+    async def copy_to_buffers(
         self,
         local_buffers: list,
         remote_buffer_refs: List[BufferRef],
         block_size: Optional[int] = None,
     ):
-        assert (
-            len({ref.address for ref in remote_buffer_refs}) == 1
-        ), "remote buffers for `copy_via_buffers` can support only 1 destination"
-        assert len(local_buffers) == len(remote_buffer_refs), (
-            f"Buffers from local and remote must have same size, "
-            f"local: {len(local_buffers)}, remote: {len(remote_buffer_refs)}"
-        )
-        if block_size is not None:
-            assert (
-                block_size > 0
-            ), f"`block_size` option must be greater than 0, current value: {block_size}."
-
-        router = Router.get_instance()
-        assert router is not None, "`copy_to` can only be used inside pools"
         address = remote_buffer_refs[0].address
-        client = await self._get_copy_to_client(router, address)
+        client = await self._get_client(address)
         if isinstance(client, UCXClient):
             message = [(buf.address, buf.uid) for buf in remote_buffer_refs]
             await self._call_send_buffers(
@@ -352,7 +349,7 @@ class IndigenActorContext(BaseActorContext):
                         (r_buf.address, r_buf.uid, last_start, remain, l_buf[:remain])
                     )
                     await self._call_with_client(
-                        client, self._gen_copy_to_message(one_block_data)
+                        client, self._gen_copy_to_buffers_message(one_block_data)
                     )
                     one_block_data = []
                     current_buf_size = 0
@@ -367,5 +364,37 @@ class IndigenActorContext(BaseActorContext):
 
             if one_block_data:
                 await self._call_with_client(
-                    client, self._gen_copy_to_message(one_block_data)
+                    client, self._gen_copy_to_buffers_message(one_block_data)
                 )
+
+    async def copy_to_fileobjs(
+        self,
+        local_fileobjs: List[AioFileObject],
+        remote_fileobj_refs: List[FileObjectRef],
+        block_size: Optional[int] = None,
+    ):
+        address = remote_fileobj_refs[0].address
+        client = await self._get_client(address)
+        block_size = block_size or DEFAULT_TRANSFER_BLOCK_SIZE
+        one_block_data = []
+        current_file_size = 0
+        for file_obj, remote_ref in zip(local_fileobjs, remote_fileobj_refs):
+            while True:
+                file_data = await file_obj.read(block_size)  # type: ignore
+                if file_data:
+                    one_block_data.append(
+                        (remote_ref.address, remote_ref.uid, file_data)
+                    )
+                    current_file_size += len(file_data)
+                    if current_file_size >= block_size:
+                        message = self._gen_copy_to_fileobjs_message(one_block_data)
+                        await self._call_with_client(client, message)
+                        one_block_data.clear()
+                        current_file_size = 0
+                else:
+                    break
+
+        if current_file_size > 0:
+            message = self._gen_copy_to_fileobjs_message(one_block_data)
+            await self._call_with_client(client, message)
+            one_block_data.clear()

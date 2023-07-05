@@ -17,12 +17,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 from numbers import Number
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union
 from urllib.parse import urlparse
 
+from .aio import AioFileObject
 from .backend import get_backend
 from .context import get_context
-from .core import ActorRef, BufferRef, _Actor, _StatelessActor
+from .core import ActorRef, BufferRef, FileObjectRef, _Actor, _StatelessActor
 
 if TYPE_CHECKING:
     from .backends.config import ActorPoolConfig
@@ -180,25 +181,44 @@ def buffer_ref(address: str, buffer: Any) -> BufferRef:
     return ctx.buffer_ref(address, buffer)
 
 
-async def copy_to(
-    local_buffers: list,
-    remote_buffer_refs: List[BufferRef],
-    block_size: Optional[int] = None,
-):
+def file_object_ref(address: str, fileobj: AioFileObject) -> FileObjectRef:
     """
-    Copy data from local buffers to remote buffers.
+    Init file object ref according to address and aio file obj.
 
     Parameters
     ----------
-    local_buffers
-        Local buffers.
-    remote_buffer_refs
-        Remote buffer refs.
+    address
+        The address of the file obj.
+    fileobj
+        Aio file object.
+
+    Returns
+    ----------
+    FileObjectRef obj.
+    """
+    ctx = get_context()
+    return ctx.file_object_ref(address, fileobj)
+
+
+async def copy_to(
+    local_buffers_or_fileobjs: list,
+    remote_refs: List[Union[BufferRef, FileObjectRef]],
+    block_size: Optional[int] = None,
+):
+    """
+    Copy data from local buffers to remote buffers or copy local file objects to remote file objects.
+
+    Parameters
+    ----------
+    local_buffers_or_fileobjs
+        Local buffers or file objects.
+    remote_refs
+        Remote buffer refs or file object refs.
     block_size
         Transfer block size when non-ucx
     """
     ctx = get_context()
-    return await ctx.copy_to(local_buffers, remote_buffer_refs, block_size)
+    return await ctx.copy_to(local_buffers_or_fileobjs, remote_refs, block_size)
 
 
 async def wait_actor_pool_recovered(address: str, main_pool_address: str | None = None):

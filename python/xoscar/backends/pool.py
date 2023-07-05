@@ -29,7 +29,7 @@ from typing import Any, Callable, Coroutine, Optional, Type, TypeVar
 
 from .._utils import TypeDispatcher, create_actor_ref, to_binary
 from ..api import Actor
-from ..core import ActorRef, BufferRef, register_local_pool
+from ..core import ActorRef, BufferRef, FileObjectRef, register_local_pool
 from ..debug import debug_async_timeout, record_message_trace
 from ..entrypoints import init_extension_entrypoints
 from ..errors import (
@@ -123,7 +123,8 @@ def _register_message_handler(pool_type: Type["AbstractActorPool"]):
         (MessageType.tell, pool_type.tell),
         (MessageType.cancel, pool_type.cancel),
         (MessageType.control, pool_type.handle_control_command),
-        (MessageType.copy_to_buffers, pool_type.handle_copy_to_message),
+        (MessageType.copy_to_buffers, pool_type.handle_copy_to_buffers_message),
+        (MessageType.copy_to_fileobjs, pool_type.handle_copy_to_fileobjs_message),
     ]:
         pool_type._message_handler[message_type] = handler  # type: ignore
     return pool_type
@@ -500,10 +501,16 @@ class AbstractActorPool(ABC):
         finally:
             self._stopped.set()
 
-    async def handle_copy_to_message(self, message) -> ResultMessage:
+    async def handle_copy_to_buffers_message(self, message) -> ResultMessage:
         for addr, uid, start, _len, data in message.content:
             buffer = BufferRef.get_buffer(BufferRef(addr, uid))
             buffer[start : start + _len] = data
+        return ResultMessage(message_id=message.message_id, result=True)
+
+    async def handle_copy_to_fileobjs_message(self, message) -> ResultMessage:
+        for addr, uid, data in message.content:
+            file_obj = FileObjectRef.get_local_file_object(FileObjectRef(addr, uid))
+            await file_obj.write(data)
         return ResultMessage(message_id=message.message_id, result=True)
 
     @property
