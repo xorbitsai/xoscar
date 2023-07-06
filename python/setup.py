@@ -203,6 +203,9 @@ class CMakeBuild(build_ext):
         source_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_directory_store = Path(source_dir) / "python" / "xoscar" / "collective" / "rendezvous"
         output_directory_gloo = Path(source_dir) / "python" / "xoscar" / "collective" / "gloo"
+        build_temp = Path(self.build_temp) / ext.name
+        if not build_temp.exists():
+            build_temp.mkdir(parents=True)
 
         # Using this requires trailing slash for auto-detection & inclusion of
         # auxiliary "native" libs
@@ -218,6 +221,7 @@ class CMakeBuild(build_ext):
         # EXAMPLE_VERSION_INFO shows you how to pass a value into the C++ code
         # from Python.
         cmake_args = [
+            f"-DBUILD_TMP_DIR={build_temp}",
             f"-DLIBRARY_OUTPUT_DIRECTORY_STORE={output_directory_store}",
             f"-DLIBRARY_OUTPUT_DIRECTORY_GLOO={output_directory_gloo}",
             f"-DPYTHON_PATH={sys.executable}",
@@ -282,9 +286,7 @@ class CMakeBuild(build_ext):
                 # CMake 3.12+ only.
                 build_args += [f"-j{self.parallel}"]
 
-        build_temp = Path(self.build_temp) / ext.name
-        if not build_temp.exists():
-            build_temp.mkdir(parents=True)
+
 
         subprocess.run(
             ["cmake", source_dir, *cmake_args], cwd=build_temp, check=True

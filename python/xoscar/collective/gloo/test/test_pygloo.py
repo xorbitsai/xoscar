@@ -4,11 +4,11 @@ import shutil
 import time
 
 import numpy as np
-
+import platform
 from ....tests.core import require_unix
 
 fileStore_path = "./collective"
-
+system_name = platform.system()
 
 def worker_allgather(rank):
     from .. import xoscar_pygloo as xp
@@ -22,8 +22,12 @@ def worker_allgather(rank):
 
     context = xp.rendezvous.Context(rank, 2)
 
-    attr = xp.transport.tcp.attr("localhost")
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     fileStore = xp.rendezvous.FileStore(fileStore_path)
     store = xp.rendezvous.PrefixStore(str(2), fileStore)
@@ -70,8 +74,12 @@ def worker_allreduce(rank):
 
     context = xp.rendezvous.Context(rank, 2)
 
-    attr = xp.transport.tcp.attr("localhost")
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     fileStore = xp.rendezvous.FileStore(fileStore_path)
     store = xp.rendezvous.PrefixStore(str(2), fileStore)
@@ -118,8 +126,12 @@ def worker_barrier(rank):
 
     context = xp.rendezvous.Context(rank, 2)
 
-    attr = xp.transport.tcp.attr("localhost")
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     fileStore = xp.rendezvous.FileStore(fileStore_path)
     store = xp.rendezvous.PrefixStore(str(2), fileStore)
@@ -167,8 +179,12 @@ def worker_broadcast(rank):
 
     context = xp.rendezvous.Context(rank, 2)
 
-    attr = xp.transport.tcp.attr("localhost")
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     fileStore = xp.rendezvous.FileStore(fileStore_path)
     store = xp.rendezvous.PrefixStore(str(2), fileStore)
@@ -225,8 +241,12 @@ def worker_gather(rank):
 
     context = xp.rendezvous.Context(rank, 3)
 
-    attr = xp.transport.tcp.attr("localhost")
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     fileStore = xp.rendezvous.FileStore(fileStore_path)
     store = xp.rendezvous.PrefixStore(str(3), fileStore)
@@ -280,8 +300,12 @@ def worker_reduce_scatter(rank):
 
     context = xp.rendezvous.Context(rank, 3)
 
-    attr = xp.transport.tcp.attr("localhost")
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     fileStore = xp.rendezvous.FileStore(fileStore_path)
     store = xp.rendezvous.PrefixStore(str(3), fileStore)
@@ -334,8 +358,12 @@ def worker_reduce(rank):
 
     context = xp.rendezvous.Context(rank, 3)
 
-    attr = xp.transport.tcp.attr("localhost")
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     fileStore = xp.rendezvous.FileStore(fileStore_path)
     store = xp.rendezvous.PrefixStore(str(3), fileStore)
@@ -385,8 +413,12 @@ def worker_scatter(rank):
 
     context = xp.rendezvous.Context(rank, 2)
 
-    attr = xp.transport.tcp.attr("localhost")
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     fileStore = xp.rendezvous.FileStore(fileStore_path)
     store = xp.rendezvous.PrefixStore(str(2), fileStore)
@@ -445,8 +477,12 @@ def worker_send_recv(rank):
 
     context = xp.rendezvous.Context(rank, 2)
 
-    attr = xp.transport.tcp.attr("localhost")
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     fileStore = xp.rendezvous.FileStore(fileStore_path)
     store = xp.rendezvous.PrefixStore(str(2), fileStore)

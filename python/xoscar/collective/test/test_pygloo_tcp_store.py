@@ -6,9 +6,10 @@ import time
 import numpy as np
 
 from ...tests.core import require_unix
+import platform
 
 fileStore_path = "./collective"
-
+system_name = platform.system()
 
 def worker_allgather(rank):
     from ..gloo import xoscar_pygloo as xp
@@ -23,9 +24,12 @@ def worker_allgather(rank):
 
     context = xp.rendezvous.Context(rank, 2)
 
-    attr = xp.transport.tcp.attr("localhost")
-    # Perform rendezvous for TCP pairs
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
     opt = xs.TCPStoreOptions()
     opt.port = 25001
     opt.numWorkers = 2
@@ -81,9 +85,12 @@ def worker_allreduce(rank):
 
     context = xp.rendezvous.Context(rank, 2)
 
-    attr = xp.transport.tcp.attr("localhost")
-    # Perform rendezvous for TCP pairs
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xs.TCPStoreOptions()
     opt.port = 25001
@@ -140,9 +147,12 @@ def worker_barrier(rank):
 
     context = xp.rendezvous.Context(rank, 2)
 
-    attr = xp.transport.tcp.attr("localhost")
-    # Perform rendezvous for TCP pairs
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xs.TCPStoreOptions()
     opt.port = 25001
@@ -200,9 +210,12 @@ def worker_broadcast(rank):
 
     context = xp.rendezvous.Context(rank, 2)
 
-    attr = xp.transport.tcp.attr("localhost")
-    # Perform rendezvous for TCP pairs
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xs.TCPStoreOptions()
     opt.port = 25001
@@ -269,9 +282,12 @@ def worker_gather(rank):
 
     context = xp.rendezvous.Context(rank, 3)
 
-    attr = xp.transport.tcp.attr("localhost")
-    # Perform rendezvous for TCP pairs
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xs.TCPStoreOptions()
     opt.port = 25001
@@ -335,9 +351,12 @@ def worker_reduce_scatter(rank):
 
     context = xp.rendezvous.Context(rank, 3)
 
-    attr = xp.transport.tcp.attr("localhost")
-    # Perform rendezvous for TCP pairs
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xs.TCPStoreOptions()
     opt.port = 25001
@@ -400,9 +419,12 @@ def worker_reduce(rank):
 
     context = xp.rendezvous.Context(rank, 3)
 
-    attr = xp.transport.tcp.attr("localhost")
-    # Perform rendezvous for TCP pairs
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xs.TCPStoreOptions()
     opt.port = 25001
@@ -462,9 +484,12 @@ def worker_scatter(rank):
 
     context = xp.rendezvous.Context(rank, 2)
 
-    attr = xp.transport.tcp.attr("localhost")
-    # Perform rendezvous for TCP pairs
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xs.TCPStoreOptions()
     opt.port = 25001
@@ -533,9 +558,12 @@ def worker_send_recv(rank):
 
     context = xp.rendezvous.Context(rank, 2)
 
-    attr = xp.transport.tcp.attr("localhost")
-    # Perform rendezvous for TCP pairs
-    dev = xp.transport.tcp.CreateDevice(attr)
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xs.TCPStoreOptions()
     opt.port = 25001
