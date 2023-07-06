@@ -74,8 +74,8 @@ async def read_buffers(header: Dict, reader: StreamReader):
     for is_cuda_buffer, buf_size in zip(is_cuda_buffers, buffer_sizes):
         if is_cuda_buffer:  # pragma: no cover
             if buf_size == 0:
-                content = await reader.readexactly(buf_size)
-                buffers.append(content)
+                # uniformly use rmm.DeviceBuffer for cuda's deserialization
+                buffers.append(rmm.DeviceBuffer(size=buf_size))
             else:
                 buffer = rmm.DeviceBuffer(size=buf_size)
                 arr = _convert_to_cupy_ndarray(buffer)
