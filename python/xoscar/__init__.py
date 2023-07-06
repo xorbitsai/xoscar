@@ -24,6 +24,7 @@ from .api import (
     destroy_actor,
     kill_actor,
     buffer_ref,
+    file_object_ref,
     copy_to,
     Actor,
     StatelessActor,
