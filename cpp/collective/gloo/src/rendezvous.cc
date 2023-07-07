@@ -33,7 +33,7 @@ limitations under the License. */
 
 namespace xoscar {
 namespace rendezvous {
-
+constexpr std::chrono::milliseconds kDefaultTimeout = std::chrono::seconds(30);
 void def_rendezvous_module(pybind11::module &m) {
     pybind11::module rendezvous
         = m.def_submodule("rendezvous", "This is a rendezvous module");
@@ -205,9 +205,7 @@ void def_rendezvous_module(pybind11::module &m) {
         }
 
         void wait(const std::vector<std::string> &keys) override {
-            constexpr std::chrono::milliseconds kDefaultTimeout
-                = std::chrono::seconds(30);
-            wait(keys, kDefaultTimeout);
+            wait(keys, xoscar::rendezvous::kDefaultTimeout);
         }
 
         void wait(const std::vector<std::string> &keys,
