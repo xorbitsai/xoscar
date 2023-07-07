@@ -11,6 +11,7 @@ import platform
 fileStore_path = "./collective"
 system_name = platform.system()
 
+
 def worker_allgather(rank):
     from ..gloo import xoscar_pygloo as xp
     from ..rendezvous import xoscar_store as xs

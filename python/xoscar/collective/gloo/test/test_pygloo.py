@@ -10,6 +10,7 @@ from ....tests.core import require_unix
 fileStore_path = "./collective"
 system_name = platform.system()
 
+
 def worker_allgather(rank):
     from .. import xoscar_pygloo as xp
 
