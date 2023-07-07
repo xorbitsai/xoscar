@@ -18,8 +18,8 @@
 # -- Project information -----------------------------------------------------
 
 project = 'Xoscar'
-copyright = '2023, Xprobe-inc'
-author = 'Xprobe-inc'
+copyright = '2023, Xorbits Inc.'
+author = 'xorbitsai'
 
 
 # -- General configuration ---------------------------------------------------
