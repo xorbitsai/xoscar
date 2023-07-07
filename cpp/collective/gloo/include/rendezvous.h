@@ -11,8 +11,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License. */
-#ifndef CPP_COLLECTIVE_GLOO_INCLUDE_RENDEZVOUS_H_
-#define CPP_COLLECTIVE_GLOO_INCLUDE_RENDEZVOUS_H_
+#pragma once
 
 #include <pybind11/pybind11.h>
 #include <transport.h>
@@ -23,5 +22,3 @@ namespace rendezvous {
 void def_rendezvous_module(pybind11::module &m);
 }  // namespace rendezvous
 }  // namespace xoscar
-
-#endif  // CPP_COLLECTIVE_GLOO_INCLUDE_RENDEZVOUS_H_

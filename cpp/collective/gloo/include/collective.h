@@ -11,8 +11,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License. */
-#ifndef CPP_COLLECTIVE_GLOO_INCLUDE_COLLECTIVE_H_
-#define CPP_COLLECTIVE_GLOO_INCLUDE_COLLECTIVE_H_
+#pragma once
 
 #include <gloo/allreduce.h>
 #include <gloo/context.h>
@@ -163,5 +162,3 @@ void reduce_scatter_wrapper(const std::shared_ptr<gloo::Context> &context,
 
 void barrier(const std::shared_ptr<gloo::Context> &context, uint32_t tag = 0);
 }  // namespace xoscar
-
-#endif  // CPP_COLLECTIVE_GLOO_INCLUDE_COLLECTIVE_H_

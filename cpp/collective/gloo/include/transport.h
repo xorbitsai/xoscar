@@ -12,8 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License. */
 
-#ifndef CPP_COLLECTIVE_GLOO_INCLUDE_TRANSPORT_H_
-#define CPP_COLLECTIVE_GLOO_INCLUDE_TRANSPORT_H_
+#pragma once
 
 #include <config.h>
 #include <pybind11/chrono.h>
@@ -109,5 +108,3 @@ void def_transport_tcp_module(pybind11::module &m);
 void def_transport_uv_module(pybind11::module &m);
 }  // namespace transport
 }  // namespace xoscar
-
-#endif  // CPP_COLLECTIVE_GLOO_INCLUDE_TRANSPORT_H_

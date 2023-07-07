@@ -1,10 +1,11 @@
 import multiprocessing as mp
 import os
+import platform
 import shutil
 import time
 
 import numpy as np
-import platform
+
 from ....tests.core import require_unix
 
 fileStore_path = "./collective"
