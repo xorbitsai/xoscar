@@ -9,7 +9,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 include_directories(include)
 include_directories(../../../third_party/pybind11/include)
-include_directories(../../../third_party/gloo)
 
 add_library(
   GlooLib
