@@ -20,7 +20,7 @@ import functools
 import logging
 import os
 import weakref
-from typing import Any, Callable, Coroutine, Dict, List, Tuple, Type
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Type
 
 import cloudpickle
 import numpy as np
@@ -28,7 +28,8 @@ import numpy as np
 from ...nvutils import get_cuda_context, get_index_and_uuid
 from ...serialization import deserialize
 from ...serialization.aio import BUFFER_SIZES_NAME, AioSerializer, get_header_length
-from ...utils import classproperty, implements, lazy_import
+from ...utils import classproperty, implements, is_cuda_buffer, lazy_import
+from ..message import _MessageBase
 from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server
 from .errors import ChannelClosed
@@ -176,9 +177,7 @@ class UCXInitializer:
         new_environ.update(envs)
         os.environ = new_environ  # type: ignore
         try:
-            ucp.init(
-                options=options, env_takes_precedence=True, blocking_progress_mode=False
-            )
+            ucp.init(options=options, env_takes_precedence=True)
         finally:
             os.environ = original_environ
 
@@ -237,6 +236,11 @@ class UCXChannel(Channel):
         if channel is not None:
             channel._closed = True
 
+    async def _serialize(self, message: Any) -> List[bytes]:
+        compress = self.compression or 0
+        serializer = AioSerializer(message, compress=compress)
+        return await serializer.run()
+
     @property
     @implements(Channel.type)
     def type(self) -> int:
@@ -247,26 +251,8 @@ class UCXChannel(Channel):
         if self.closed:
             raise ChannelClosed("UCX Endpoint is closed, unable to send message")
 
-        compress = self.compression or 0
-        serializer = AioSerializer(message, compress=compress)
-        buffers = await serializer.run()
-        try:
-            # It is necessary to first synchronize the default stream before start
-            # sending We synchronize the default stream because UCX is not
-            # stream-ordered and syncing the default stream will wait for other
-            # non-blocking CUDA streams. Note this is only sufficient if the memory
-            # being sent is not currently in use on non-blocking CUDA streams.
-            if any(hasattr(buf, "__cuda_array_interface__") for buf in buffers):
-                # has GPU buffer
-                synchronize_stream(0)
-
-            async with self._send_lock:
-                for buffer in buffers:
-                    if buffer.nbytes if hasattr(buffer, "nbytes") else len(buffer) > 0:
-                        await self.ucp_endpoint.send(buffer)
-        except ucp.exceptions.UCXBaseException:  # pragma: no cover
-            self.abort()
-            raise ChannelClosed("While writing, the connection was closed")
+        buffers = await self._serialize(message)
+        return await self.send_buffers(buffers)
 
     @implements(Channel.recv)
     async def recv(self):
@@ -305,6 +291,48 @@ class UCXChannel(Channel):
                 else:
                     raise EOFError("Server closed already")
         return deserialize(header, buffers)
+
+    async def send_buffers(self, buffers: list, meta: Optional[_MessageBase] = None):
+        try:
+            # It is necessary to first synchronize the default stream before start
+            # sending We synchronize the default stream because UCX is not
+            # stream-ordered and syncing the default stream will wait for other
+            # non-blocking CUDA streams. Note this is only sufficient if the memory
+            # being sent is not currently in use on non-blocking CUDA streams.
+            if any(is_cuda_buffer(buf) for buf in buffers):
+                # has GPU buffer
+                synchronize_stream(0)
+
+            meta_buffers = None
+            if meta:
+                meta_buffers = await self._serialize(meta)
+
+            async with self._send_lock:
+                if meta_buffers:
+                    for buf in meta_buffers:
+                        await self.ucp_endpoint.send(buf)
+                for buffer in buffers:
+                    if buffer.nbytes if hasattr(buffer, "nbytes") else len(buffer) > 0:
+                        await self.ucp_endpoint.send(buffer)
+        except ucp.exceptions.UCXBaseException:  # pragma: no cover
+            self.abort()
+            raise ChannelClosed("While writing, the connection was closed")
+
+    async def recv_buffers(self, buffers: list):
+        async with self._recv_lock:
+            try:
+                for buffer in buffers:
+                    await self.ucp_endpoint.recv(buffer)
+            except BaseException as e:  # pragma: no cover
+                if not self._closed:
+                    # In addition to UCX exceptions, may be CancelledError or another
+                    # "low-level" exception. The only safe thing to do is to abort.
+                    self.abort()
+                    raise ChannelClosed(
+                        f"Connection closed by writer.\nInner exception: {e!r}"
+                    ) from e
+                else:
+                    raise EOFError("Server closed already")
 
     def abort(self):
         self._closed = True
@@ -390,7 +418,7 @@ class UCXServer(Server):
                     client_ucp_endpoint, local_address=server.address
                 )
             except ChannelClosed:  # pragma: no cover
-                logger.debug("Connection closed before handshake completed")
+                logger.exception("Connection closed before handshake completed")
                 return
 
         ucp_listener = ucp.create_listener(serve_forever, port=port)
@@ -442,6 +470,7 @@ class UCXServer(Server):
         await asyncio.gather(
             *(channel.close() for channel in self._channels if not channel.closed)
         )
+        self._channels = []
         self._ucp_listener = None
         self._closed.set()
 
@@ -456,6 +485,7 @@ class UCXClient(Client):
     __slots__ = ()
 
     scheme = UCXServer.scheme
+    channel: UCXChannel
 
     @classmethod
     def parse_config(cls, config: dict) -> dict:
@@ -477,9 +507,15 @@ class UCXClient(Client):
 
         try:
             ucp_endpoint = await ucp.create_endpoint(host, port)
-        except ucp.exceptions.UCXBaseException:  # pragma: no cover
-            raise ChannelClosed("Connection closed before handshake completed")
+        except ucp.exceptions.UCXBaseException as e:  # pragma: no cover
+            raise ChannelClosed(
+                f"Connection closed before handshake completed, "
+                f"local address: {local_address}, dest address: {dest_address}"
+            ) from e
         channel = UCXChannel(
             ucp_endpoint, local_address=local_address, dest_address=dest_address
         )
         return UCXClient(local_address, dest_address, channel)
+
+    async def send_buffers(self, buffers: list, meta: _MessageBase):
+        return await self.channel.send_buffers(buffers, meta)

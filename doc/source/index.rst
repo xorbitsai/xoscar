@@ -64,7 +64,7 @@ environments with multiple processing units and accelerators.
 
 Where to get it
 ---------------
-The source code is currently hosted on GitHub at: https://github.com/xprobe-inc/xoscar
+The source code is currently hosted on GitHub at: https://github.com/xorbitsai/xoscar
 
 Binary installers for the latest released version are available at the
 `Python Package Index (PyPI) <https://pypi.org/project/xoscar/>`_.
@@ -76,7 +76,7 @@ Binary installers for the latest released version are available at the
 
 License
 -------
-`Apache 2 <https://github.com/xprobe-inc/xoscar/blob/main/LICENSE>`_
+`Apache 2 <https://github.com/xorbitsai/xoscar/blob/main/LICENSE>`_
 
 .. toctree::
    :maxdepth: 2

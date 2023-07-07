@@ -31,7 +31,7 @@ import time
 import uuid
 from abc import ABC
 from types import TracebackType
-from typing import Callable, Type
+from typing import Callable, Type, Union
 
 from ._utils import (  # noqa: F401 # pylint: disable=unused-import
     NamedType,
@@ -446,3 +446,15 @@ def retry_callable(
             raise ex  # pylint: disable-msg=E0702
 
     return retry_call
+
+
+_cupy = lazy_import("cupy")
+_rmm = lazy_import("rmm")
+
+
+def is_cuda_buffer(cuda_buffer: Union["_cupy.ndarray", "_rmm.DeviceBuffer"]) -> bool:  # type: ignore
+    return hasattr(cuda_buffer, "__cuda_array_interface__")
+
+
+def is_windows():
+    return sys.platform.startswith("win")

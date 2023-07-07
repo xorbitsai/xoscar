@@ -17,12 +17,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 from numbers import Number
-from typing import TYPE_CHECKING, Any, Dict, Tuple, Type
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union
 from urllib.parse import urlparse
 
+from .aio import AioFileObject
 from .backend import get_backend
 from .context import get_context
-from .core import ActorRef, _Actor, _StatelessActor
+from .core import ActorRef, BufferRef, FileObjectRef, _Actor, _StatelessActor
 
 if TYPE_CHECKING:
     from .backends.config import ActorPoolConfig
@@ -105,7 +106,7 @@ async def actor_ref(*args, **kwargs) -> ActorRef:
     return await ctx.actor_ref(*args, **kwargs)
 
 
-async def kill_actor(actor_ref):
+async def kill_actor(actor_ref: ActorRef):
     # TODO: explain the meaning of 'kill'
     """
     Forcefully kill an actor.
@@ -159,6 +160,65 @@ async def create_actor_pool(
     return await get_backend(scheme).create_actor_pool(
         address, n_process=n_process, **kwargs
     )
+
+
+def buffer_ref(address: str, buffer: Any) -> BufferRef:
+    """
+    Init buffer ref according address and buffer.
+
+    Parameters
+    ----------
+    address
+        The address of the buffer.
+    buffer
+        CPU / GPU buffer. Need to support for slicing and retrieving the length.
+
+    Returns
+    ----------
+    BufferRef obj.
+    """
+    ctx = get_context()
+    return ctx.buffer_ref(address, buffer)
+
+
+def file_object_ref(address: str, fileobj: AioFileObject) -> FileObjectRef:
+    """
+    Init file object ref according to address and aio file obj.
+
+    Parameters
+    ----------
+    address
+        The address of the file obj.
+    fileobj
+        Aio file object.
+
+    Returns
+    ----------
+    FileObjectRef obj.
+    """
+    ctx = get_context()
+    return ctx.file_object_ref(address, fileobj)
+
+
+async def copy_to(
+    local_buffers_or_fileobjs: list,
+    remote_refs: List[Union[BufferRef, FileObjectRef]],
+    block_size: Optional[int] = None,
+):
+    """
+    Copy data from local buffers to remote buffers or copy local file objects to remote file objects.
+
+    Parameters
+    ----------
+    local_buffers_or_fileobjs
+        Local buffers or file objects.
+    remote_refs
+        Remote buffer refs or file object refs.
+    block_size
+        Transfer block size when non-ucx
+    """
+    ctx = get_context()
+    return await ctx.copy_to(local_buffers_or_fileobjs, remote_refs, block_size)
 
 
 async def wait_actor_pool_recovered(address: str, main_pool_address: str | None = None):

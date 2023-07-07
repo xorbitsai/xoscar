@@ -1,0 +1,21 @@
+# See all possible options and defaults with:
+# clang-format --style=llvm --dump-config
+BasedOnStyle: LLVM
+AccessModifierOffset: -4
+AllowShortLambdasOnASingleLine: Inline
+AlwaysBreakTemplateDeclarations: Yes
+BinPackArguments: false
+BinPackParameters: false
+BreakBeforeBinaryOperators: All
+BreakConstructorInitializers: BeforeColon
+ColumnLimit: 80
+SpacesBeforeTrailingComments: 2
+IncludeBlocks: Regroup
+IndentCaseLabels: true
+IndentPPDirectives: AfterHash
+IndentWidth: 4
+Language: Cpp
+SpaceAfterCStyleCast: true
+Standard: c++20
+StatementMacros: ['PyObject_HEAD']
+TabWidth: 4

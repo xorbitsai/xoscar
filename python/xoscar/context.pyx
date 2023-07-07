@@ -12,11 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from typing import Any, List, Optional, Union
 from urllib.parse import urlparse
 
-from ._utils cimport new_actor_id
-from .core cimport ActorRef
+from ._utils cimport new_actor_id, new_random_id
+from .core cimport ActorRef, BufferRef, FileObjectRef
 
 
 cdef dict _backend_context_cls = dict()
@@ -179,6 +179,68 @@ cdef class BaseActorContext:
         """
         raise NotImplementedError
 
+    def buffer_ref(self, str address, object buf) -> BufferRef:
+        """
+        Create a reference to a buffer
+
+        Parameters
+        ----------
+        address
+            address of the actor pool
+        buf
+            buffer object
+
+        Returns
+        -------
+        BufferRef
+        """
+        return BufferRef.create(buf, address, new_random_id(32))
+
+    def file_object_ref(self, str address, object file_object) -> FileObjectRef:
+        """
+        Create a reference to an aio file object
+
+        Parameters
+        ----------
+        address
+            address of the actor pool
+        file_object
+            aio file object
+
+        Returns
+        -------
+        FileObjectRef
+        """
+        return FileObjectRef.create(file_object, address, new_random_id(32))
+
+    async def copy_to_buffers(self, local_buffers: List, remote_buffer_refs: List[BufferRef], block_size: Optional[int] = None):
+        """
+        Copy local buffers to remote buffers.
+        Parameters
+        ----------
+        local_buffers
+            Local buffers.
+        remote_buffer_refs
+            Remote buffer refs
+        block_size
+            Transfer block size when non-ucx
+        """
+        raise NotImplementedError
+
+    async def copy_to_fileobjs(self, local_fileobjs: list, remote_fileobj_refs: List[FileObjectRef], block_size: Optional[int] = None):
+        """
+        Copy local file objs to remote file objs.
+        Parameters
+        ----------
+        local_fileobjs
+            Local file objs.
+        remote_fileobj_refs
+            Remote file object refs
+        block_size
+            Transfer block size when non-ucx
+        """
+        raise NotImplementedError
+
 
 cdef class ClientActorContext(BaseActorContext):
     """
@@ -258,6 +320,36 @@ cdef class ClientActorContext(BaseActorContext):
     def get_pool_config(self, str address):
         context = self._get_backend_context(address)
         return context.get_pool_config(address)
+
+    def buffer_ref(self, str address, buf: Any) -> BufferRef:
+        context = self._get_backend_context(address)
+        return context.buffer_ref(address, buf)
+
+    def file_object_ref(self, str address, object file_object) -> FileObjectRef:
+        context = self._get_backend_context(address)
+        return context.file_object_ref(address, file_object)
+
+    def copy_to(self, local_buffers_or_fileobjs: list, remote_refs: List[Union[BufferRef, FileObjectRef]], block_size: Optional[int] = None):
+        if len(local_buffers_or_fileobjs) == 0 or len(remote_refs) == 0:
+            raise ValueError("Nothing to transfer since the length of `local_buffers_or_fileobjs` or `remote_refs` is 0.")
+        assert (
+            len({ref.address for ref in remote_refs}) == 1
+        ), "remote_refs for `copy_to` can support only 1 destination"
+        assert len(local_buffers_or_fileobjs) == len(remote_refs), (
+            f"Buffers or fileobjs from local and remote must have same size, "
+            f"local: {len(local_buffers_or_fileobjs)}, remote: {len(remote_refs)}"
+        )
+        if block_size is not None:
+            assert (
+                block_size > 0
+            ), f"`block_size` option must be greater than 0, current value: {block_size}."
+        remote_ref = remote_refs[0]
+        address = remote_ref.address
+        context = self._get_backend_context(address)
+        if isinstance(remote_ref, BufferRef):
+            return context.copy_to_buffers(local_buffers_or_fileobjs, remote_refs, block_size)
+        else:
+            return context.copy_to_fileobjs(local_buffers_or_fileobjs, remote_refs, block_size)
 
 
 def register_backend_context(scheme, cls):

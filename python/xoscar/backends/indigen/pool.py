@@ -30,7 +30,7 @@ import threading
 import uuid
 from dataclasses import dataclass
 from types import TracebackType
-from typing import List
+from typing import List, Optional
 
 from ..._utils import reset_id_random_seed
 from ...utils import dataslots, ensure_coverage
@@ -122,7 +122,7 @@ class MainActorPool(MainActorPoolBase):
         address: str,
         n_process: int | None = None,
         ports: list[int] | None = None,
-        schemes: list[str] | None = None,
+        schemes: list[Optional[str]] | None = None,
     ):
         """Get external address for every process"""
         assert n_process is not None
@@ -309,7 +309,7 @@ class MainActorPool(MainActorPoolBase):
         try:
             return await asyncio.to_thread(process.is_alive)
         except RuntimeError as ex:  # pragma: no cover
-            if "cannot schedule new futures after interpreter shutdown" not in str(ex):
+            if "cannot schedule new futures" not in str(ex):
                 # when atexit is triggered, the default pool might be shutdown
                 # and to_thread will fail
                 raise

@@ -19,7 +19,7 @@ from typing import Any, Type
 
 from tblib import pickling_support
 
-from ..core cimport ActorRef
+from ..core cimport ActorRef, BufferRef
 from ..serialization.core cimport Serializer
 from ..utils import wrap_exception
 from .._utils cimport new_random_id
@@ -42,6 +42,8 @@ class MessageType(Enum):
     send = 7
     tell = 8
     cancel = 9
+    copy_to_buffers = 10
+    copy_to_fileobjs = 11
 
 
 class ControlMessageType(Enum):
@@ -51,6 +53,8 @@ class ControlMessageType(Enum):
     get_config = 3
     wait_pool_recovered = 4
     add_sub_pool_actor = 5
+    # the new channel created is for data transfer only
+    switch_to_copy_to = 6
 
 
 cdef class _MessageSerialItem:
@@ -486,6 +490,41 @@ cdef class CancelMessage(_MessageBase):
         self.cancel_message_id = serialized[-1]
 
 
+cdef class CopyToBuffersMessage(_MessageBase):
+    message_type = MessageType.copy_to_buffers
+
+    cdef:
+        public object content
+
+    def __init__(
+        self,
+        bytes message_id = None,
+        object content = None,
+        int protocol = _DEFAULT_PROTOCOL,
+        list message_trace = None,
+    ):
+        _MessageBase.__init__(
+            self,
+            message_id,
+            protocol=protocol,
+            message_trace=message_trace
+        )
+        self.content = content
+
+    cdef _MessageSerialItem serial(self):
+        cdef _MessageSerialItem item = _MessageBase.serial(self)
+        item.subs = [self.content]
+        return item
+
+    cdef deserial_members(self, tuple serialized, list subs):
+        _MessageBase.deserial_members(self, serialized, subs)
+        self.content = subs[0]
+
+
+cdef class CopyToFileObjectsMessage(CopyToBuffersMessage):
+    message_type = MessageType.copy_to_fileobjs
+
+
 cdef dict _message_type_to_message_cls = {
     MessageType.control.value: ControlMessage,
     MessageType.result.value: ResultMessage,
@@ -497,6 +536,8 @@ cdef dict _message_type_to_message_cls = {
     MessageType.send.value: SendMessage,
     MessageType.tell.value: TellMessage,
     MessageType.cancel.value: CancelMessage,
+    MessageType.copy_to_buffers.value: CopyToBuffersMessage,
+    MessageType.copy_to_fileobjs.value: CopyToFileObjectsMessage
 }
 
 

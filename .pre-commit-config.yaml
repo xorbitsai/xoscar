@@ -1,32 +1,58 @@
-files: python/xoscar
 repos:
   - repo: https://github.com/psf/black
     rev: 23.1.0
     hooks:
       - id: black
+        files: python/xoscar
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
     hooks:
       - id: end-of-file-fixer
+        files: python/xoscar
       - id: trailing-whitespace
+        files: python/xoscar
   - repo: https://github.com/PyCQA/flake8
     rev: 6.0.0
     hooks:
       - id: flake8
         args: [--config, python/setup.cfg]
+        files: python/xoscar
   - repo: https://github.com/pycqa/isort
     rev: 5.12.0
     hooks:
       - id: isort
         args: [--sp, python/setup.cfg]
+        files: python/xoscar
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.0.1
+    rev: v1.4.1
     hooks:
       - id: mypy
         additional_dependencies: [tokenize-rt==3.2.0]
         args: [--ignore-missing-imports, --follow-imports, skip]
+        files: python/xoscar
   - repo: https://github.com/codespell-project/codespell
     rev: v2.2.2
     hooks:
       - id: codespell
         args: [ --config, python/setup.cfg]
+        files: python/xoscar
+
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: "v15.0.7"
+    hooks:
+      - id: clang-format
+        files: cpp
+
+  - repo: https://github.com/cheshirekow/cmake-format-precommit
+    rev: "v0.6.13"
+    hooks:
+      - id: cmake-format
+        additional_dependencies: [ pyyaml ]
+        types: [ file ]
+        files: (\.cmake|CMakeLists.txt)(.in)?$
+
+  - repo: https://github.com/pocc/pre-commit-hooks
+    rev: v1.3.5
+    hooks:
+      - id: cpplint
+        files: cpp
