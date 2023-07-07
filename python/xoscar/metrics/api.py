@@ -70,7 +70,7 @@ def init_metrics(backend="console", config: dict[str, Any] | None = None):
         cls = getattr(_backends_cls[_metric_backend], m.type)
         metric = cls(m.name, m.description, m.tag_keys)
         m.set_metric(metric)
-    logger.info("Finished initialize the metrics of backend: %s.", _metric_backend)
+    logger.debug("Finished initialize the metrics of backend: %s.", _metric_backend)
 
 
 def shutdown_metrics():
@@ -78,7 +78,7 @@ def shutdown_metrics():
     _metric_backend = "console"
     global _init
     _init = False
-    logger.info("Shutdown metrics of backend: %s.", _metric_backend)
+    logger.debug("Shutdown metrics of backend: %s.", _metric_backend)
 
 
 class _MetricWrapper(AbstractMetric):
