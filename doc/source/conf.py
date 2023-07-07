@@ -68,7 +68,7 @@ html_theme_options = {
     "icon_links": [
         {
             "name": "GitHub",
-            "url": "https://github.com/xprobe-inc/xoscar",
+            "url": "https://github.com/xorbitsai/xoscar",
             "icon": "fa-brands fa-github",
             "type": "fontawesome",
         },

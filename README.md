@@ -4,9 +4,9 @@
 
 # Python actor framework for heterogeneous computing.
 [![PyPI Latest Release](https://img.shields.io/pypi/v/xoscar.svg?style=for-the-badge)](https://pypi.org/project/xoscar/)
-[![Coverage](https://img.shields.io/codecov/c/github/xprobe-inc/xoscar?style=for-the-badge)](https://codecov.io/gh/xprobe-inc/xoscar)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/xprobe-inc/xoscar/python.yaml?branch=main&style=for-the-badge&label=GITHUB%20ACTIONS&logo=github)](https://actions-badge.atrox.dev/xprobe-inc/xoscar/goto?ref=main)
-[![License](https://img.shields.io/pypi/l/xoscar.svg?style=for-the-badge)](https://github.com/xprobe-inc/xoscar/blob/main/LICENSE)
+[![Coverage](https://img.shields.io/codecov/c/github/xorbitsai/xoscar?style=for-the-badge)](https://codecov.io/gh/xorbitsai/xoscar)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/xorbitsai/xoscar/python.yaml?branch=main&style=for-the-badge&label=GITHUB%20ACTIONS&logo=github)](https://actions-badge.atrox.dev/xorbitsai/xoscar/goto?ref=main)
+[![License](https://img.shields.io/pypi/l/xoscar.svg?style=for-the-badge)](https://github.com/xorbitsai/xoscar/blob/main/LICENSE)
 
 ## What is actor
 Writing parallel and distributed programs is often challenging and requires a lot of time to deal with concurrency
@@ -43,7 +43,7 @@ belong to. This allows Xoscar to optimize communication in heterogeneous environ
 units and accelerators.
 
 ## Where to get it
-The source code is currently hosted on GitHub at: https://github.com/xprobe-inc/xoscar
+The source code is currently hosted on GitHub at: https://github.com/xorbitsai/xoscar
 
 Binary installers for the latest released version are available at the [Python
 Package Index (PyPI)](https://pypi.org/project/xoscar).
