@@ -18,8 +18,8 @@
 # -- Project information -----------------------------------------------------
 
 project = 'Xoscar'
-copyright = '2023, Xprobe-inc'
-author = 'Xprobe-inc'
+copyright = '2023, Xorbits Inc.'
+author = 'xorbitsai'
 
 
 # -- General configuration ---------------------------------------------------
@@ -68,7 +68,7 @@ html_theme_options = {
     "icon_links": [
         {
             "name": "GitHub",
-            "url": "https://github.com/xprobe-inc/xoscar",
+            "url": "https://github.com/xorbitsai/xoscar",
             "icon": "fa-brands fa-github",
             "type": "fontawesome",
         },
