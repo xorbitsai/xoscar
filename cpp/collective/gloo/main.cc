@@ -158,7 +158,7 @@ PYBIND11_MODULE(xoscar_pygloo, m) {
           pybind11::arg("datatype") = nullptr,
           pybind11::arg("root") = 0,
           pybind11::arg("tag") = 0);
-
+#ifdef __linux__
     m.def("reduce_scatter",
           &xoscar::reduce_scatter_wrapper,
           pybind11::arg("context") = nullptr,
@@ -168,6 +168,15 @@ PYBIND11_MODULE(xoscar_pygloo, m) {
           pybind11::arg("recvElems") = nullptr,
           pybind11::arg("datatype") = nullptr,
           pybind11::arg("reduceop") = xoscar::ReduceOp::SUM);
+#endif
+    m.def("all_to_all",
+          &xoscar::all_to_all_wrapper,
+          pybind11::arg("context") = nullptr,
+          pybind11::arg("sendbuf") = nullptr,
+          pybind11::arg("recvbuf") = nullptr,
+          pybind11::arg("size") = nullptr,
+          pybind11::arg("datatype") = nullptr,
+          pybind11::arg("tag") = 0);
 
     m.def("barrier",
           &xoscar::barrier,

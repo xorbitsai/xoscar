@@ -17,7 +17,7 @@ import itertools
 
 import pytest
 
-from ..utils import is_windows, lazy_import
+from ..utils import is_linux, is_windows, lazy_import
 
 cupy = lazy_import("cupy")
 cudf = lazy_import("cudf")
@@ -50,6 +50,14 @@ def require_unix(func):
         func = pytest.mark.unix(func)
 
     func = pytest.mark.skipif(is_windows(), reason="only unix is supported")(func)
+    return func
+
+
+def require_lunix(func):
+    if pytest:
+        func = pytest.mark.unix(func)
+
+    func = pytest.mark.skipif(not is_linux(), reason="only lunix is supported")(func)
     return func
 
 

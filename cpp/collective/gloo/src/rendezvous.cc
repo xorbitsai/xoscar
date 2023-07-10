@@ -24,13 +24,6 @@ limitations under the License. */
 #include <pybind11/pytypes.h>
 #include <rendezvous.h>
 
-#if GLOO_USE_REDIS
-#    include <gloo/rendezvous/redis_store.h>
-#    include <pybind11/chrono.h>
-#    include <pybind11/complex.h>
-#    include <pybind11/stl.h>
-#endif
-
 namespace xoscar {
 namespace rendezvous {
 constexpr std::chrono::milliseconds kDefaultTimeout = std::chrono::seconds(30);
@@ -77,104 +70,6 @@ void def_rendezvous_module(pybind11::module &m) {
         .def(pybind11::init<const std::string &, gloo::rendezvous::Store &>())
         .def("set", &gloo::rendezvous::PrefixStore::set)
         .def("get", &gloo::rendezvous::PrefixStore::get);
-
-#if GLOO_USE_REDIS
-    class RedisStoreWithAuth : public gloo::rendezvous::RedisStore {
-    public:
-        RedisStoreWithAuth(const std::string &host, int port)
-            : gloo::rendezvous::RedisStore(host, port) {}
-        using gloo::rendezvous::RedisStore::check;
-        using gloo::rendezvous::RedisStore::get;
-        using gloo::rendezvous::RedisStore::redis_;
-        using gloo::rendezvous::RedisStore::set;
-        using gloo::rendezvous::RedisStore::wait;
-
-        void authorize(std::string redis_password) {
-            void *ptr = reinterpret_cast<redisReply *>(
-                redisCommand(redis_,
-                             "auth %b",
-                             redis_password.c_str(),
-                             Use static_cast<size_t>(redis_password.size())));
-
-            if (ptr == nullptr) {
-                GLOO_THROW_IO_EXCEPTION(redis_->errstr);
-            }
-            redisReply *reply = static_cast<redisReply *>(ptr);
-            if (reply->type == REDIS_REPLY_ERROR) {
-                GLOO_THROW_IO_EXCEPTION("Error: ", reply->str);
-            }
-            freeReplyObject(reply);
-        }
-
-        void delKey(const std::string &key) {
-            void *ptr = redisCommand(redis_,
-                                     "del %b",
-                                     key.c_str(),
-                                     Use static_cast<size_t>(key.size()));
-
-            if (ptr == nullptr) {
-                GLOO_THROW_IO_EXCEPTION(redis_->errstr);
-            }
-            redisReply *reply = static_cast<redisReply *>(ptr);
-            if (reply->type == REDIS_REPLY_ERROR) {
-                GLOO_THROW_IO_EXCEPTION("Error: ", reply->str);
-            }
-            freeReplyObject(reply);
-        }
-
-        void delKeys(const std::vector<std::string> &keys) {
-            bool result = check(keys);
-            if (!result)
-                GLOO_THROW_IO_EXCEPTION("Error: keys not exist");
-
-            std::vector<std::string> args;
-            args.push_back("del");
-            for (const auto &key : keys) {
-                args.push_back(key);
-            }
-
-            std::vector<const char *> argv;
-            std::vector<size_t> argvlen;
-            for (const auto &arg : args) {
-                argv.push_back(arg.c_str());
-                argvlen.push_back(arg.length());
-            }
-
-            auto argc = argv.size();
-            void *ptr
-                = redisCommandArgv(redis_, argc, argv.data(), argvlen.data());
-
-            if (ptr == nullptr) {
-                GLOO_THROW_IO_EXCEPTION(redis_->errstr);
-            }
-            redisReply *reply = static_cast<redisReply *>(ptr);
-            if (reply->type == REDIS_REPLY_ERROR) {
-                GLOO_THROW_IO_EXCEPTION("Error: ", reply->str);
-            }
-            freeReplyObject(reply);
-        }
-    };
-
-    pybind11::class_<gloo::rendezvous::RedisStore,
-                     gloo::rendezvous::Store,
-                     std::shared_ptr<gloo::rendezvous::RedisStore>>(
-        rendezvous, "_RedisStore")
-        .def(pybind11::init<const std::string &, int>())
-        .def("set", &gloo::rendezvous::RedisStore::set)
-        .def("get", &gloo::rendezvous::RedisStore::get);
-
-    pybind11::class_<RedisStoreWithAuth,
-                     gloo::rendezvous::RedisStore,
-                     gloo::rendezvous::Store,
-                     std::shared_ptr<RedisStoreWithAuth>>(rendezvous,
-                                                          "RedisStore")
-        .def(pybind11::init<const std::string &, int>())
-        .def("set", &RedisStoreWithAuth::set)
-        .def("get", &RedisStoreWithAuth::get)
-        .def("authorize", &RedisStoreWithAuth::authorize)
-        .def("delKey", &RedisStoreWithAuth::delKey)
-        .def("delKeys", &RedisStoreWithAuth::delKeys);
-#endif
 
     class CustomStore : public gloo::rendezvous::Store {
     public:

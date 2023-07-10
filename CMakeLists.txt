@@ -11,7 +11,7 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
 
-set(USE_LIBUV ON)
+option(USE_LIBUV " " ON)
 
 include_directories(${CMAKE_SOURCE_DIR})
 #find python3 include dir

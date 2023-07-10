@@ -6,7 +6,7 @@ import time
 
 import numpy as np
 
-from ...tests.core import require_unix
+from ...tests.core import require_lunix, require_unix
 
 fileStore_path = "./collective"
 system_name = platform.system()
@@ -59,7 +59,7 @@ def worker_allgather(rank):
 
     xp.allgather(context, sendptr, recvptr, data_size, datatype)
 
-    print(f"rank {rank} sends {sendbuf},\nreceives {recvbuf}")
+    np.testing.assert_array_equal(recvbuf, np.array([sendbuf] * 2))
 
 
 @require_unix
@@ -121,7 +121,7 @@ def worker_allreduce(rank):
 
     xp.allreduce(context, sendptr, recvptr, data_size, datatype, op, algorithm)
 
-    print(f"rank {rank} sends {sendbuf}, receives {recvbuf}")
+    np.testing.assert_array_equal(recvbuf, np.array(sendbuf * 2))
 
 
 @require_unix
@@ -184,7 +184,7 @@ def worker_barrier(rank):
     xp.allreduce(context, sendptr, recvptr, data_size, datatype, op, algorithm)
     xp.barrier(context)
 
-    print(f"rank {rank} sends {sendbuf}, receives {recvbuf}")
+    np.testing.assert_array_equal(recvbuf, sendbuf * 2)
 
 
 @require_unix
@@ -249,7 +249,9 @@ def worker_broadcast(rank):
 
     xp.broadcast(context, sendptr, recvptr, data_size, datatype, root)
 
-    print(f"rank {rank} sends {sendbuf}, receives {recvbuf}")
+    np.testing.assert_array_equal(
+        recvbuf, np.array([[1, 2, 3], [1, 2, 3]], dtype=np.float32)
+    )
     ## example output
     # (pid=36435) rank 1 sends [[0. 0. 0.]
     # (pid=36435)  [0. 0. 0.]], receives [[1. 2. 3.]
@@ -317,7 +319,10 @@ def worker_gather(rank):
 
     xp.gather(context, sendptr, recvptr, data_size, datatype, root=0)
 
-    print(f"rank {rank} sends {sendbuf}, receives {recvbuf}")
+    if rank == 0:
+        np.testing.assert_array_equal(
+            recvbuf, np.array([[0.0, 1.0, 1.0, 2.0, 2.0, 3.0]])
+        )
 
     ## example output
     # (pid=23172) rank 2 sends [2. 3.], receives [[0. 0. 0. 0. 0. 0.]]
@@ -390,10 +395,23 @@ def worker_reduce_scatter(rank):
 
     xp.reduce_scatter(context, sendptr, recvptr, data_size, recvElems, datatype, op)
 
-    print(f"rank {rank} sends {sendbuf}, receives {recvbuf}")
+    # print(f"rank {rank} sends {sendbuf}, receives {recvbuf}")
+    if rank == 0:
+        np.testing.assert_array_equal(
+            recvbuf,
+            np.array(
+                [
+                    3.0,
+                ]
+            ),
+        )
+    elif rank == 1:
+        np.testing.assert_array_equal(recvbuf, np.array([6.0, 9.0]))
+    else:
+        np.testing.assert_array_equal(recvbuf, np.array([12.0, 15.0, 18.0]))
 
 
-@require_unix
+@require_lunix
 def test_reduce_scatter():
     process1 = mp.Process(target=worker_reduce_scatter, args=(0,))
     process1.start()
@@ -455,7 +473,20 @@ def worker_reduce(rank):
 
     xp.reduce(context, sendptr, recvptr, data_size, datatype, op, root)
 
-    print(f"rank {rank} sends {sendbuf}, receives {recvbuf}")
+    if rank == 0:
+        np.testing.assert_array_equal(
+            recvbuf,
+            np.array(
+                [
+                    [
+                        3.0,
+                        6.0,
+                        9.0,
+                    ],
+                    [3.0, 6.0, 9.0],
+                ]
+            ),
+        )
 
 
 @require_unix
@@ -523,7 +554,7 @@ def worker_scatter(rank):
 
     xp.scatter(context, sendptr, recvptr, data_size, datatype, root)
 
-    print(f"rank {rank} sends {sendbuf}, receives {recvbuf}")
+    np.testing.assert_array_equal(recvbuf, np.array([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]))
     ## example output, root is 0.
     # (pid=18951) rank 1 sends [array([[1., 2., 3.],
     # (pid=18951)        [1., 2., 3.]], dtype=float32), array([[1., 2., 3.],
@@ -590,7 +621,6 @@ def worker_send_recv(rank):
         datatype = xp.glooDataType_t.glooFloat32
         peer = 1
         xp.send(context, sendptr, data_size, datatype, peer)
-        print(f"rank {rank} sends {sendbuf}")
 
     elif rank == 1:
         recvbuf = np.zeros((2, 3), dtype=np.float32)
@@ -603,7 +633,9 @@ def worker_send_recv(rank):
         peer = 0
 
         xp.recv(context, recvptr, data_size, datatype, peer)
-        print(f"rank {rank} receives {recvbuf}")
+        np.testing.assert_array_equal(
+            recvbuf, np.array([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]])
+        )
     else:
         raise Exception(
             "Only support 2 process to test send function and recv function"
@@ -620,3 +652,65 @@ def test_send_recv():
 
     process1.join()
     process2.join()
+
+
+def worker_all_to_all(rank):
+    from ..gloo import xoscar_pygloo as xp
+    from ..rendezvous import xoscar_store as xs
+
+    if rank == 0:
+        if os.path.exists(fileStore_path):
+            shutil.rmtree(fileStore_path)
+        os.makedirs(fileStore_path)
+    else:
+        time.sleep(0.5)
+
+    context = xp.rendezvous.Context(rank, 3)
+
+    if system_name == "Linux":
+        attr = xp.transport.tcp.attr("localhost")
+        dev = xp.transport.tcp.CreateDevice(attr)
+    else:
+        attr = xp.transport.uv.attr("localhost")
+        dev = xp.transport.uv.CreateDevice(attr)
+    opt = xs.TCPStoreOptions()
+    opt.port = 25001
+    opt.numWorkers = 3
+    if rank == 0:
+        opt.isServer = True
+    else:
+        opt.isServer = False
+
+    store = xs.TCPStore("127.0.0.1", opt)
+    custom_store = xp.rendezvous.CustomStore(store)
+    store = xp.rendezvous.PrefixStore(str(2), custom_store)
+
+    context.connectFullMesh(store, dev)
+
+    sendbuf = np.zeros((6,), dtype=np.float32) + rank
+    recvbuf = np.zeros(sendbuf.shape, dtype=np.float32)
+    sendptr = sendbuf.ctypes.data
+    recvptr = recvbuf.ctypes.data
+
+    data_size = (
+        sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
+    )
+    datatype = xp.glooDataType_t.glooFloat32
+
+    xp.all_to_all(context, sendptr, recvptr, data_size, datatype)
+
+    np.testing.assert_array_equal(recvbuf, np.array([0.0, 0.0, 1.0, 1.0, 2.0, 2.0]))
+
+
+@require_unix
+def test_all_to_all():
+    process1 = mp.Process(target=worker_all_to_all, args=(0,))
+    process1.start()
+    process2 = mp.Process(target=worker_all_to_all, args=(1,))
+    process2.start()
+    process3 = mp.Process(target=worker_all_to_all, args=(2,))
+    process3.start()
+
+    process1.join()
+    process2.join()
+    process3.join()

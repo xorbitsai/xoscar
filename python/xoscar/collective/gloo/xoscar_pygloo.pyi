@@ -63,6 +63,14 @@ def allgather(
     datatype: Optional[GlooDataType] = None,
     tag: Optional[int] = 0,
 ) -> None: ...
+def all_to_all(
+    context: Optional[Context] = None,
+    sendbuf: Optional[int] = None,
+    recvbuf: Optional[int] = None,
+    size: Optional[int] = None,
+    datatype: Optional[GlooDataType] = None,
+    tag: Optional[int] = 0,
+) -> None: ...
 def allgatherv(
     context: Optional[Context] = None,
     sendbuf: Optional[int] = None,
@@ -155,7 +163,7 @@ class rendezvous:
 
     class Context(xoscar_pygloo.Context):
         def connectFullMesh(
-            self, store: rendezvous.Store, dev: xoscar_pygloo.transport.Device
+            self, store: rendezvous.Store, dev: transport.Device
         ) -> None: ...
 
 class transport:

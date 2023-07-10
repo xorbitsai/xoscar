@@ -161,4 +161,11 @@ void reduce_scatter_wrapper(const std::shared_ptr<gloo::Context> &context,
                             ReduceOp reduceop = xoscar::ReduceOp::SUM);
 
 void barrier(const std::shared_ptr<gloo::Context> &context, uint32_t tag = 0);
+
+void all_to_all_wrapper(const std::shared_ptr<gloo::Context> &context,
+                        intptr_t sendbuf,
+                        intptr_t recvbuf,
+                        size_t size,
+                        glooDataType_t datatype,
+                        uint32_t tag);
 }  // namespace xoscar

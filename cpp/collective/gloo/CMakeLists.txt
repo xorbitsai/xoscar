@@ -27,4 +27,5 @@ add_library(
   src/rendezvous.cc
   src/scatter.cc
   src/send.cc
-  src/transport.cc)
+  src/transport.cc
+  src/all_to_all.cc)
