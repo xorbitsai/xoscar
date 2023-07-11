@@ -12,9 +12,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-  option(USE_LIBUV " " OFF)
+  option(USE_LIBUV "Build tcp transport on linux" OFF)
 else()
-  option(USE_LIBUV " " ON)
+  option(USE_LIBUV "Build libuv transport on others" ON)
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR})

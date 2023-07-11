@@ -53,11 +53,11 @@ def require_unix(func):
     return func
 
 
-def require_lunix(func):
+def require_linux(func):
     if pytest:
-        func = pytest.mark.unix(func)
+        func = pytest.mark.linux(func)
 
-    func = pytest.mark.skipif(not is_linux(), reason="only lunix is supported")(func)
+    func = pytest.mark.skipif(not is_linux(), reason="only linux is supported")(func)
     return func
 
 

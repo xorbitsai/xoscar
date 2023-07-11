@@ -6,7 +6,7 @@ import time
 
 import numpy as np
 
-from ....tests.core import require_lunix, require_unix
+from ....tests.core import require_linux, require_unix
 
 fileStore_path = "./collective"
 system_name = platform.system()
@@ -350,7 +350,7 @@ def worker_reduce_scatter(rank):
         np.testing.assert_array_equal(recvbuf, np.array([12.0, 15.0, 18.0]))
 
 
-@require_lunix
+@require_linux
 def test_reduce_scatter():
     process1 = mp.Process(target=worker_reduce_scatter, args=(0,))
     process1.start()
