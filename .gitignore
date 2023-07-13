@@ -139,3 +139,9 @@ CMakeFiles
 CMakeCache.txt
 *.cmake
 Makefile
+
+#config.h
+cpp/collective/gloo/include/config.h
+
+#filestore
+python/xoscar/collective/tests/collective

@@ -458,3 +458,7 @@ def is_cuda_buffer(cuda_buffer: Union["_cupy.ndarray", "_rmm.DeviceBuffer"]) -> 
 
 def is_windows():
     return sys.platform.startswith("win")
+
+
+def is_linux():
+    return sys.platform.startswith("linux")
