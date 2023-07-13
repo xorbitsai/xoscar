@@ -60,8 +60,10 @@ void def_rendezvous_module(pybind11::module &m) {
 
     pybind11::class_<TCPStore,
                      gloo::rendezvous::Store,
-                     std::unique_ptr<TCPStore, pybind11::nodelete>>(rendezvous,
-                                                                    "TCPStore")
+                     std::unique_ptr<TCPStore, pybind11::nodelete>>(
+        rendezvous,  // why we use pybind11::nodelete:
+                     // https://github.com/pybind/pybind11/issues/3514
+        "TCPStore")
         .def(pybind11::init<std::string, const TCPStoreOptions &>())
         .def("wait",
              pybind11::overload_cast<const std::vector<std::string> &>(
