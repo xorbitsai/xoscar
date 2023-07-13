@@ -76,13 +76,13 @@ public:
 
     ~TCPStore();
 
-    void set_tcp(const std::string &key, const std::vector<uint8_t> &value);
+    void setTCP(const std::string &key, const std::vector<uint8_t> &value);
 
     std::vector<uint8_t> compareSet(const std::string &key,
                                     const std::vector<uint8_t> &expectedValue,
                                     const std::vector<uint8_t> &desiredValue);
 
-    std::vector<uint8_t> get_tcp(const std::string &key);
+    std::vector<uint8_t> getTCP(const std::string &key);
 
     int64_t add(const std::string &key, int64_t value) override;
 

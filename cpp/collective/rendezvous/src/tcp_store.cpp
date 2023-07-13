@@ -1134,8 +1134,8 @@ void TCPStore::waitForWorkers() {
     }
 }
 
-void TCPStore::set_tcp(const std::string &key,
-                       const std::vector<uint8_t> &data) {
+void TCPStore::setTCP(const std::string &key,
+                      const std::vector<uint8_t> &data) {
     const std::lock_guard<std::mutex> lock(activeOpLock_);
     detail::SendBuffer buffer(*client_, detail::QueryType::SET);
     buffer.appendString(keyPrefix_ + key);
@@ -1157,7 +1157,7 @@ TCPStore::compareSet(const std::string &key,
     return client_->receiveBits();
 }
 
-std::vector<uint8_t> TCPStore::get_tcp(const std::string &key) {
+std::vector<uint8_t> TCPStore::getTCP(const std::string &key) {
     const std::lock_guard<std::mutex> lock(activeOpLock_);
     return doGet(keyPrefix_ + key);
 }
@@ -1316,14 +1316,14 @@ bool TCPStore::hasExtendedApi() const { return true; }
 
 void TCPStore::set(const std::string &key, const std::vector<char> &data) {
     std::vector<uint8_t> dataSet(data.begin(), data.end());
-    set_tcp(key, dataSet);
+    setTCP(key, dataSet);
 }
 
 std::vector<char> TCPStore::get(const std::string &key) {
     wait({key});
-    std::vector<uint8_t> dataUint8Get = get_tcp(key);
-    std::vector<char> data_char_get(dataUint8Get.begin(), dataUint8Get.end());
-    return data_char_get;
+    std::vector<uint8_t> dataUint8Get = getTCP(key);
+    std::vector<char> dataCharGet(dataUint8Get.begin(), dataUint8Get.end());
+    return dataCharGet;
 }
 
 }  // namespace xoscar

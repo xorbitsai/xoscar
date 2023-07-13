@@ -134,9 +134,9 @@ jobs:
         if [[ "$MODULE" == "xoscar" ]]; then
           pytest --timeout=1500 \
             -W ignore::PendingDeprecationWarning \
-            --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar
+            --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar --capture=no
         else
-          pytest -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar
+          pytest -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar --capture=no
         fi
       working-directory: ./python
 
