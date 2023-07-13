@@ -201,8 +201,7 @@ class CMakeBuild(build_ext):
         ext_fullpath = Path.cwd() / self.get_ext_fullpath(ext.name)
         extdir = ext_fullpath.parent.resolve()
         source_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        output_directory_store = Path(source_dir) / "python" / "xoscar" / "collective" / "rendezvous"
-        output_directory_gloo = Path(source_dir) / "python" / "xoscar" / "collective" / "gloo"
+        output_directory_collective = Path(source_dir) / "python" / "xoscar" / "collective"
         build_temp = Path(self.build_temp) / ext.name
         if not build_temp.exists():
             build_temp.mkdir(parents=True)
@@ -222,8 +221,7 @@ class CMakeBuild(build_ext):
         # from Python.
         cmake_args = [
             f"-DBUILD_TMP_DIR={build_temp}",
-            f"-DLIBRARY_OUTPUT_DIRECTORY_STORE={output_directory_store}",
-            f"-DLIBRARY_OUTPUT_DIRECTORY_GLOO={output_directory_gloo}",
+            f"-DLIBRARY_OUTPUT_DIRECTORY={output_directory_collective}",
             f"-DPYTHON_PATH={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
         ]

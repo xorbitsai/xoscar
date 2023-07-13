@@ -15,7 +15,7 @@ class ReduceOp(IntEnum):
     BXOR = 6
     UNUSED = 7
 
-class GlooDataType(IntEnum):
+class GlooDataType_t(IntEnum):
     glooInt8 = 0
     glooUint8 = 1
     glooInt32 = 2
@@ -50,7 +50,7 @@ def allreduce(
     sendbuf: Optional[int] = None,
     recvbuf: Optional[int] = None,
     size: Optional[int] = None,
-    datatype: Optional[GlooDataType] = None,
+    datatype: Optional[GlooDataType_t] = None,
     reduceop: Optional[ReduceOp] = ReduceOp.SUM,
     algorithm: Optional[AllreduceAlgorithm] = AllreduceAlgorithm.RING,
     tag: int = 0,
@@ -60,7 +60,7 @@ def allgather(
     sendbuf: Optional[int] = None,
     recvbuf: Optional[int] = None,
     size: Optional[int] = None,
-    datatype: Optional[GlooDataType] = None,
+    datatype: Optional[GlooDataType_t] = None,
     tag: Optional[int] = 0,
 ) -> None: ...
 def all_to_all(
@@ -68,7 +68,7 @@ def all_to_all(
     sendbuf: Optional[int] = None,
     recvbuf: Optional[int] = None,
     size: Optional[int] = None,
-    datatype: Optional[GlooDataType] = None,
+    datatype: Optional[GlooDataType_t] = None,
     tag: Optional[int] = 0,
 ) -> None: ...
 def allgatherv(
@@ -76,7 +76,7 @@ def allgatherv(
     sendbuf: Optional[int] = None,
     recvbuf: Optional[int] = None,
     size: Optional[int] = None,
-    datatype: Optional[GlooDataType] = None,
+    datatype: Optional[GlooDataType_t] = None,
     tag: Optional[int] = 0,
 ) -> None: ...
 def reduce(
@@ -84,7 +84,7 @@ def reduce(
     sendbuf: Optional[int] = None,
     recvbuf: Optional[int] = None,
     size: Optional[int] = None,
-    datatype: Optional[GlooDataType] = None,
+    datatype: Optional[GlooDataType_t] = None,
     reduceop: Optional[ReduceOp] = ReduceOp.SUM,
     root: Optional[int] = 0,
     tag: Optional[int] = 0,
@@ -94,7 +94,7 @@ def scatter(
     sendbuf: Optional[int] = None,
     recvbuf: Optional[int] = None,
     size: Optional[int] = None,
-    datatype: Optional[GlooDataType] = None,
+    datatype: Optional[GlooDataType_t] = None,
     root: Optional[int] = 0,
     tag: Optional[int] = 0,
 ) -> None: ...
@@ -103,7 +103,7 @@ def gather(
     sendbuf: Optional[int] = None,
     recvbuf: Optional[int] = None,
     size: Optional[int] = None,
-    datatype: Optional[GlooDataType] = None,
+    datatype: Optional[GlooDataType_t] = None,
     root: Optional[int] = 0,
     tag: Optional[int] = 0,
 ) -> None: ...
@@ -111,7 +111,7 @@ def send(
     context: Optional[Context] = None,
     sendbuf: Optional[int] = None,
     size: Optional[int] = None,
-    datatype: Optional[GlooDataType] = None,
+    datatype: Optional[GlooDataType_t] = None,
     peer: Optional[int] = None,
     tag: Optional[int] = 0,
 ) -> None: ...
@@ -119,7 +119,7 @@ def recv(
     context: Optional[Context] = None,
     recvbuf: Optional[int] = None,
     size: Optional[int] = None,
-    datatype: Optional[GlooDataType] = None,
+    datatype: Optional[GlooDataType_t] = None,
     peer: Optional[int] = None,
     tag: Optional[int] = 0,
 ) -> None: ...
@@ -128,7 +128,7 @@ def broadcast(
     sendbuf: Optional[int] = None,
     recvbuf: Optional[int] = None,
     size: Optional[int] = None,
-    datatype: Optional[GlooDataType] = None,
+    datatype: Optional[GlooDataType_t] = None,
     root: Optional[int] = 0,
     tag: Optional[int] = 0,
 ) -> None: ...
@@ -138,7 +138,7 @@ def reduce_scatter(
     recvbuf: Optional[int] = None,
     size: Optional[int] = None,
     recvElems: Optional[List[int]] = None,
-    datatype: Optional[GlooDataType] = None,
+    datatype: Optional[GlooDataType_t] = None,
     reduceop: Optional[ReduceOp] = ReduceOp.SUM,
 ) -> None: ...
 def barrier(context: Optional[Context] = None, tag: Optional[int] = 0) -> None: ...
@@ -148,18 +148,44 @@ class rendezvous:
         def set(self, key: str, data: List[str]) -> None: ...
         def get(self, key: str) -> str: ...
 
+    class TCPStoreOptions:
+        port: int
+        isServer: bool
+        numWorkers: Optional[int]
+        waitWorkers: bool
+        timeout: datetime.timedelta
+        multiTenant: bool
+
+    class TCPStore:
+        def __init__(
+            self,
+            host: str,
+            opts: rendezvous.TCPStoreOptions = rendezvous.TCPStoreOptions(),
+        ): ...
+        def set(self, key: str, value: bytes): ...
+        def get(self, key: str) -> bytes: ...
+        def wait(self, keys: List[str]): ...
+
     class FileStore(Store):
         def __init__(self, path: str) -> None: ...
+        def set(self, key: str, data: List[str]) -> None: ...
+        def get(self, key: str) -> str: ...
 
     class HashStore(Store):
         def __init__(self) -> None: ...
+        def set(self, key: str, data: List[str]) -> None: ...
+        def get(self, key: str) -> str: ...
 
     class PrefixStore(Store):
         def __init__(self, prefix: str, store: rendezvous.Store) -> None: ...
+        def set(self, key: str, data: List[str]) -> None: ...
+        def get(self, key: str) -> str: ...
 
     class CustomStore(Store):
         def __init__(self, real_store_py_object: object) -> None: ...
         def delKeys(self, keys: List[str]) -> None: ...
+        def set(self, key: str, data: List[str]) -> None: ...
+        def get(self, key: str) -> str: ...
 
     class Context(xoscar_pygloo.Context):
         def connectFullMesh(

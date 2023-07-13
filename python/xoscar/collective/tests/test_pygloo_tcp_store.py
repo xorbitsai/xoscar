@@ -1,27 +1,15 @@
 import multiprocessing as mp
-import os
 import platform
-import shutil
-import time
 
 import numpy as np
 
 from ...tests.core import require_linux, require_unix
 
-fileStore_path = "./collective"
 system_name = platform.system()
 
 
 def worker_allgather(rank):
-    from ..gloo import xoscar_pygloo as xp
-    from ..rendezvous import xoscar_store as xs
-
-    if rank == 0:
-        if os.path.exists(fileStore_path):
-            shutil.rmtree(fileStore_path)
-        os.makedirs(fileStore_path)
-    else:
-        time.sleep(0.5)
+    from .. import xoscar_pygloo as xp
 
     context = xp.rendezvous.Context(rank, 2)
 
@@ -31,7 +19,7 @@ def worker_allgather(rank):
     else:
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
-    opt = xs.TCPStoreOptions()
+    opt = xp.rendezvous.TCPStoreOptions()
     opt.port = 25001
     opt.numWorkers = 2
     if rank == 0:
@@ -39,9 +27,8 @@ def worker_allgather(rank):
     else:
         opt.isServer = False
 
-    store = xs.TCPStore("127.0.0.1", opt)
-    custom_store = xp.rendezvous.CustomStore(store)
-    store = xp.rendezvous.PrefixStore(str(2), custom_store)
+    store = xp.rendezvous.TCPStore("127.0.0.1", opt)
+    store = xp.rendezvous.PrefixStore(str(2), store)
 
     context.connectFullMesh(store, dev)
 
@@ -55,7 +42,7 @@ def worker_allgather(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
 
     xp.allgather(context, sendptr, recvptr, data_size, datatype)
 
@@ -74,15 +61,7 @@ def test_allgather():
 
 
 def worker_allreduce(rank):
-    from ..gloo import xoscar_pygloo as xp
-    from ..rendezvous import xoscar_store as xs
-
-    if rank == 0:
-        if os.path.exists(fileStore_path):
-            shutil.rmtree(fileStore_path)
-        os.makedirs(fileStore_path)
-    else:
-        time.sleep(0.5)
+    from .. import xoscar_pygloo as xp
 
     context = xp.rendezvous.Context(rank, 2)
 
@@ -93,7 +72,7 @@ def worker_allreduce(rank):
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
 
-    opt = xs.TCPStoreOptions()
+    opt = xp.rendezvous.TCPStoreOptions()
     opt.port = 25001
     opt.numWorkers = 2
     if rank == 0:
@@ -101,9 +80,8 @@ def worker_allreduce(rank):
     else:
         opt.isServer = False
 
-    store = xs.TCPStore("127.0.0.1", opt)
-    custom_store = xp.rendezvous.CustomStore(store)
-    store = xp.rendezvous.PrefixStore(str(2), custom_store)
+    store = xp.rendezvous.TCPStore("127.0.0.1", opt)
+    store = xp.rendezvous.PrefixStore(str(2), store)
 
     context.connectFullMesh(store, dev)
 
@@ -115,9 +93,9 @@ def worker_allreduce(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
     op = xp.ReduceOp.SUM
-    algorithm = xp.allreduceAlgorithm.RING
+    algorithm = xp.AllreduceAlgorithm.RING
 
     xp.allreduce(context, sendptr, recvptr, data_size, datatype, op, algorithm)
 
@@ -136,15 +114,7 @@ def test_allreduce():
 
 
 def worker_barrier(rank):
-    from ..gloo import xoscar_pygloo as xp
-    from ..rendezvous import xoscar_store as xs
-
-    if rank == 0:
-        if os.path.exists(fileStore_path):
-            shutil.rmtree(fileStore_path)
-        os.makedirs(fileStore_path)
-    else:
-        time.sleep(0.5)
+    from .. import xoscar_pygloo as xp
 
     context = xp.rendezvous.Context(rank, 2)
 
@@ -155,7 +125,7 @@ def worker_barrier(rank):
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
 
-    opt = xs.TCPStoreOptions()
+    opt = xp.rendezvous.TCPStoreOptions()
     opt.port = 25001
     opt.numWorkers = 2
     if rank == 0:
@@ -163,9 +133,8 @@ def worker_barrier(rank):
     else:
         opt.isServer = False
 
-    store = xs.TCPStore("127.0.0.1", opt)
-    custom_store = xp.rendezvous.CustomStore(store)
-    store = xp.rendezvous.PrefixStore(str(2), custom_store)
+    store = xp.rendezvous.TCPStore("127.0.0.1", opt)
+    store = xp.rendezvous.PrefixStore(str(2), store)
 
     context.connectFullMesh(store, dev)
 
@@ -177,9 +146,9 @@ def worker_barrier(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
     op = xp.ReduceOp.SUM
-    algorithm = xp.allreduceAlgorithm.RING
+    algorithm = xp.AllreduceAlgorithm.RING
 
     xp.allreduce(context, sendptr, recvptr, data_size, datatype, op, algorithm)
     xp.barrier(context)
@@ -199,15 +168,7 @@ def test_barrier():
 
 
 def worker_broadcast(rank):
-    from ..gloo import xoscar_pygloo as xp
-    from ..rendezvous import xoscar_store as xs
-
-    if rank == 0:
-        if os.path.exists(fileStore_path):
-            shutil.rmtree(fileStore_path)
-        os.makedirs(fileStore_path)
-    else:
-        time.sleep(0.5)
+    from .. import xoscar_pygloo as xp
 
     context = xp.rendezvous.Context(rank, 2)
 
@@ -218,7 +179,7 @@ def worker_broadcast(rank):
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
 
-    opt = xs.TCPStoreOptions()
+    opt = xp.rendezvous.TCPStoreOptions()
     opt.port = 25001
     opt.numWorkers = 2
     if rank == 0:
@@ -226,9 +187,8 @@ def worker_broadcast(rank):
     else:
         opt.isServer = False
 
-    store = xs.TCPStore("127.0.0.1", opt)
-    custom_store = xp.rendezvous.CustomStore(store)
-    store = xp.rendezvous.PrefixStore(str(2), custom_store)
+    store = xp.rendezvous.TCPStore("127.0.0.1", opt)
+    store = xp.rendezvous.PrefixStore(str(2), store)
 
     context.connectFullMesh(store, dev)
 
@@ -244,7 +204,7 @@ def worker_broadcast(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
     root = 0
 
     xp.broadcast(context, sendptr, recvptr, data_size, datatype, root)
@@ -273,15 +233,7 @@ def test_broadcast():
 
 
 def worker_gather(rank):
-    from ..gloo import xoscar_pygloo as xp
-    from ..rendezvous import xoscar_store as xs
-
-    if rank == 0:
-        if os.path.exists(fileStore_path):
-            shutil.rmtree(fileStore_path)
-        os.makedirs(fileStore_path)
-    else:
-        time.sleep(0.5)
+    from .. import xoscar_pygloo as xp
 
     context = xp.rendezvous.Context(rank, 3)
 
@@ -292,7 +244,7 @@ def worker_gather(rank):
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
 
-    opt = xs.TCPStoreOptions()
+    opt = xp.rendezvous.TCPStoreOptions()
     opt.port = 25001
     opt.numWorkers = 3
     if rank == 0:
@@ -300,9 +252,8 @@ def worker_gather(rank):
     else:
         opt.isServer = False
 
-    store = xs.TCPStore("127.0.0.1", opt)
-    custom_store = xp.rendezvous.CustomStore(store)
-    store = xp.rendezvous.PrefixStore(str(3), custom_store)
+    store = xp.rendezvous.TCPStore("127.0.0.1", opt)
+    store = xp.rendezvous.PrefixStore(str(3), store)
 
     context.connectFullMesh(store, dev)
 
@@ -315,7 +266,7 @@ def worker_gather(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
 
     xp.gather(context, sendptr, recvptr, data_size, datatype, root=0)
 
@@ -345,15 +296,7 @@ def test_gather():
 
 
 def worker_reduce_scatter(rank):
-    from ..gloo import xoscar_pygloo as xp
-    from ..rendezvous import xoscar_store as xs
-
-    if rank == 0:
-        if os.path.exists(fileStore_path):
-            shutil.rmtree(fileStore_path)
-        os.makedirs(fileStore_path)
-    else:
-        time.sleep(0.5)
+    from .. import xoscar_pygloo as xp
 
     context = xp.rendezvous.Context(rank, 3)
 
@@ -364,7 +307,7 @@ def worker_reduce_scatter(rank):
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
 
-    opt = xs.TCPStoreOptions()
+    opt = xp.rendezvous.TCPStoreOptions()
     opt.port = 25001
     opt.numWorkers = 3
     if rank == 0:
@@ -372,9 +315,8 @@ def worker_reduce_scatter(rank):
     else:
         opt.isServer = False
 
-    store = xs.TCPStore("127.0.0.1", opt)
-    custom_store = xp.rendezvous.CustomStore(store)
-    store = xp.rendezvous.PrefixStore(str(3), custom_store)
+    store = xp.rendezvous.TCPStore("127.0.0.1", opt)
+    store = xp.rendezvous.PrefixStore(str(3), store)
 
     context.connectFullMesh(store, dev)
 
@@ -390,7 +332,7 @@ def worker_reduce_scatter(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
     op = xp.ReduceOp.SUM
 
     xp.reduce_scatter(context, sendptr, recvptr, data_size, recvElems, datatype, op)
@@ -426,15 +368,7 @@ def test_reduce_scatter():
 
 
 def worker_reduce(rank):
-    from ..gloo import xoscar_pygloo as xp
-    from ..rendezvous import xoscar_store as xs
-
-    if rank == 0:
-        if os.path.exists(fileStore_path):
-            shutil.rmtree(fileStore_path)
-        os.makedirs(fileStore_path)
-    else:
-        time.sleep(0.5)
+    from .. import xoscar_pygloo as xp
 
     context = xp.rendezvous.Context(rank, 3)
 
@@ -445,7 +379,7 @@ def worker_reduce(rank):
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
 
-    opt = xs.TCPStoreOptions()
+    opt = xp.rendezvous.TCPStoreOptions()
     opt.port = 25001
     opt.numWorkers = 3
     if rank == 0:
@@ -453,9 +387,8 @@ def worker_reduce(rank):
     else:
         opt.isServer = False
 
-    store = xs.TCPStore("127.0.0.1", opt)
-    custom_store = xp.rendezvous.CustomStore(store)
-    store = xp.rendezvous.PrefixStore(str(3), custom_store)
+    store = xp.rendezvous.TCPStore("127.0.0.1", opt)
+    store = xp.rendezvous.PrefixStore(str(3), store)
 
     context.connectFullMesh(store, dev)
 
@@ -467,7 +400,7 @@ def worker_reduce(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
     op = xp.ReduceOp.SUM
     root = 0
 
@@ -504,15 +437,7 @@ def test_reduce():
 
 
 def worker_scatter(rank):
-    from ..gloo import xoscar_pygloo as xp
-    from ..rendezvous import xoscar_store as xs
-
-    if rank == 0:
-        if os.path.exists(fileStore_path):
-            shutil.rmtree(fileStore_path)
-        os.makedirs(fileStore_path)
-    else:
-        time.sleep(0.5)
+    from .. import xoscar_pygloo as xp
 
     context = xp.rendezvous.Context(rank, 2)
 
@@ -523,7 +448,7 @@ def worker_scatter(rank):
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
 
-    opt = xs.TCPStoreOptions()
+    opt = xp.rendezvous.TCPStoreOptions()
     opt.port = 25001
     opt.numWorkers = 2
     if rank == 0:
@@ -531,9 +456,8 @@ def worker_scatter(rank):
     else:
         opt.isServer = False
 
-    store = xs.TCPStore("127.0.0.1", opt)
-    custom_store = xp.rendezvous.CustomStore(store)
-    store = xp.rendezvous.PrefixStore(str(2), custom_store)
+    store = xp.rendezvous.TCPStore("127.0.0.1", opt)
+    store = xp.rendezvous.PrefixStore(str(2), store)
 
     context.connectFullMesh(store, dev)
 
@@ -549,7 +473,7 @@ def worker_scatter(rank):
         if isinstance(sendbuf[0], np.ndarray)
         else sendbuf[0].numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
     root = 0
 
     xp.scatter(context, sendptr, recvptr, data_size, datatype, root)
@@ -578,15 +502,7 @@ def test_scatter():
 
 
 def worker_send_recv(rank):
-    from ..gloo import xoscar_pygloo as xp
-    from ..rendezvous import xoscar_store as xs
-
-    if rank == 0:
-        if os.path.exists(fileStore_path):
-            shutil.rmtree(fileStore_path)
-        os.makedirs(fileStore_path)
-    else:
-        time.sleep(0.5)
+    from .. import xoscar_pygloo as xp
 
     context = xp.rendezvous.Context(rank, 2)
 
@@ -597,7 +513,7 @@ def worker_send_recv(rank):
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
 
-    opt = xs.TCPStoreOptions()
+    opt = xp.rendezvous.TCPStoreOptions()
     opt.port = 25001
     opt.numWorkers = 2
     if rank == 0:
@@ -605,9 +521,8 @@ def worker_send_recv(rank):
     else:
         opt.isServer = False
 
-    store = xs.TCPStore("127.0.0.1", opt)
-    custom_store = xp.rendezvous.CustomStore(store)
-    store = xp.rendezvous.PrefixStore(str(2), custom_store)
+    store = xp.rendezvous.TCPStore("127.0.0.1", opt)
+    store = xp.rendezvous.PrefixStore(str(2), store)
 
     context.connectFullMesh(store, dev)
 
@@ -618,7 +533,7 @@ def worker_send_recv(rank):
         data_size = (
             sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
         )
-        datatype = xp.glooDataType_t.glooFloat32
+        datatype = xp.GlooDataType_t.glooFloat32
         peer = 1
         xp.send(context, sendptr, data_size, datatype, peer)
 
@@ -629,7 +544,7 @@ def worker_send_recv(rank):
         data_size = (
             recvbuf.size if isinstance(recvbuf, np.ndarray) else recvbuf.numpy().size
         )
-        datatype = xp.glooDataType_t.glooFloat32
+        datatype = xp.GlooDataType_t.glooFloat32
         peer = 0
 
         xp.recv(context, recvptr, data_size, datatype, peer)
@@ -655,15 +570,7 @@ def test_send_recv():
 
 
 def worker_all_to_all(rank):
-    from ..gloo import xoscar_pygloo as xp
-    from ..rendezvous import xoscar_store as xs
-
-    if rank == 0:
-        if os.path.exists(fileStore_path):
-            shutil.rmtree(fileStore_path)
-        os.makedirs(fileStore_path)
-    else:
-        time.sleep(0.5)
+    from .. import xoscar_pygloo as xp
 
     context = xp.rendezvous.Context(rank, 3)
 
@@ -673,7 +580,7 @@ def worker_all_to_all(rank):
     else:
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
-    opt = xs.TCPStoreOptions()
+    opt = xp.rendezvous.TCPStoreOptions()
     opt.port = 25001
     opt.numWorkers = 3
     if rank == 0:
@@ -681,9 +588,8 @@ def worker_all_to_all(rank):
     else:
         opt.isServer = False
 
-    store = xs.TCPStore("127.0.0.1", opt)
-    custom_store = xp.rendezvous.CustomStore(store)
-    store = xp.rendezvous.PrefixStore(str(2), custom_store)
+    store = xp.rendezvous.TCPStore("127.0.0.1", opt)
+    store = xp.rendezvous.PrefixStore(str(2), store)
 
     context.connectFullMesh(store, dev)
 
@@ -695,7 +601,7 @@ def worker_all_to_all(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
 
     xp.all_to_all(context, sendptr, recvptr, data_size, datatype)
 

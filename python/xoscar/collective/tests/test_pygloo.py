@@ -6,7 +6,7 @@ import time
 
 import numpy as np
 
-from ....tests.core import require_linux, require_unix
+from ...tests.core import require_linux, require_unix
 
 fileStore_path = "./collective"
 system_name = platform.system()
@@ -46,7 +46,7 @@ def worker_allgather(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
 
     xp.allgather(context, sendptr, recvptr, data_size, datatype)
 
@@ -96,9 +96,9 @@ def worker_allreduce(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
     op = xp.ReduceOp.SUM
-    algorithm = xp.allreduceAlgorithm.RING
+    algorithm = xp.AllreduceAlgorithm.RING
 
     xp.allreduce(context, sendptr, recvptr, data_size, datatype, op, algorithm)
 
@@ -148,9 +148,9 @@ def worker_barrier(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
     op = xp.ReduceOp.SUM
-    algorithm = xp.allreduceAlgorithm.RING
+    algorithm = xp.AllreduceAlgorithm.RING
 
     xp.allreduce(context, sendptr, recvptr, data_size, datatype, op, algorithm)
     xp.barrier(context)
@@ -205,7 +205,7 @@ def worker_broadcast(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
     root = 0
 
     xp.broadcast(context, sendptr, recvptr, data_size, datatype, root)
@@ -266,7 +266,7 @@ def worker_gather(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
 
     xp.gather(context, sendptr, recvptr, data_size, datatype, root=0)
 
@@ -330,7 +330,7 @@ def worker_reduce_scatter(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
     op = xp.ReduceOp.SUM
 
     xp.reduce_scatter(context, sendptr, recvptr, data_size, recvElems, datatype, op)
@@ -396,7 +396,7 @@ def worker_reduce(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
     op = xp.ReduceOp.SUM
     root = 0
 
@@ -468,7 +468,7 @@ def worker_scatter(rank):
         if isinstance(sendbuf[0], np.ndarray)
         else sendbuf[0].numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
     root = 0
 
     xp.scatter(context, sendptr, recvptr, data_size, datatype, root)
@@ -527,7 +527,7 @@ def worker_send_recv(rank):
         data_size = (
             sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
         )
-        datatype = xp.glooDataType_t.glooFloat32
+        datatype = xp.GlooDataType_t.glooFloat32
         peer = 1
         xp.send(context, sendptr, data_size, datatype, peer)
 
@@ -538,7 +538,7 @@ def worker_send_recv(rank):
         data_size = (
             recvbuf.size if isinstance(recvbuf, np.ndarray) else recvbuf.numpy().size
         )
-        datatype = xp.glooDataType_t.glooFloat32
+        datatype = xp.GlooDataType_t.glooFloat32
         peer = 0
 
         xp.recv(context, recvptr, data_size, datatype, peer)
@@ -594,7 +594,7 @@ def worker_all_to_all(rank):
     data_size = (
         sendbuf.size if isinstance(sendbuf, np.ndarray) else sendbuf.numpy().size
     )
-    datatype = xp.glooDataType_t.glooFloat32
+    datatype = xp.GlooDataType_t.glooFloat32
 
     xp.all_to_all(context, sendptr, recvptr, data_size, datatype)
 

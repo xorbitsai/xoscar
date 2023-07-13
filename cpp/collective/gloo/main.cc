@@ -53,7 +53,7 @@ PYBIND11_MODULE(xoscar_pygloo, m) {
         .export_values();
 
     pybind11::enum_<gloo::detail::AllreduceOptionsImpl::Algorithm>(
-        m, "allreduceAlgorithm", pybind11::arithmetic())
+        m, "AllreduceAlgorithm", pybind11::arithmetic())
         .value("SUM",
                gloo::detail::AllreduceOptionsImpl::Algorithm::UNSPECIFIED)
         .value("RING", gloo::detail::AllreduceOptionsImpl::Algorithm::RING)
@@ -61,7 +61,7 @@ PYBIND11_MODULE(xoscar_pygloo, m) {
         .export_values();
 
     pybind11::enum_<xoscar::glooDataType_t>(
-        m, "glooDataType_t", pybind11::arithmetic())
+        m, "GlooDataType_t", pybind11::arithmetic())
         .value("glooInt8", xoscar::glooDataType_t::glooInt8)
         .value("glooUint8", xoscar::glooDataType_t::glooUint8)
         .value("glooInt32", xoscar::glooDataType_t::glooInt32)

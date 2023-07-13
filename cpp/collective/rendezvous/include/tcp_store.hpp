@@ -13,10 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License. */
 #pragma once
 
-#include "store.hpp"
-
 #include <cstddef>
 #include <cstdint>
+#include <gloo/rendezvous/store.h>
 #include <memory>
 #include <mutex>
 
@@ -36,6 +35,9 @@ struct SocketAddress {
 
 }  // namespace detail
 
+using WatchKeyCallback = std::function<void(std::optional<std::string>,
+                                            std::optional<std::string>)>;
+
 struct TCPStoreOptions {
     static constexpr std::uint16_t kDefaultPort = 29500;
 
@@ -43,15 +45,19 @@ struct TCPStoreOptions {
     bool isServer = false;
     std::optional<std::size_t> numWorkers = std::nullopt;
     bool waitWorkers = true;
-    std::chrono::milliseconds timeout = Store::kDefaultTimeout;
+    std::chrono::milliseconds timeout = std::chrono::seconds(300);
 
     // A boolean value indicating whether multiple store instances can be
     // initialized with the same host:port pair.
     bool multiTenant = false;
 };
 
-class TCPStore : public Store {
+class TCPStore : public gloo::rendezvous::Store {
 public:
+    static constexpr std::chrono::milliseconds kDefaultTimeout
+        = std::chrono::seconds(300);
+    static constexpr std::chrono::milliseconds kNoTimeout
+        = std::chrono::milliseconds::zero();
     explicit TCPStore(std::string host, const TCPStoreOptions &opts = {});
 
     [[deprecated("Use TCPStore(host, opts) instead.")]] explicit TCPStore(
@@ -64,46 +70,43 @@ public:
 
     ~TCPStore();
 
-    void set(const std::string &key,
-             const std::vector<uint8_t> &value) override;
+    void set_tcp(const std::string &key, const std::vector<uint8_t> &value);
 
-    std::vector<uint8_t>
-    compareSet(const std::string &key,
-               const std::vector<uint8_t> &expectedValue,
-               const std::vector<uint8_t> &desiredValue) override;
+    std::vector<uint8_t> compareSet(const std::string &key,
+                                    const std::vector<uint8_t> &expectedValue,
+                                    const std::vector<uint8_t> &desiredValue);
 
-    std::vector<uint8_t> get(const std::string &key) override;
+    std::vector<uint8_t> get_tcp(const std::string &key);
 
     int64_t add(const std::string &key, int64_t value) override;
 
-    bool deleteKey(const std::string &key) override;
+    bool deleteKey(const std::string &key);
 
     // NOTE: calling other TCPStore APIs inside the callback is NOT threadsafe
     // watchKey() is a blocking operation. It will register the socket on
     // TCPStoreMasterDaemon and the callback on TCPStoreWorkerDaemon. It will
     // return once it has verified the callback is registered on both background
     // threads. Only one thread can call watchKey() at a time.
-    void watchKey(const std::string &key, WatchKeyCallback callback) override;
+    void watchKey(const std::string &key, WatchKeyCallback callback);
 
-    bool check(const std::vector<std::string> &keys) override;
+    bool check(const std::vector<std::string> &keys);
 
-    int64_t getNumKeys() override;
+    int64_t getNumKeys();
 
     void wait(const std::vector<std::string> &keys) override;
 
     void wait(const std::vector<std::string> &keys,
               const std::chrono::milliseconds &timeout) override;
 
-    void append(const std::string &key,
-                const std::vector<uint8_t> &value) override;
+    void append(const std::string &key, const std::vector<uint8_t> &value);
 
     std::vector<std::vector<uint8_t>>
-    multiGet(const std::vector<std::string> &keys) override;
+    multiGet(const std::vector<std::string> &keys);
 
     void multiSet(const std::vector<std::string> &keys,
-                  const std::vector<std::vector<uint8_t>> &values) override;
+                  const std::vector<std::vector<uint8_t>> &values);
 
-    bool hasExtendedApi() const override;
+    bool hasExtendedApi() const;
 
     // Waits for all workers to join.
     void waitForWorkers();
@@ -113,6 +116,13 @@ public:
 
     // Returns the port used by the TCPStore.
     std::uint16_t getPort() const noexcept { return addr_.port; }
+
+    void set(const std::string &key, const std::vector<char> &data) override;
+
+    std::vector<char> get(const std::string &key) override;
+
+protected:
+    std::chrono::milliseconds timeout_;
 
 private:
     int64_t incrementValueBy(const std::string &key, int64_t delta);

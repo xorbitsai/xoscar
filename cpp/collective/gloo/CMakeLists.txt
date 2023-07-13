@@ -8,6 +8,7 @@ project(
 set(CMAKE_CXX_STANDARD 20)
 
 include_directories(include)
+include_directories(../rendezvous/include)
 include_directories(../../../third_party/pybind11/include)
 
 add_library(

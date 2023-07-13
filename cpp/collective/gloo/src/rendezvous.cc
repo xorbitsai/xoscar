@@ -12,6 +12,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License. */
 
+#include "tcp_store.hpp"
+
 #include <config.h>
 #include <gloo/rendezvous/context.h>
 #include <gloo/rendezvous/file_store.h>
@@ -42,14 +44,38 @@ void def_rendezvous_module(pybind11::module &m) {
         .def("connectFullMesh", &gloo::rendezvous::Context::connectFullMesh);
 
     pybind11::class_<gloo::rendezvous::Store,
-                     std::shared_ptr<gloo::rendezvous::Store>>(rendezvous,
+                     std::unique_ptr<gloo::rendezvous::Store>>(rendezvous,
                                                                "Store")
         .def("set", &gloo::rendezvous::Store::set)
         .def("get", &gloo::rendezvous::Store::get);
 
+    pybind11::class_<TCPStoreOptions>(rendezvous, "TCPStoreOptions")
+        .def(pybind11::init())
+        .def_readwrite("port", &TCPStoreOptions::port)
+        .def_readwrite("isServer", &TCPStoreOptions::isServer)
+        .def_readwrite("numWorkers", &TCPStoreOptions::numWorkers)
+        .def_readwrite("waitWorkers", &TCPStoreOptions::waitWorkers)
+        .def_readwrite("timeout", &TCPStoreOptions::timeout)
+        .def_readwrite("multiTenant", &TCPStoreOptions::multiTenant);
+
+    pybind11::class_<TCPStore,
+                     gloo::rendezvous::Store,
+                     std::unique_ptr<TCPStore, pybind11::nodelete>>(rendezvous,
+                                                                    "TCPStore")
+        .def(pybind11::init<std::string, const TCPStoreOptions &>())
+        .def("wait",
+             pybind11::overload_cast<const std::vector<std::string> &>(
+                 &TCPStore::wait))
+        .def("wait",
+             pybind11::overload_cast<const std::vector<std::string> &,
+                                     const std::chrono::milliseconds &>(
+                 &TCPStore::wait))
+        .def("set", &TCPStore::set)
+        .def("get", &TCPStore::get);
+
     pybind11::class_<gloo::rendezvous::FileStore,
                      gloo::rendezvous::Store,
-                     std::shared_ptr<gloo::rendezvous::FileStore>>(rendezvous,
+                     std::unique_ptr<gloo::rendezvous::FileStore>>(rendezvous,
                                                                    "FileStore")
         .def(pybind11::init<const std::string &>())
         .def("set", &gloo::rendezvous::FileStore::set)
@@ -57,7 +83,7 @@ void def_rendezvous_module(pybind11::module &m) {
 
     pybind11::class_<gloo::rendezvous::HashStore,
                      gloo::rendezvous::Store,
-                     std::shared_ptr<gloo::rendezvous::HashStore>>(rendezvous,
+                     std::unique_ptr<gloo::rendezvous::HashStore>>(rendezvous,
                                                                    "HashStore")
         .def(pybind11::init([]() { return new gloo::rendezvous::HashStore(); }))
         .def("set", &gloo::rendezvous::HashStore::set)
@@ -65,7 +91,7 @@ void def_rendezvous_module(pybind11::module &m) {
 
     pybind11::class_<gloo::rendezvous::PrefixStore,
                      gloo::rendezvous::Store,
-                     std::shared_ptr<gloo::rendezvous::PrefixStore>>(
+                     std::unique_ptr<gloo::rendezvous::PrefixStore>>(
         rendezvous, "PrefixStore")
         .def(pybind11::init<const std::string &, gloo::rendezvous::Store &>())
         .def("set", &gloo::rendezvous::PrefixStore::set)
@@ -82,7 +108,7 @@ void def_rendezvous_module(pybind11::module &m) {
                  const std::vector<char> &data) override {
             pybind11::str py_key(key.data(), key.size());
             pybind11::bytes py_data(data.data(), data.size());
-            auto set_func = real_store_py_object_.attr("set");
+            auto set_func = real_store_py_object_.attr("set_tcp");
             set_func(py_key, py_data);
         }
 
@@ -91,7 +117,7 @@ void def_rendezvous_module(pybind11::module &m) {
             wait({key});
 
             pybind11::str py_key(key.data(), key.size());
-            auto get_func = real_store_py_object_.attr("get");
+            auto get_func = real_store_py_object_.attr("get_tcp");
             pybind11::bytes data = get_func(py_key);
             std::string ret_str = data;
             std::vector<char> ret(ret_str.data(),
@@ -124,7 +150,7 @@ void def_rendezvous_module(pybind11::module &m) {
 
     pybind11::class_<CustomStore,
                      gloo::rendezvous::Store,
-                     std::shared_ptr<CustomStore>>(rendezvous, "CustomStore")
+                     std::unique_ptr<CustomStore>>(rendezvous, "CustomStore")
         .def(pybind11::init<const pybind11::object &>())
         .def("set", &CustomStore::set)
         .def("get", &CustomStore::get)
