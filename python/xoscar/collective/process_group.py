@@ -15,6 +15,7 @@ import os
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
+from ..utils import is_macos
 from . import xoscar_pygloo as xp
 from .common import (
     RENDEZVOUS_MASTER_IP_ENV_KEY,
@@ -149,8 +150,12 @@ class ProcessGroupGloo(ProcessGroup):
             opt.isServer = rank == 0
 
             store = xp.rendezvous.TCPStore(master_ip, opt)
-            attr = xp.transport.tcp.attr(ip)
-            dev = xp.transport.tcp.CreateDevice(attr)  # type: ignore
+            if is_macos():
+                attr = xp.transport.uv.attr(ip)  # type: ignore
+                dev = xp.transport.uv.CreateDevice(attr)  # type: ignore
+            else:
+                attr = xp.transport.tcp.attr(ip)
+                dev = xp.transport.tcp.CreateDevice(attr)  # type: ignore
             _world.store = store  # type: ignore
             _world.device = dev  # type: ignore
         else:
