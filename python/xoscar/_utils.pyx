@@ -77,7 +77,7 @@ cdef class TypeDispatcher:
                 imported = True
             except Exception as e:  # pragma: no cover
                 imported = False
-                warnings.warn(str(e))
+                warnings.warn(f'Import {mod_name} failed. Please check your current Python environment.')
 
             if imported:
                 self.register(getattr(mod, obj_name), v)
