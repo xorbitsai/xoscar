@@ -66,13 +66,23 @@ cdef class TypeDispatcher:
     cdef _reload_lazy_handlers(self):
         for k, v in self._lazy_handlers.items():
             mod_name, obj_name = k.rsplit('.', 1)
-            with warnings.catch_warnings():
-                # the lazy imported cudf will warn no device found,
-                # when we set visible device to -1 for CPU processes,
-                # ignore the warning to not distract users
-                warnings.simplefilter("ignore")
-                mod = importlib.import_module(mod_name, __name__)
-            self.register(getattr(mod, obj_name), v)
+            imported = False
+            try:
+                with warnings.catch_warnings():
+                    # the lazy imported cudf will warn no device found,
+                    # when we set visible device to -1 for CPU processes,
+                    # ignore the warning to not distract users
+                    warnings.simplefilter("ignore")
+                    mod = importlib.import_module(mod_name, __name__)
+                imported = True
+            # The reason all exceptions are caught here instead of ImportError is that
+            # when, for example, a cpu machine tries to import cuda, the exception thrown is CudaAPIError.
+            except:  # pragma: no cover
+                imported = False
+                warnings.warn(f'Import {mod_name} failed. Please check your current Python environment.')
+
+            if imported:
+                self.register(getattr(mod, obj_name), v)
         self._lazy_handlers = dict()
 
     cpdef get_handler(self, object type_):
