@@ -75,7 +75,9 @@ cdef class TypeDispatcher:
                     warnings.simplefilter("ignore")
                     mod = importlib.import_module(mod_name, __name__)
                 imported = True
-            except Exception as e:  # pragma: no cover
+            # The reason all exceptions are caught here instead of ImportError is that
+            # when, for example, a cpu machine tries to import cuda, the exception thrown is CudaAPIError.
+            except:  # pragma: no cover
                 imported = False
                 warnings.warn(f'Import {mod_name} failed. Please check your current Python environment.')
 
