@@ -40,6 +40,7 @@ from ._utils import (  # noqa: F401 # pylint: disable=unused-import
     to_binary,
     to_str,
 )
+from .nvutils import cuda_count
 
 # Please refer to https://bugs.python.org/issue41451
 try:
@@ -267,6 +268,12 @@ def lazy_import(
             return func
 
     if pkgutil.find_loader(prefix_name) is not None:
+        # There are cuda-related files in python env (commonly happen in a shared env),
+        # but that is a cpu only machine without GPU cards, just return None
+        if (
+            "cupy" in name or "cudf" in name or "cuda" in name or "rmm" in name
+        ) and cuda_count() == 0:  # pragma: no cover
+            return None
         return LazyModule()
     elif placeholder:
         return ModulePlaceholder(prefix_name)
