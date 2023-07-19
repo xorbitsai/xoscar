@@ -37,13 +37,13 @@ NUMPY_NCCL_DTYPE_MAP = {
     cupy.float16: nccl.NCCL_FLOAT16,
     cupy.float32: nccl.NCCL_FLOAT32,
     cupy.float64: nccl.NCCL_FLOAT64,
-    cupy.double: nccl.NCCL_DOUBLE
+    cupy.double: nccl.NCCL_DOUBLE,
 }
 
 
 class Context:
     def __init__(self, n_devices: int, nccl_unique_id: Tuple, rank: int):
-        self.communicator = nccl.NcclCommunicator(n_devices,nccl_unique_id, rank)
+        self.communicator = nccl.NcclCommunicator(n_devices, nccl_unique_id, rank)
 
 
 def allreduce(

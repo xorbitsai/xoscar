@@ -36,7 +36,7 @@ def worker_allreduce(rank, nccl_id, device_id):
 
 @require_unix
 def test_allreduce():
-    mp.set_start_method('spawn')
+    mp.set_start_method("spawn")
 
     nccl_id = nccl.get_unique_id()
     device_id = [0, 1]
