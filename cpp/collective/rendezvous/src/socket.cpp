@@ -22,10 +22,10 @@ limitations under the License. */
 #include <vector>
 
 #ifdef _WIN32
+#    include <CallOnce.h>
 #    include <mutex>
 #    include <winsock2.h>
 #    include <ws2tcpip.h>
-#    include <CallOnce.h>
 #else
 #    include <fcntl.h>
 #    include <netdb.h>
@@ -515,7 +515,8 @@ bool SocketListenOp::tryListen(const ::addrinfo &addr) {
     // Here we follow the recommendation of Microsoft and use the non-standard
     // SO_EXCLUSIVEADDRUSE flag instead.
     if (!socket_->enableExclusiveAddressUse()) {
-        std::cout<<"The exclusive address use option cannot be enabled for the server socket on. \n";
+        std::cout << "The exclusive address use option cannot be enabled for "
+                     "the server socket on. \n";
     }
 #endif
 

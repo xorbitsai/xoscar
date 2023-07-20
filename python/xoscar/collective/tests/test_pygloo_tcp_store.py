@@ -16,6 +16,7 @@ import multiprocessing as mp
 import platform
 
 import numpy as np
+
 from ...tests.core import require_linux
 
 system_name = platform.system()
@@ -62,7 +63,7 @@ def worker_allgather(rank):
     np.testing.assert_array_equal(recvbuf, np.array([sendbuf] * 2))
 
 
-#@require_unix
+# @require_unix
 def test_allgather():
     process1 = mp.Process(target=worker_allgather, args=(0,))
     process1.start()

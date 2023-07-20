@@ -16,4 +16,5 @@ add_subdirectory(collective/rendezvous)
 add_subdirectory(collective/gloo)
 
 pybind11_add_module(xoscar_pygloo collective/gloo/main.cc)
+
 target_link_libraries(xoscar_pygloo PRIVATE GlooLib gloo StoreLib fmt::fmt)

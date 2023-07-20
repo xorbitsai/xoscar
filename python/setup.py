@@ -20,6 +20,7 @@ import sys
 from distutils.command.build_ext import build_ext as _du_build_ext
 from distutils.file_util import copy_file
 from pathlib import Path
+
 from sysconfig import get_config_vars
 
 import numpy as np

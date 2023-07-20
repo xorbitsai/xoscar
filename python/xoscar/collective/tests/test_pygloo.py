@@ -17,6 +17,7 @@ import platform
 import tempfile
 
 import numpy as np
+
 from ...tests.core import require_linux
 
 system_name = platform.system()
@@ -316,6 +317,7 @@ def worker_reduce_scatter(rank, fileStore_path):
         np.testing.assert_array_equal(recvbuf, np.array([6.0, 9.0]))
     else:
         np.testing.assert_array_equal(recvbuf, np.array([12.0, 15.0, 18.0]))
+
 
 @require_linux
 def test_reduce_scatter():
