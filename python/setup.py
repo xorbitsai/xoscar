@@ -157,26 +157,46 @@ class CMakeBuild(build_ext):
     def copy_extensions_to_source(self):
         build_py = self.get_finalized_command('build_py')
         for ext in self.extensions:
-            fullname = self.get_ext_fullname(ext.name)
-            filename = self.get_ext_filename(fullname)
-            modpath = fullname.split('.')
-            package = '.'.join(modpath[:-1])
-            package_dir = build_py.get_package_dir(package)
-            if package_dir=="" and ext.name=="xoscar_pygloo":
-                package_dir="xoscar/collective"
-            dest_filename = os.path.join(package_dir,
-                                            os.path.basename(filename))
-            src_filename = os.path.join(self.build_lib, filename)
+            if not isinstance(ext, XoscarCmakeExtension):
+                fullname = self.get_ext_fullname(ext.name)
+                filename = self.get_ext_filename(fullname)
+                modpath = fullname.split('.')
+                package = '.'.join(modpath[:-1])
+                package_dir = build_py.get_package_dir(package)
+                dest_filename = os.path.join(package_dir,
+                                             os.path.basename(filename))
+                src_filename = os.path.join(self.build_lib, filename)
 
-            # Always copy, even if source is older than destination, to ensure
-            # that the right extensions for the current Python/platform are
-            # used.
-            copy_file(
-                src_filename, dest_filename, verbose=self.verbose,
-                dry_run=self.dry_run
-            )
-            if ext._needs_stub:
-                self.write_stub(package_dir or os.curdir, ext, True)
+                # Always copy, even if source is older than destination, to ensure
+                # that the right extensions for the current Python/platform are
+                # used.
+                copy_file(
+                    src_filename, dest_filename, verbose=self.verbose,
+                    dry_run=self.dry_run
+                )
+                if ext._needs_stub:
+                    self.write_stub(package_dir or os.curdir, ext, True)
+            elif sys.platform.startswith('win'):
+                fullname = self.get_ext_fullname(ext.name)
+                filename = self.get_ext_filename(fullname)
+                modpath = fullname.split('.')
+                package = '.'.join(modpath[:-1])
+                package_dir = build_py.get_package_dir(package)
+                if package_dir=="" and ext.name=="xoscar_pygloo":
+                    package_dir="xoscar/collective"
+                dest_filename = os.path.join(package_dir,
+                                                os.path.basename(filename))
+                src_filename = os.path.join(self.build_lib, filename)
+
+                # Always copy, even if source is older than destination, to ensure
+                # that the right extensions for the current Python/platform are
+                # used.
+                copy_file(
+                    src_filename, dest_filename, verbose=self.verbose,
+                    dry_run=self.dry_run
+                )
+                if ext._needs_stub:
+                    self.write_stub(package_dir or os.curdir, ext, True)
 
     def build_extension(self, ext):
         # TODO: support windows compilation
@@ -201,6 +221,7 @@ class CMakeBuild(build_ext):
         ext_fullpath = Path.cwd() / self.get_ext_fullpath(ext.name)
         extdir = ext_fullpath.parent.resolve()
         source_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        output_directory_collective = Path(source_dir) / "python" / "xoscar" / "collective"
         build_temp = Path(self.build_temp) / ext.name
         if not build_temp.exists():
             build_temp.mkdir(parents=True)
@@ -220,6 +241,7 @@ class CMakeBuild(build_ext):
         # from Python.
         cmake_args = [
             f"-DBUILD_TMP_DIR={build_temp}",
+            f"-DLIBRARY_OUTPUT_DIRECTORY={output_directory_collective}",
             f"-DPYTHON_PATH={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
         ]

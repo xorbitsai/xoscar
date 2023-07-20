@@ -22,6 +22,4 @@ add_library(
   include/tcp_store.hpp
   src/tcp_store.cpp
   include/unix_sock_utils.hpp
-  include/utils.hpp
-  include/Backtrace.h
-  src/Backtrace.cpp)
+  include/utils.hpp)
