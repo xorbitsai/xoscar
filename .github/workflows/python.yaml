@@ -12,6 +12,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  msbuild:
+    runs-on: ${{ matrix.os}}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ "windows-latest" ]
+    steps:
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1.1
+        with:
+          vs-version: '[16.4,16.5)'
   lint:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -88,11 +99,6 @@ jobs:
           - { os: self-hosted, module: gpu, python-version: 3.9}
 
     steps:
-    - name: Setup build env on windows
-      if: ${{ matrix.os == 'windows-latest' }}
-      run: |
-        PATH=$PATH:"C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/MSBuild/Current/Bin"
-
     - name: Check out code
       uses: actions/checkout@v3
       with:
