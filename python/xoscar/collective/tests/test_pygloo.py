@@ -17,8 +17,7 @@ import platform
 import tempfile
 
 import numpy as np
-
-from ...tests.core import require_linux, require_unix
+from ...tests.core import require_linux
 
 system_name = platform.system()
 
@@ -57,7 +56,6 @@ def worker_allgather(rank, fileStore_path):
     np.testing.assert_array_equal(recvbuf, np.array([sendbuf] * 2))
 
 
-@require_unix
 def test_allgather():
     with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
         process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
@@ -103,7 +101,6 @@ def worker_allreduce(rank, fileStore_path):
     np.testing.assert_array_equal(recvbuf, np.array(sendbuf * 2))
 
 
-@require_unix
 def test_allreduce():
     with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
         process1 = mp.Process(target=worker_allreduce, args=(0, temp_dir))
@@ -150,7 +147,6 @@ def worker_barrier(rank, fileStore_path):
     np.testing.assert_array_equal(recvbuf, np.array(sendbuf * 2))
 
 
-@require_unix
 def test_barrier():
     with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
         process1 = mp.Process(target=worker_barrier, args=(0, temp_dir))
@@ -208,7 +204,6 @@ def worker_broadcast(rank, fileStore_path):
     # (pid=36432)  [1. 2. 3.]]
 
 
-@require_unix
 def test_broadcast():
     with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
         process1 = mp.Process(target=worker_broadcast, args=(0, temp_dir))
@@ -260,7 +255,6 @@ def worker_gather(rank, fileStore_path):
     # (pid=23173) rank 0 sends [0. 1.], receives [[0. 1. 1. 2. 2. 3.]]
 
 
-@require_unix
 def test_gather():
     with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
         process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
@@ -322,7 +316,6 @@ def worker_reduce_scatter(rank, fileStore_path):
         np.testing.assert_array_equal(recvbuf, np.array([6.0, 9.0]))
     else:
         np.testing.assert_array_equal(recvbuf, np.array([12.0, 15.0, 18.0]))
-
 
 @require_linux
 def test_reduce_scatter():
@@ -386,7 +379,6 @@ def worker_reduce(rank, fileStore_path):
         )
 
 
-@require_unix
 def test_reduce():
     with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
         process1 = mp.Process(target=worker_reduce, args=(0, temp_dir))
@@ -447,7 +439,6 @@ def worker_scatter(rank, fileStore_path):
     # (pid=18952)  [1. 2. 3.]]
 
 
-@require_unix
 def test_scatter():
     with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
         process1 = mp.Process(target=worker_scatter, args=(0, temp_dir))
@@ -507,7 +498,6 @@ def worker_send_recv(rank, fileStore_path):
         )
 
 
-@require_unix
 def test_send_recv():
     with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
         process1 = mp.Process(target=worker_send_recv, args=(0, temp_dir))
@@ -551,7 +541,6 @@ def worker_all_to_all(rank, fileStore_path):
     np.testing.assert_array_equal(recvbuf, np.array([0.0, 0.0, 1.0, 1.0, 2.0, 2.0]))
 
 
-@require_unix
 def test_all_to_all():
     with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
         process1 = mp.Process(target=worker_all_to_all, args=(0, temp_dir))

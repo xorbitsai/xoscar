@@ -25,6 +25,7 @@ limitations under the License. */
 #    include <mutex>
 #    include <winsock2.h>
 #    include <ws2tcpip.h>
+#    include <CallOnce.h>
 #else
 #    include <fcntl.h>
 #    include <netdb.h>
@@ -514,10 +515,7 @@ bool SocketListenOp::tryListen(const ::addrinfo &addr) {
     // Here we follow the recommendation of Microsoft and use the non-standard
     // SO_EXCLUSIVEADDRUSE flag instead.
     if (!socket_->enableExclusiveAddressUse()) {
-        xoscar_WARNING(
-            "The exclusive address use option cannot be enabled for the "
-            "server socket on {}.",
-            addr);
+        std::cout<<"The exclusive address use option cannot be enabled for the server socket on. \n";
     }
 #endif
 
@@ -854,11 +852,11 @@ void SocketConnectOp::throwTimeoutError() const {
 
 void Socket::initialize() {
 #ifdef _WIN32
-    static c10::once_flag init_flag{};
+    static xoscar::once_flag init_flag{};
 
     // All processes that call socket functions on Windows must first initialize
     // the Winsock library.
-    c10::call_once(init_flag, []() {
+    xoscar::call_once(init_flag, []() {
         WSADATA data{};
         if (::WSAStartup(MAKEWORD(2, 2), &data) != 0) {
             throw SocketError{"The initialization of Winsock has failed."};

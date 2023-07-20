@@ -34,7 +34,7 @@ limitations under the License. */
 #endif
 
 #ifdef _WIN32
-// #    include <WinSockUtils.hpp>
+#    include <WinSockUtils.hpp>
 #else
 #    include "unix_sock_utils.hpp"
 #endif
@@ -573,10 +573,12 @@ void TCPStoreMasterDaemon::run() {
     // receive the queries
     bool finished = false;
     while (!finished) {
-        for (const auto i : c10::irange(sockets_.size())) {
-            fds[i].revents = 0;
+        // for (const auto i : c10::irange(sockets_.size())) {
+        //     fds[i].revents = 0;
+        // }
+        for (auto &fd : fds) {
+            fd.revents = 0;
         }
-
         int res;
         SYSCHECK_ERR_RETURN_NEG1(
             res = WSAPoll(fds.data(), fds.size(), checkTimeout_.count()))

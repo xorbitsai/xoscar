@@ -19,17 +19,303 @@ limitations under the License. */
 #include <fcntl.h>
 #include <functional>
 #include <limits>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+typedef SSIZE_T ssize_t;
+#pragma comment(lib, "Ws2_32.lib")
+#include<Backtrace.h>
+#else
+#include <fcntl.h>
 #include <netdb.h>
-#include <string>
 #include <sys/poll.h>
 #include <sys/socket.h>
+#include <unistd.h>
+#endif
+
+#include <string>
 #include <sys/types.h>
 #include <system_error>
 #include <tuple>
-#include <unistd.h>
 #include <vector>
+#include <iostream>
+#include <numeric>
+#include <sstream>
+#include <utility>
 
 namespace xoscar {
+
+std::string StripBasename(const std::string& full_path) {
+#ifdef _WIN32
+  const std::string separators("/\\");
+#else
+  const std::string separators("/");
+#endif
+  size_t pos = full_path.find_last_of(separators);
+  if (pos != std::string::npos) {
+    return full_path.substr(pos + 1, std::string::npos);
+  } else {
+    return full_path;
+  }
+}
+
+struct SourceLocation {
+  const char* func;
+  const char* file;
+  uint32_t line;
+};
+
+
+std::function<std::string()>* GetFetchStackTrace() {
+  static std::function<std::string()> func = []() {
+    return get_backtrace(/*frames_to_skip=*/1);
+  };
+  return &func;
+};
+
+class Error : public std::exception {
+  // The actual error message.
+  std::string msg_;
+
+  // Context for the message (in order of decreasing specificity).  Context will
+  // be automatically formatted appropriately, so it is not necessary to add
+  // extra leading/trailing newlines to strings inside this vector
+  std::vector<std::string> context_;
+
+  // The C++ backtrace at the point when this exception was raised.  This
+  // may be empty if there is no valid backtrace.  (We don't use optional
+  // here to reduce the dependencies this file has.)
+  std::string backtrace_;
+
+  // These two are derived fields from msg_stack_ and backtrace_, but we need
+  // fields for the strings so that we can return a const char* (as the
+  // signature of std::exception requires).  Currently, the invariant
+  // is that these fields are ALWAYS populated consistently with respect
+  // to msg_stack_ and backtrace_.
+  std::string what_;
+  std::string what_without_backtrace_;
+
+  // This is a little debugging trick: you can stash a relevant pointer
+  // in caller, and then when you catch the exception, you can compare
+  // against pointers you have on hand to get more information about
+  // where the exception came from.  In Caffe2, this is used to figure
+  // out which operator raised an exception.
+  const void* caller_;
+
+ public:
+
+  Error(SourceLocation source_location, std::string msg);
+
+  // Caffe2-style error message
+  Error(
+      const char* file,
+      const uint32_t line,
+      const char* condition,
+      const std::string& msg,
+      const std::string& backtrace,
+      const void* caller = nullptr);
+
+  // Base constructor
+  Error(std::string msg, std::string backtrace, const void* caller = nullptr);
+
+  // Add some new context to the message stack.  The last added context
+  // will be formatted at the end of the context list upon printing.
+  // WARNING: This method is O(n) in the size of the stack, so don't go
+  // wild adding a ridiculous amount of context to error messages.
+  void add_context(std::string new_msg) {
+  context_.push_back(std::move(new_msg));
+  // TODO: Calling add_context O(n) times has O(n^2) cost.  We can fix
+  // this perf problem by populating the fields lazily... if this ever
+  // actually is a problem.
+  // NB: If you do fix this, make sure you do it in a thread safe way!
+  // what() is almost certainly expected to be thread safe even when
+  // accessed across multiple threads
+  refresh_what();
+}
+
+  const std::string& msg() const {
+    return msg_;
+  }
+
+  const std::vector<std::string>& context() const {
+    return context_;
+  }
+
+  const std::string& backtrace() const {
+    return backtrace_;
+  }
+
+  /// Returns the complete error message, including the source location.
+  /// The returned pointer is invalidated if you call add_context() on
+  /// this object.
+  const char* what() const noexcept override {
+    return what_.c_str();
+  }
+
+  const void* caller() const noexcept {
+    return caller_;
+  }
+
+  /// Returns only the error message string, without source location.
+  /// The returned pointer is invalidated if you call add_context() on
+  /// this object.
+  const char* what_without_backtrace() const noexcept {
+    return what_without_backtrace_.c_str();
+  }
+
+ private:
+  void refresh_what() {
+   what_ = compute_what(/*include_backtrace*/ true);
+   what_without_backtrace_ = compute_what(/*include_backtrace*/ false);
+ }
+  std::string compute_what(bool include_backtrace) const {
+  std::ostringstream oss;
+
+  oss << msg_;
+
+  if (context_.size() == 1) {
+    // Fold error and context in one line
+    oss << " (" << context_[0] << ")";
+  } else {
+    for (const auto& c : context_) {
+      oss << "\n  " << c;
+    }
+  }
+
+  if (include_backtrace) {
+    oss << "\n" << backtrace_;
+  }
+
+  return oss.str();
+}
+};
+Error::Error(std::string msg, std::string backtrace, const void* caller)
+    : msg_(std::move(msg)), backtrace_(std::move(backtrace)), caller_(caller) {
+  refresh_what();
+}
+
+// PyTorch-style error message
+// Error::Error(SourceLocation source_location, const std::string& msg)
+// NB: This is defined in Logging.cpp for access to GetFetchStackTrace
+std::string charToString(const char * chars){
+    std::string ret=chars;
+    return ret;
+}
+// Caffe2-style error message
+Error::Error(
+    const char* file,
+    const uint32_t line,
+    const char* condition,
+    const std::string& msg,
+    const std::string& backtrace,
+    const void* caller)
+    : Error(
+          "[enforce fail at " + xoscar::StripBasename(file) + ":" + std::to_string(line) + "] " + charToString(condition) + ". " + msg,
+          backtrace,
+          caller) {}
+
+Error::Error(SourceLocation source_location, std::string msg)
+    : Error(
+          std::move(msg),
+          "Exception raised from " + charToString(source_location.file) + " (most recent call first):\n" + (*GetFetchStackTrace())()) {}
+
+void torchCheckFail(
+    const char* func,
+    const char* file,
+    uint32_t line,
+    const std::string& msg) {
+  throw ::xoscar::Error({func, file, line}, msg);
+}
+
+void torchCheckFail(
+    const char* func,
+    const char* file,
+    uint32_t line,
+    const char* msg) {
+  throw ::xoscar::Error({func, file, line}, msg);
+}
+
+#if defined(__GNUC__) || defined(__ICL) || defined(__clang__)
+#define C10_LIKELY(expr) (__builtin_expect(static_cast<bool>(expr), 1))
+#define C10_UNLIKELY(expr) (__builtin_expect(static_cast<bool>(expr), 0))
+#else
+#define C10_LIKELY(expr) (expr)
+#define C10_UNLIKELY(expr) (expr)
+#endif
+
+#if defined(__CUDACC__)
+#define C10_UNLIKELY_OR_CONST(e) e
+#else
+#define C10_UNLIKELY_OR_CONST(e) C10_UNLIKELY(e)
+#endif
+
+template <typename T, typename... Args>
+inline std::ostream& _str(std::ostream& ss, const T& t, const Args&... args) {
+  return _str(_str(ss, t), args...);
+}
+
+template <typename... Args>
+struct _str_wrapper final {
+  static std::string call(const Args&... args) {
+    std::ostringstream ss;
+    _str(ss, args...);
+    return ss.str();
+  }
+};
+
+template <typename T>
+struct CanonicalizeStrTypes {
+  using type = const T&;
+};
+
+// Convert a list of string-like arguments into a single string.
+template <typename... Args>
+inline decltype(auto) str(const Args&... args) {
+  return _str_wrapper<
+      typename CanonicalizeStrTypes<Args>::type...>::call(args...);
+}
+
+template <typename... Args>
+decltype(auto) torchCheckMsgImpl(const char* /*msg*/, const Args&... args) {
+  return ::xoscar::str(args...);
+}
+inline const char* torchCheckMsgImpl(const char* msg) {
+  return msg;
+}
+// If there is just 1 user-provided C-string argument, use it.
+inline const char* torchCheckMsgImpl(
+    const char* /*msg*/,
+    const char* args) {
+  return args;
+}
+
+#define TORCH_CHECK_MSG(cond, type, ...)                   \
+  (::xoscar::torchCheckMsgImpl(                       \
+      "Expected " #cond                                    \
+      " to be true, but got false.  "                      \
+      "(Could this error message be improved?  If so, "    \
+      "please report an enhancement request to PyTorch.)", \
+      ##__VA_ARGS__))
+
+#ifdef STRIP_ERROR_MESSAGES
+#define TORCH_CHECK(cond, ...)                   \
+  if (C10_UNLIKELY_OR_CONST(!(cond))) {          \
+    ::xoscar::torchCheckFail(               \
+        __func__,                                \
+        __FILE__,                                \
+        static_cast<uint32_t>(__LINE__),         \
+        TORCH_CHECK_MSG(cond, "", __VA_ARGS__)); \
+  }
+#else
+#define TORCH_CHECK(cond, ...)                     \
+  if (C10_UNLIKELY_OR_CONST(!(cond))) {            \
+    ::xoscar::torchCheckFail(                 \
+        __func__,                                  \
+        __FILE__,                                  \
+        static_cast<uint32_t>(__LINE__),           \
+        TORCH_CHECK_MSG(cond, "", ##__VA_ARGS__)); \
+  }
+#endif
 
 using RankType = uint32_t;
 using SizeType = uint64_t;

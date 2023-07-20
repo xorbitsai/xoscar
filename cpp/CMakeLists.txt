@@ -17,5 +17,3 @@ add_subdirectory(collective/gloo)
 
 pybind11_add_module(xoscar_pygloo collective/gloo/main.cc)
 target_link_libraries(xoscar_pygloo PRIVATE GlooLib gloo StoreLib fmt::fmt)
-set_target_properties(xoscar_pygloo PROPERTIES LIBRARY_OUTPUT_DIRECTORY
-                                               ${LIBRARY_OUTPUT_DIRECTORY})

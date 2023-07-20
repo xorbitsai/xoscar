@@ -20,7 +20,10 @@ limitations under the License. */
 #include <cstdint>
 #include <ctime>
 #include <memory>
+#include<iostream>
 #include <string>
+
+#define XOSCAR_WARNING(...)
 
 namespace xoscar {
 namespace detail {
