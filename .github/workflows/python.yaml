@@ -1,12 +1,5 @@
 name: Python CI
 
-executors:
-  windows-cpu:
-    machine:
-      resource_class: windows.medium
-      image: windows-server-2019-vs2019:stable
-      shell: bash.exe
-
 on:
   push:
     branches:
