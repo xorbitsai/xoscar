@@ -1,5 +1,12 @@
 name: Python CI
 
+executors:
+  windows-cpu:
+    machine:
+      resource_class: windows.medium
+      image: windows-server-2019-vs2019:stable
+      shell: bash.exe
+
 on:
   push:
     branches:
@@ -86,12 +93,14 @@ jobs:
           - { os: windows-latest, python-version: 3.10}
         include:
           - { os: self-hosted, module: gpu, python-version: 3.9}
-
+    executor:
+      if: ${{ matrix.os == 'windows-latest' }}
+      name: windows-cpu
     steps:
     - name: Setup build env on windows
       if: ${{ matrix.os == 'windows-latest' }}
       run: |
-        conda install -c conda-forge libstdcxx-ng
+        PATH=$PATH:"C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/MSBuild/Current/Bin"
 
     - name: Check out code
       uses: actions/checkout@v3
