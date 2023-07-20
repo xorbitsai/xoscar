@@ -108,4 +108,5 @@ private:
     std::mutex mutex_;
     std::atomic<bool> init_{false};
 };
+
 }  // namespace xoscar
