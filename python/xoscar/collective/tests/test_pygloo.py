@@ -16,6 +16,7 @@ import multiprocessing as mp
 import os
 import platform
 import shutil
+import time
 
 import numpy as np
 
@@ -27,6 +28,7 @@ system_name = platform.system()
 def worker_allgather(rank, fileStore_path):
     from .. import xoscar_pygloo as xp
 
+    time.sleep(0.5)
     context = xp.rendezvous.Context(rank, 2)
 
     if system_name == "Linux":
@@ -60,6 +62,8 @@ def worker_allgather(rank, fileStore_path):
 
 def test_allgather():
     temp_dir = "./collective"
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
     os.makedirs(temp_dir)
     process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
     process1.start()
@@ -75,6 +79,7 @@ def test_allgather():
 def worker_allreduce(rank, fileStore_path):
     from .. import xoscar_pygloo as xp
 
+    time.sleep(0.5)
     context = xp.rendezvous.Context(rank, 2)
 
     if system_name == "Linux":
@@ -108,6 +113,8 @@ def worker_allreduce(rank, fileStore_path):
 
 def test_allreduce():
     temp_dir = "./collective"
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
     os.makedirs(temp_dir)
     process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
     process1.start()
@@ -123,6 +130,7 @@ def test_allreduce():
 def worker_barrier(rank, fileStore_path):
     from .. import xoscar_pygloo as xp
 
+    time.sleep(0.5)
     context = xp.rendezvous.Context(rank, 2)
 
     if system_name == "Linux":
@@ -157,6 +165,8 @@ def worker_barrier(rank, fileStore_path):
 
 def test_barrier():
     temp_dir = "./collective"
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
     os.makedirs(temp_dir)
     process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
     process1.start()
@@ -172,6 +182,7 @@ def test_barrier():
 def worker_broadcast(rank, fileStore_path):
     from .. import xoscar_pygloo as xp
 
+    time.sleep(0.5)
     context = xp.rendezvous.Context(rank, 2)
 
     if system_name == "Linux":
@@ -217,6 +228,8 @@ def worker_broadcast(rank, fileStore_path):
 
 def test_broadcast():
     temp_dir = "./collective"
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
     os.makedirs(temp_dir)
     process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
     process1.start()
@@ -232,6 +245,7 @@ def test_broadcast():
 def worker_gather(rank, fileStore_path):
     from .. import xoscar_pygloo as xp
 
+    time.sleep(0.5)
     context = xp.rendezvous.Context(rank, 3)
 
     if system_name == "Linux":
@@ -271,6 +285,8 @@ def worker_gather(rank, fileStore_path):
 
 def test_gather():
     temp_dir = "./collective"
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
     os.makedirs(temp_dir)
     process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
     process1.start()
@@ -289,6 +305,7 @@ def test_gather():
 def worker_reduce_scatter(rank, fileStore_path):
     from .. import xoscar_pygloo as xp
 
+    time.sleep(0.5)
     context = xp.rendezvous.Context(rank, 3)
 
     if system_name == "Linux":
@@ -338,6 +355,8 @@ def worker_reduce_scatter(rank, fileStore_path):
 @require_linux
 def test_reduce_scatter():
     temp_dir = "./collective"
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
     os.makedirs(temp_dir)
     process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
     process1.start()
@@ -356,6 +375,7 @@ def test_reduce_scatter():
 def worker_reduce(rank, fileStore_path):
     from .. import xoscar_pygloo as xp
 
+    time.sleep(0.5)
     context = xp.rendezvous.Context(rank, 3)
 
     if system_name == "Linux":
@@ -402,6 +422,8 @@ def worker_reduce(rank, fileStore_path):
 
 def test_reduce():
     temp_dir = "./collective"
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
     os.makedirs(temp_dir)
     process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
     process1.start()
@@ -420,6 +442,7 @@ def test_reduce():
 def worker_scatter(rank, fileStore_path):
     from .. import xoscar_pygloo as xp
 
+    time.sleep(0.5)
     context = xp.rendezvous.Context(rank, 2)
 
     if system_name == "Linux":
@@ -465,6 +488,8 @@ def worker_scatter(rank, fileStore_path):
 
 def test_scatter():
     temp_dir = "./collective"
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
     os.makedirs(temp_dir)
     process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
     process1.start()
@@ -480,6 +505,7 @@ def test_scatter():
 def worker_send_recv(rank, fileStore_path):
     from .. import xoscar_pygloo as xp
 
+    time.sleep(0.5)
     context = xp.rendezvous.Context(rank, 2)
 
     if system_name == "Linux":
@@ -527,6 +553,8 @@ def worker_send_recv(rank, fileStore_path):
 
 def test_send_recv():
     temp_dir = "./collective"
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
     os.makedirs(temp_dir)
     process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
     process1.start()
@@ -542,6 +570,7 @@ def test_send_recv():
 def worker_all_to_all(rank, fileStore_path):
     from .. import xoscar_pygloo as xp
 
+    time.sleep(0.5)
     context = xp.rendezvous.Context(rank, 3)
 
     if system_name == "Linux":
@@ -573,6 +602,8 @@ def worker_all_to_all(rank, fileStore_path):
 
 def test_all_to_all():
     temp_dir = "./collective"
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
     os.makedirs(temp_dir)
     process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
     process1.start()
