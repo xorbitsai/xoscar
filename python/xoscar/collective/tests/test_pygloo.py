@@ -61,10 +61,10 @@ def worker_allgather(rank, fileStore_path):
 
 
 def test_allgather():
-    temp_dir = "./collective"
+    temp_dir = "collective"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+    os.mkdir(temp_dir)
     process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
     process1.start()
     process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
@@ -112,10 +112,10 @@ def worker_allreduce(rank, fileStore_path):
 
 
 def test_allreduce():
-    temp_dir = "./collective"
+    temp_dir = "collective"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+    os.mkdir(temp_dir)
     process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
     process1.start()
     process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
@@ -164,10 +164,10 @@ def worker_barrier(rank, fileStore_path):
 
 
 def test_barrier():
-    temp_dir = "./collective"
+    temp_dir = "collective"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+    os.mkdir(temp_dir)
     process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
     process1.start()
     process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
@@ -227,10 +227,10 @@ def worker_broadcast(rank, fileStore_path):
 
 
 def test_broadcast():
-    temp_dir = "./collective"
+    temp_dir = "collective"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+    os.mkdir(temp_dir)
     process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
     process1.start()
     process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
@@ -284,10 +284,10 @@ def worker_gather(rank, fileStore_path):
 
 
 def test_gather():
-    temp_dir = "./collective"
+    temp_dir = "collective"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+    os.mkdir(temp_dir)
     process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
     process1.start()
     process2 = mp.Process(target=worker_gather, args=(1, temp_dir))
@@ -354,10 +354,10 @@ def worker_reduce_scatter(rank, fileStore_path):
 
 @require_linux
 def test_reduce_scatter():
-    temp_dir = "./collective"
+    temp_dir = "collective"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+    os.mkdir(temp_dir)
     process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
     process1.start()
     process2 = mp.Process(target=worker_gather, args=(1, temp_dir))
@@ -421,10 +421,10 @@ def worker_reduce(rank, fileStore_path):
 
 
 def test_reduce():
-    temp_dir = "./collective"
+    temp_dir = "collective"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+    os.mkdir(temp_dir)
     process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
     process1.start()
     process2 = mp.Process(target=worker_gather, args=(1, temp_dir))
@@ -487,10 +487,10 @@ def worker_scatter(rank, fileStore_path):
 
 
 def test_scatter():
-    temp_dir = "./collective"
+    temp_dir = "collective"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+    os.mkdir(temp_dir)
     process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
     process1.start()
     process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
@@ -552,10 +552,10 @@ def worker_send_recv(rank, fileStore_path):
 
 
 def test_send_recv():
-    temp_dir = "./collective"
+    temp_dir = "collective"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+    os.mkdir(temp_dir)
     process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
     process1.start()
     process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
@@ -601,10 +601,10 @@ def worker_all_to_all(rank, fileStore_path):
 
 
 def test_all_to_all():
-    temp_dir = "./collective"
+    temp_dir = "collective"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+    os.mkdir(temp_dir)
     process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
     process1.start()
     process2 = mp.Process(target=worker_gather, args=(1, temp_dir))
