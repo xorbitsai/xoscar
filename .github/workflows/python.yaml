@@ -12,15 +12,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  msbuild:
-    runs-on: ${{ matrix.os}}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ "windows-latest" ]
-    steps:
-      - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v1.1
   lint:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -102,7 +93,9 @@ jobs:
       with:
         fetch-depth: 0
         submodules: recursive
-
+    - name: Add msbuild to PATH
+      if: ${{ matrix.os == 'windows-latest'}}
+      uses: microsoft/setup-msbuild@v1.1
     - name: Set up conda ${{ matrix.python-version }}
       uses: conda-incubator/setup-miniconda@v2
       if: ${{ matrix.module != 'gpu' }}
