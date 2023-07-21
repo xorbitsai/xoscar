@@ -28,6 +28,8 @@ system_name = platform.system()
 def worker_allgather(rank, fileStore_path):
     from .. import xoscar_pygloo as xp
 
+    if os.path.exists(fileStore_path):
+        print(os.path)
     time.sleep(0.5)
     context = xp.rendezvous.Context(rank, 2)
 
@@ -61,7 +63,7 @@ def worker_allgather(rank, fileStore_path):
 
 
 def test_allgather():
-    temp_dir = "collective"
+    temp_dir = "collective_allgather"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
     os.mkdir(temp_dir)
@@ -112,7 +114,7 @@ def worker_allreduce(rank, fileStore_path):
 
 
 def test_allreduce():
-    temp_dir = "collective"
+    temp_dir = "collective_allreduce"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
     os.mkdir(temp_dir)
@@ -164,7 +166,7 @@ def worker_barrier(rank, fileStore_path):
 
 
 def test_barrier():
-    temp_dir = "collective"
+    temp_dir = "collective_barrier"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
     os.mkdir(temp_dir)
@@ -227,7 +229,7 @@ def worker_broadcast(rank, fileStore_path):
 
 
 def test_broadcast():
-    temp_dir = "collective"
+    temp_dir = "collective_broadcast"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
     os.mkdir(temp_dir)
@@ -284,7 +286,7 @@ def worker_gather(rank, fileStore_path):
 
 
 def test_gather():
-    temp_dir = "collective"
+    temp_dir = "collective_gather"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
     os.mkdir(temp_dir)
@@ -354,7 +356,7 @@ def worker_reduce_scatter(rank, fileStore_path):
 
 @require_linux
 def test_reduce_scatter():
-    temp_dir = "collective"
+    temp_dir = "collective_reduce_scatter"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
     os.mkdir(temp_dir)
@@ -421,7 +423,7 @@ def worker_reduce(rank, fileStore_path):
 
 
 def test_reduce():
-    temp_dir = "collective"
+    temp_dir = "collective_reduce"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
     os.mkdir(temp_dir)
@@ -487,7 +489,7 @@ def worker_scatter(rank, fileStore_path):
 
 
 def test_scatter():
-    temp_dir = "collective"
+    temp_dir = "collective_scatter"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
     os.mkdir(temp_dir)
@@ -552,7 +554,7 @@ def worker_send_recv(rank, fileStore_path):
 
 
 def test_send_recv():
-    temp_dir = "collective"
+    temp_dir = "collective_send_recv"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
     os.mkdir(temp_dir)
@@ -601,7 +603,7 @@ def worker_all_to_all(rank, fileStore_path):
 
 
 def test_all_to_all():
-    temp_dir = "collective"
+    temp_dir = "collective_all_to_all"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
     os.mkdir(temp_dir)
