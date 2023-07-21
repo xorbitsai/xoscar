@@ -25,7 +25,6 @@ limitations under the License. */
 typedef SSIZE_T ssize_t;
 
 #    pragma comment(lib, "Ws2_32.lib")
-#    include <Backtrace.h>
 #else
 #    include <netdb.h>
 #    include <sys/poll.h>
