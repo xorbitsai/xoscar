@@ -51,8 +51,16 @@ set_target_properties(
   PROPERTIES CXX_STANDARD 11
              CXX_STANDARD_REQUIRED ON
              CXX_EXTENSIONS OFF)
+if(NOT DEFINED BUILD_TMP_DIR)
+  file(GLOB MY_DIRS "python/build/temp*")
+  foreach(MY_DIR ${MY_DIRS})
+    set(BUILD_TMP_DIR ${MY_DIR}/xoscar_pygloo)
+  endforeach()
+else()
+  set(BUILD_TMP_DIR python/${BUILD_TMP_DIR})
+endif()
 # copy config.h to cpp/gloo/include
-file(COPY python/${BUILD_TMP_DIR}/third_party/gloo/gloo/config.h
+file(COPY ${BUILD_TMP_DIR}/third_party/gloo/gloo/config.h
      DESTINATION ${CMAKE_SOURCE_DIR}/cpp/collective/gloo/include)
 
 add_subdirectory(cpp)
