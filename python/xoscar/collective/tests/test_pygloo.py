@@ -14,6 +14,7 @@
 
 import multiprocessing as mp
 import platform
+import shutil
 import tempfile
 
 import numpy as np
@@ -58,14 +59,20 @@ def worker_allgather(rank, fileStore_path):
 
 
 def test_allgather():
-    with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
-        process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
-        process1.start()
-        process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
-        process2.start()
+    temp_dir = tempfile.mkdtemp()
 
-        process1.join()
-        process2.join()
+    shared_dir = "./collective"
+    shutil.copytree(temp_dir, shared_dir)
+    process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
+    process1.start()
+    process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
+    process2.start()
+
+    process1.join()
+    process2.join()
+
+    shutil.rmtree(temp_dir)
+    shutil.rmtree(shared_dir)
 
 
 def worker_allreduce(rank, fileStore_path):
@@ -103,14 +110,20 @@ def worker_allreduce(rank, fileStore_path):
 
 
 def test_allreduce():
-    with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
-        process1 = mp.Process(target=worker_allreduce, args=(0, temp_dir))
-        process1.start()
-        process2 = mp.Process(target=worker_allreduce, args=(1, temp_dir))
-        process2.start()
+    temp_dir = tempfile.mkdtemp()
 
-        process1.join()
-        process2.join()
+    shared_dir = "./collective"
+    shutil.copytree(temp_dir, shared_dir)
+    process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
+    process1.start()
+    process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
+    process2.start()
+
+    process1.join()
+    process2.join()
+
+    shutil.rmtree(temp_dir)
+    shutil.rmtree(shared_dir)
 
 
 def worker_barrier(rank, fileStore_path):
@@ -149,14 +162,20 @@ def worker_barrier(rank, fileStore_path):
 
 
 def test_barrier():
-    with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
-        process1 = mp.Process(target=worker_barrier, args=(0, temp_dir))
-        process1.start()
-        process2 = mp.Process(target=worker_barrier, args=(1, temp_dir))
-        process2.start()
+    temp_dir = tempfile.mkdtemp()
 
-        process1.join()
-        process2.join()
+    shared_dir = "./collective"
+    shutil.copytree(temp_dir, shared_dir)
+    process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
+    process1.start()
+    process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
+    process2.start()
+
+    process1.join()
+    process2.join()
+
+    shutil.rmtree(temp_dir)
+    shutil.rmtree(shared_dir)
 
 
 def worker_broadcast(rank, fileStore_path):
@@ -206,14 +225,20 @@ def worker_broadcast(rank, fileStore_path):
 
 
 def test_broadcast():
-    with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
-        process1 = mp.Process(target=worker_broadcast, args=(0, temp_dir))
-        process1.start()
-        process2 = mp.Process(target=worker_broadcast, args=(1, temp_dir))
-        process2.start()
+    temp_dir = tempfile.mkdtemp()
 
-        process1.join()
-        process2.join()
+    shared_dir = "./collective"
+    shutil.copytree(temp_dir, shared_dir)
+    process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
+    process1.start()
+    process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
+    process2.start()
+
+    process1.join()
+    process2.join()
+
+    shutil.rmtree(temp_dir)
+    shutil.rmtree(shared_dir)
 
 
 def worker_gather(rank, fileStore_path):
@@ -257,17 +282,23 @@ def worker_gather(rank, fileStore_path):
 
 
 def test_gather():
-    with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
-        process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
-        process1.start()
-        process2 = mp.Process(target=worker_gather, args=(1, temp_dir))
-        process2.start()
-        process3 = mp.Process(target=worker_gather, args=(2, temp_dir))
-        process3.start()
+    temp_dir = tempfile.mkdtemp()
 
-        process1.join()
-        process2.join()
-        process3.join()
+    shared_dir = "./collective"
+    shutil.copytree(temp_dir, shared_dir)
+    process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
+    process1.start()
+    process2 = mp.Process(target=worker_gather, args=(1, temp_dir))
+    process2.start()
+    process3 = mp.Process(target=worker_gather, args=(2, temp_dir))
+    process3.start()
+
+    process1.join()
+    process2.join()
+    process3.join()
+
+    shutil.rmtree(temp_dir)
+    shutil.rmtree(shared_dir)
 
 
 def worker_reduce_scatter(rank, fileStore_path):
@@ -321,17 +352,23 @@ def worker_reduce_scatter(rank, fileStore_path):
 
 @require_linux
 def test_reduce_scatter():
-    with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
-        process1 = mp.Process(target=worker_reduce_scatter, args=(0, temp_dir))
-        process1.start()
-        process2 = mp.Process(target=worker_reduce_scatter, args=(1, temp_dir))
-        process2.start()
-        process3 = mp.Process(target=worker_reduce_scatter, args=(2, temp_dir))
-        process3.start()
+    temp_dir = tempfile.mkdtemp()
 
-        process1.join()
-        process2.join()
-        process3.join()
+    shared_dir = "./collective"
+    shutil.copytree(temp_dir, shared_dir)
+    process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
+    process1.start()
+    process2 = mp.Process(target=worker_gather, args=(1, temp_dir))
+    process2.start()
+    process3 = mp.Process(target=worker_gather, args=(2, temp_dir))
+    process3.start()
+
+    process1.join()
+    process2.join()
+    process3.join()
+
+    shutil.rmtree(temp_dir)
+    shutil.rmtree(shared_dir)
 
 
 def worker_reduce(rank, fileStore_path):
@@ -382,17 +419,23 @@ def worker_reduce(rank, fileStore_path):
 
 
 def test_reduce():
-    with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
-        process1 = mp.Process(target=worker_reduce, args=(0, temp_dir))
-        process1.start()
-        process2 = mp.Process(target=worker_reduce, args=(1, temp_dir))
-        process2.start()
-        process3 = mp.Process(target=worker_reduce, args=(2, temp_dir))
-        process3.start()
+    temp_dir = tempfile.mkdtemp()
 
-        process1.join()
-        process2.join()
-        process3.join()
+    shared_dir = "./collective"
+    shutil.copytree(temp_dir, shared_dir)
+    process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
+    process1.start()
+    process2 = mp.Process(target=worker_gather, args=(1, temp_dir))
+    process2.start()
+    process3 = mp.Process(target=worker_gather, args=(2, temp_dir))
+    process3.start()
+
+    process1.join()
+    process2.join()
+    process3.join()
+
+    shutil.rmtree(temp_dir)
+    shutil.rmtree(shared_dir)
 
 
 def worker_scatter(rank, fileStore_path):
@@ -442,14 +485,20 @@ def worker_scatter(rank, fileStore_path):
 
 
 def test_scatter():
-    with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
-        process1 = mp.Process(target=worker_scatter, args=(0, temp_dir))
-        process1.start()
-        process2 = mp.Process(target=worker_scatter, args=(1, temp_dir))
-        process2.start()
+    temp_dir = tempfile.mkdtemp()
 
-        process1.join()
-        process2.join()
+    shared_dir = "./collective"
+    shutil.copytree(temp_dir, shared_dir)
+    process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
+    process1.start()
+    process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
+    process2.start()
+
+    process1.join()
+    process2.join()
+
+    shutil.rmtree(temp_dir)
+    shutil.rmtree(shared_dir)
 
 
 def worker_send_recv(rank, fileStore_path):
@@ -501,14 +550,20 @@ def worker_send_recv(rank, fileStore_path):
 
 
 def test_send_recv():
-    with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
-        process1 = mp.Process(target=worker_send_recv, args=(0, temp_dir))
-        process1.start()
-        process2 = mp.Process(target=worker_send_recv, args=(1, temp_dir))
-        process2.start()
+    temp_dir = tempfile.mkdtemp()
 
-        process1.join()
-        process2.join()
+    shared_dir = "./collective"
+    shutil.copytree(temp_dir, shared_dir)
+    process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
+    process1.start()
+    process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
+    process2.start()
+
+    process1.join()
+    process2.join()
+
+    shutil.rmtree(temp_dir)
+    shutil.rmtree(shared_dir)
 
 
 def worker_all_to_all(rank, fileStore_path):
@@ -544,14 +599,20 @@ def worker_all_to_all(rank, fileStore_path):
 
 
 def test_all_to_all():
-    with tempfile.TemporaryDirectory(prefix="collective") as temp_dir:
-        process1 = mp.Process(target=worker_all_to_all, args=(0, temp_dir))
-        process1.start()
-        process2 = mp.Process(target=worker_all_to_all, args=(1, temp_dir))
-        process2.start()
-        process3 = mp.Process(target=worker_all_to_all, args=(2, temp_dir))
-        process3.start()
+    temp_dir = tempfile.mkdtemp()
 
-        process1.join()
-        process2.join()
-        process3.join()
+    shared_dir = "./collective"
+    shutil.copytree(temp_dir, shared_dir)
+    process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
+    process1.start()
+    process2 = mp.Process(target=worker_gather, args=(1, temp_dir))
+    process2.start()
+    process3 = mp.Process(target=worker_gather, args=(2, temp_dir))
+    process3.start()
+
+    process1.join()
+    process2.join()
+    process3.join()
+
+    shutil.rmtree(temp_dir)
+    shutil.rmtree(shared_dir)
