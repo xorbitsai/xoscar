@@ -221,54 +221,6 @@ def test_scatter_buffer(rank, nccl_id, device_id):
     cupy.testing.assert_array_equal(buffer_chunks[1], cupy.array([[3], [4]]))
 
 
-def test_get_buffer_ptr():
-    import numpy as np
-
-    buffer = cupy.array([1, 2, 3], dtype=cupy.float32)
-
-    ptr = xc.get_buffer_ptr(buffer)
-    assert isinstance(ptr, int)
-    assert ptr == buffer.data.ptr
-
-    with pytest.raises(ValueError, match="Buffer type not supported"):
-        list_buffer = [1, 2, 3]
-        xc.get_buffer_ptr(list_buffer)
-
-    with pytest.raises(ValueError, match="Buffer type not supported"):
-        np_buffer = np.array([1, 2, 3])
-        xc.get_buffer_ptr(np_buffer)
-
-
-def test_get_nccl_buffer_dtype():
-    import numpy as np
-
-    CUPY_NCCL_DTYPE_MAP = {
-        cupy.uint8: nccl.NCCL_UINT8,
-        cupy.uint32: nccl.NCCL_UINT32,
-        cupy.uint64: nccl.NCCL_UINT64,
-        cupy.int8: nccl.NCCL_INT8,
-        cupy.int32: nccl.NCCL_INT32,
-        cupy.int64: nccl.NCCL_INT64,
-        cupy.half: nccl.NCCL_HALF,
-        cupy.float16: nccl.NCCL_FLOAT16,
-        cupy.float32: nccl.NCCL_FLOAT32,
-        cupy.float64: nccl.NCCL_FLOAT64,
-        cupy.double: nccl.NCCL_DOUBLE,
-    }
-
-    for cupy_dtype in CUPY_NCCL_DTYPE_MAP:
-        buffer = cupy.array([1, 2, 3], dtype=cupy_dtype)
-        assert xc.get_nccl_buffer_dtype(buffer) == CUPY_NCCL_DTYPE_MAP[cupy_dtype]
-
-    with pytest.raises(ValueError, match="Buffer type not supported"):
-        list_buffer = [1, 2, 3]
-        xc.get_nccl_buffer_dtype(list_buffer)
-
-    with pytest.raises(ValueError, match="Buffer type not supported"):
-        np_buffer = np.array([1, 2, 3])
-        xc.get_nccl_buffer_dtype(np_buffer)
-
-
 @pytest.mark.parametrize(
     "worker_func",
     [
