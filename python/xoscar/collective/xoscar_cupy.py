@@ -26,7 +26,7 @@ class ReduceOp(Enum):
     MAX = nccl.NCCL_MAX
 
 
-NUMPY_NCCL_DTYPE_MAP = {
+CUPY_NCCL_DTYPE_MAP = {
     cupy.uint8: nccl.NCCL_UINT8,
     cupy.uint32: nccl.NCCL_UINT32,
     cupy.uint64: nccl.NCCL_UINT64,
@@ -44,22 +44,216 @@ NUMPY_NCCL_DTYPE_MAP = {
 class Context:
     def __init__(self, n_devices: int, nccl_unique_id: Tuple, rank: int):
         self.communicator = nccl.NcclCommunicator(n_devices, nccl_unique_id, rank)
+        self.n_devices = n_devices
+        self.rank = rank
 
 
 def allreduce(
     context: Optional[Context] = None,
     sendbuf: Optional[cupy.ndarray] = None,
     recvbuf: Optional[cupy.ndarray] = None,
-    reduceop: Optional[ReduceOp] = ReduceOp.SUM,
+    op: Optional[ReduceOp] = ReduceOp.SUM,
 ):
     context.communicator.allReduce(
         get_buffer_ptr(sendbuf),
         get_buffer_ptr(recvbuf),
         get_buffer_n_elements(sendbuf),
         get_nccl_buffer_dtype(sendbuf),
-        reduceop.value,
+        op.value,
         cupy.cuda.Stream.null.ptr,
     )
+
+
+def allgather(
+    context: Optional[Context] = None,
+    sendbuf: Optional[cupy.ndarray] = None,
+    recvbuf: Optional[cupy.ndarray] = None,
+):
+    context.communicator.allGather(
+        get_buffer_ptr(sendbuf),
+        get_buffer_ptr(recvbuf),
+        get_buffer_n_elements(sendbuf),
+        get_nccl_buffer_dtype(sendbuf),
+        cupy.cuda.Stream.null.ptr,
+    )
+
+
+def all_to_all(
+    context: Context = None,
+    sendbuf: cupy.ndarray = None,
+    recvbuf: cupy.ndarray = None,
+):
+    assert context.n_devices == sendbuf.shape[0]
+
+    for i in range(context.n_devices):
+        if context.rank == i:
+            buf_i = []
+            for peer in range(context.n_devices):
+                if peer == context.rank:
+                    buf_i.append(sendbuf[i])
+                else:
+                    temp_recv = sendbuf[i].copy()
+                    recv(context, temp_recv, peer)
+                    buf_i.append(temp_recv)
+            buf_i = cupy.concatenate(buf_i)
+            recvbuf[:] = buf_i.reshape(recvbuf.shape)
+        else:
+            send(context, sendbuf[i], i)
+
+
+def reduce(
+    context: Context = None,
+    sendbuf: cupy.ndarray = None,
+    recvbuf: cupy.ndarray = None,
+    root: int = None,
+    op: Optional[ReduceOp] = ReduceOp.SUM,
+):
+    context.communicator.reduce(
+        get_buffer_ptr(sendbuf),
+        get_buffer_ptr(recvbuf),
+        get_buffer_n_elements(sendbuf),
+        get_nccl_buffer_dtype(sendbuf),
+        op.value,
+        root,
+        cupy.cuda.Stream.null.ptr,
+    )
+
+
+def scatter(
+    context: Context = None,
+    sendbuf: cupy.ndarray = None,
+    recvbuf: cupy.ndarray = None,
+    root: int = None,
+):
+    if context.rank == root:
+        # make sendbuf equally scattered into context.n_devices chunks
+        scattered_send_buf = scatter_buffer(context, sendbuf)
+        for peer in range(context.n_devices):
+            if peer == context.rank:
+                continue
+            send(context, scattered_send_buf[peer], peer)
+        recvbuf[:] = scattered_send_buf[context.rank].reshape(recvbuf.shape)
+    else:
+        recv(context, recvbuf, root)
+
+
+def gather(
+    context: Context = None,
+    sendbuf: cupy.ndarray = None,
+    recvbuf: cupy.ndarray = None,
+    root: int = None,
+):
+    if context.rank == root:
+        buffs = []
+        for peer in range(context.n_devices):
+            if peer == context.rank:
+                buffs.append(sendbuf)
+            else:
+                temp_recv = sendbuf.copy()
+                recv(context, temp_recv, peer)
+                buffs.append(temp_recv)
+        buffs = cupy.concatenate(buffs)
+        recvbuf[:] = buffs.reshape(recvbuf.shape)
+    else:
+        send(context, sendbuf, root)
+
+
+def send(
+    context: Context = None,
+    sendbuf: cupy.ndarray = None,
+    peer: int = None,
+):
+    context.communicator.send(
+        get_buffer_ptr(sendbuf),
+        get_buffer_n_elements(sendbuf),
+        get_nccl_buffer_dtype(sendbuf),
+        peer,
+        cupy.cuda.Stream.null.ptr,
+    )
+
+
+def recv(
+    context: Context = None,
+    recvbuf: cupy.ndarray = None,
+    peer: int = None,
+):
+    context.communicator.recv(
+        get_buffer_ptr(recvbuf),
+        get_buffer_n_elements(recvbuf),
+        get_nccl_buffer_dtype(recvbuf),
+        peer,
+        cupy.cuda.Stream.null.ptr,
+    )
+
+
+def broadcast(
+    context: Context = None,
+    sendbuf: cupy.ndarray = None,
+    recvbuf: cupy.ndarray = None,
+    root: int = None,
+):
+    context.communicator.broadcast(
+        get_buffer_ptr(sendbuf),
+        get_buffer_ptr(recvbuf),
+        get_buffer_n_elements(sendbuf),
+        get_nccl_buffer_dtype(sendbuf),
+        root,
+        cupy.cuda.Stream.null.ptr,
+    )
+
+
+def reduce_scatter(
+    context: Context = None,
+    sendbuf: cupy.ndarray = None,
+    recvbuf: cupy.ndarray = None,
+    op: Optional[ReduceOp] = ReduceOp.SUM,
+):
+    reduce_recv = sendbuf.copy()
+    reduce(context, sendbuf, reduce_recv, 0, op)
+    scatter(context, reduce_recv, recvbuf, 0)
+
+
+def barrier(
+    context: Context = None,
+):
+    barrier_tensors = [None] * len(context.n_devices)
+    for i, d in enumerate(context.n_devices):
+        with cupy.cuda.Device(d):
+            barrier_tensors[i] = cupy.array([1])
+    allreduce(context, barrier_tensors, barrier_tensors)
+
+
+def scatter_buffer(context: Context, buffer):
+    n_chunks = context.n_devices
+    chunk_size = buffer.shape[0] // n_chunks
+    if buffer.shape[0] % n_chunks != 0:
+        raise ValueError(
+            "Buffer size is not exactly divisible by the number of devices"
+        )
+
+    chunks = []
+    ptr = buffer.data.ptr
+    dtype_size = buffer.dtype.itemsize
+    chunk_elements = chunk_size * buffer.size // buffer.shape[0]
+    for i in range(n_chunks):
+        cupy.cuda.Device(i).use()
+        chunk_ptr = ptr + i * chunk_elements * dtype_size
+        chunk_shape = (
+            (chunk_size,) + buffer.shape[1:] if buffer.ndim > 1 else (chunk_size,)
+        )
+        chunk = cupy.ndarray(
+            chunk_shape,
+            dtype=buffer.dtype,
+            memptr=cupy.cuda.MemoryPointer(
+                cupy.cuda.memory.UnownedMemory(
+                    chunk_ptr, chunk_elements * dtype_size, None
+                ),
+                0,
+            ),
+        )
+        chunks.append(chunk)
+
+    return chunks
 
 
 def get_buffer_ptr(buffer):
@@ -78,6 +272,6 @@ def get_buffer_n_elements(buffer):
 
 def get_nccl_buffer_dtype(buffer):
     if isinstance(buffer, cupy.ndarray):
-        return NUMPY_NCCL_DTYPE_MAP[buffer.dtype.type]
+        return CUPY_NCCL_DTYPE_MAP[buffer.dtype.type]
 
-    raise ValueError("Unspported GPU buffer type")
+    raise ValueError("Buffer type not supported")
