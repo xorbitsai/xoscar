@@ -21,6 +21,8 @@ import pytest
 
 from .. import xoscar_cupy as xc
 
+mp.set_start_method("spawn")
+
 
 def worker_allreduce(rank, nccl_id, device_id):
     cupy.cuda.Device(device_id).use()
@@ -183,7 +185,7 @@ def worker_barrier(rank, nccl_id, device_id):
     cupy.testing.assert_array_equal(recvbuf, cupy.array(sendbuf * 2))
 
 
-def test_scatter_buffer(rank, nccl_id, device_id):
+def worker_scatter_buffer(rank, nccl_id, device_id):
     cupy.cuda.Device(device_id).use()
 
     context = xc.Context(n_devices=2, nccl_unique_id=nccl_id, rank=rank)
@@ -233,12 +235,10 @@ def test_scatter_buffer(rank, nccl_id, device_id):
         worker_reduce_scatter,
         worker_scatter,
         worker_barrier,
-        test_scatter_buffer,
+        worker_scatter_buffer,
     ],
 )
 def test_driver(worker_func):
-    mp.set_start_method("spawn")
-
     nccl_id = nccl.get_unique_id()
     device_id = [0, 1]
 
