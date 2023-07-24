@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from enum import Enum
-from typing import Optional, Tuple
+from typing import Tuple
 
 import cupy
 import cupy.cuda.nccl as nccl
@@ -49,10 +49,10 @@ class Context:
 
 
 def allreduce(
-    context: Optional[Context] = None,
-    sendbuf: Optional[cupy.ndarray] = None,
-    recvbuf: Optional[cupy.ndarray] = None,
-    op: Optional[ReduceOp] = ReduceOp.SUM,
+    context: Context,
+    sendbuf: cupy.ndarray,
+    recvbuf: cupy.ndarray,
+    op: ReduceOp = ReduceOp.SUM,
 ):
     context.communicator.allReduce(
         get_buffer_ptr(sendbuf),
@@ -65,9 +65,9 @@ def allreduce(
 
 
 def allgather(
-    context: Optional[Context] = None,
-    sendbuf: Optional[cupy.ndarray] = None,
-    recvbuf: Optional[cupy.ndarray] = None,
+    context: Context,
+    sendbuf: cupy.ndarray,
+    recvbuf: cupy.ndarray,
 ):
     context.communicator.allGather(
         get_buffer_ptr(sendbuf),
@@ -79,9 +79,9 @@ def allgather(
 
 
 def all_to_all(
-    context: Optional[Context] = None,
-    sendbuf: Optional[cupy.ndarray] = None,
-    recvbuf: Optional[cupy.ndarray] = None,
+    context: Context,
+    sendbuf: cupy.ndarray,
+    recvbuf: cupy.ndarray,
 ):
     assert context.n_devices == sendbuf.shape[0]
 
@@ -102,11 +102,11 @@ def all_to_all(
 
 
 def reduce(
-    context: Optional[Context] = None,
-    sendbuf: Optional[cupy.ndarray] = None,
-    recvbuf: Optional[cupy.ndarray] = None,
-    root: Optional[int] = None,
-    op: Optional[ReduceOp] = ReduceOp.SUM,
+    context: Context,
+    sendbuf: cupy.ndarray,
+    recvbuf: cupy.ndarray,
+    root: int,
+    op: ReduceOp = ReduceOp.SUM,
 ):
     context.communicator.reduce(
         get_buffer_ptr(sendbuf),
@@ -120,10 +120,10 @@ def reduce(
 
 
 def scatter(
-    context: Optional[Context] = None,
-    sendbuf: Optional[cupy.ndarray] = None,
-    recvbuf: Optional[cupy.ndarray] = None,
-    root: Optional[int] = None,
+    context: Context,
+    sendbuf: cupy.ndarray,
+    recvbuf: cupy.ndarray,
+    root: int,
 ):
     if context.rank == root:
         # make sendbuf equally scattered into context.n_devices chunks
@@ -138,10 +138,10 @@ def scatter(
 
 
 def gather(
-    context: Optional[Context] = None,
-    sendbuf: Optional[cupy.ndarray] = None,
-    recvbuf: Optional[cupy.ndarray] = None,
-    root: Optional[int] = None,
+    context: Context,
+    sendbuf: cupy.ndarray,
+    recvbuf: cupy.ndarray,
+    root: int,
 ):
     if context.rank == root:
         buffs = []
@@ -160,9 +160,9 @@ def gather(
 
 
 def send(
-    context: Optional[Context] = None,
-    sendbuf: Optional[cupy.ndarray] = None,
-    peer: Optional[int] = None,
+    context: Context,
+    sendbuf: cupy.ndarray,
+    peer: int,
 ):
     context.communicator.send(
         get_buffer_ptr(sendbuf),
@@ -174,9 +174,9 @@ def send(
 
 
 def recv(
-    context: Optional[Context] = None,
-    recvbuf: Optional[cupy.ndarray] = None,
-    peer: Optional[int] = None,
+    context: Context,
+    recvbuf: cupy.ndarray,
+    peer: int,
 ):
     context.communicator.recv(
         get_buffer_ptr(recvbuf),
@@ -188,10 +188,10 @@ def recv(
 
 
 def broadcast(
-    context: Optional[Context] = None,
-    sendbuf: Optional[cupy.ndarray] = None,
-    recvbuf: Optional[cupy.ndarray] = None,
-    root: Optional[int] = None,
+    context: Context,
+    sendbuf: cupy.ndarray,
+    recvbuf: cupy.ndarray,
+    root: int,
 ):
     context.communicator.broadcast(
         get_buffer_ptr(sendbuf),
@@ -204,10 +204,10 @@ def broadcast(
 
 
 def reduce_scatter(
-    context: Optional[Context] = None,
-    sendbuf: Optional[cupy.ndarray] = None,
-    recvbuf: Optional[cupy.ndarray] = None,
-    op: Optional[ReduceOp] = ReduceOp.SUM,
+    context: Context,
+    sendbuf: cupy.ndarray,
+    recvbuf: cupy.ndarray,
+    op: ReduceOp = ReduceOp.SUM,
 ):
     reduce_recv = sendbuf.copy()
     reduce(context, sendbuf, reduce_recv, 0, op)
@@ -215,7 +215,7 @@ def reduce_scatter(
 
 
 def barrier(
-    context: Optional[Context] = None,
+    context: Context,
 ):
     barrier_tensors = [None] * len(context.n_devices)
     for i, d in enumerate(context.n_devices):
