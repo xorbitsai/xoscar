@@ -153,8 +153,8 @@ def gather(
                 recv(context, temp_recv, peer)
                 buffs.append(temp_recv)
 
-        buffs = cupy.concatenate(buffs)
-        recvbuf[:] = buffs.reshape(recvbuf.shape)
+        cupy_buff = cupy.concatenate(buffs)
+        recvbuf[:] = cupy_buff.reshape(recvbuf.shape)
     else:
         send(context, sendbuf, root)
 
@@ -217,9 +217,9 @@ def reduce_scatter(
 def barrier(
     context: Context,
 ):
-    barrier_tensors = [None] * len(context.n_devices)
-    for i, d in enumerate(context.n_devices):
-        with cupy.cuda.Device(d):
+    barrier_tensors = [None] * context.n_devices
+    for i in range(context.n_devices):
+        with cupy.cuda.Device(i):
             barrier_tensors[i] = cupy.array([1])
     allreduce(context, barrier_tensors, barrier_tensors)
 
