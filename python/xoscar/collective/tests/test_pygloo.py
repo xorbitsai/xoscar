@@ -20,7 +20,7 @@ import time
 
 import numpy as np
 
-from ...tests.core import require_linux
+from ...tests.core import require_linux, require_unix
 
 system_name = platform.system()
 
@@ -65,6 +65,7 @@ def worker_allgather(rank, fileStore_path):
     np.testing.assert_array_equal(recvbuf, np.array([sendbuf] * 2))
 
 
+@require_unix
 def test_allgather():
     temp_dir = "collective_allgather"
     process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
@@ -119,11 +120,12 @@ def worker_allreduce(rank, fileStore_path):
     np.testing.assert_array_equal(recvbuf, np.array(sendbuf * 2))
 
 
+@require_unix
 def test_allreduce():
     temp_dir = "collective_allreduce"
-    process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
+    process1 = mp.Process(target=worker_allreduce, args=(0, temp_dir))
     process1.start()
-    process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
+    process2 = mp.Process(target=worker_allreduce, args=(1, temp_dir))
     process2.start()
 
     process1.join()
@@ -174,11 +176,12 @@ def worker_barrier(rank, fileStore_path):
     np.testing.assert_array_equal(recvbuf, np.array(sendbuf * 2))
 
 
+@require_unix
 def test_barrier():
     temp_dir = "collective_barrier"
-    process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
+    process1 = mp.Process(target=worker_barrier, args=(0, temp_dir))
     process1.start()
-    process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
+    process2 = mp.Process(target=worker_barrier, args=(1, temp_dir))
     process2.start()
 
     process1.join()
@@ -240,11 +243,12 @@ def worker_broadcast(rank, fileStore_path):
     # (pid=36432)  [1. 2. 3.]]
 
 
+@require_unix
 def test_broadcast():
     temp_dir = "collective_broadcast"
-    process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
+    process1 = mp.Process(target=worker_broadcast, args=(0, temp_dir))
     process1.start()
-    process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
+    process2 = mp.Process(target=worker_broadcast, args=(1, temp_dir))
     process2.start()
 
     process1.join()
@@ -300,6 +304,7 @@ def worker_gather(rank, fileStore_path):
     # (pid=23173) rank 0 sends [0. 1.], receives [[0. 1. 1. 2. 2. 3.]]
 
 
+@require_unix
 def test_gather():
     temp_dir = "collective_gather"
     process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
@@ -375,11 +380,11 @@ def worker_reduce_scatter(rank, fileStore_path):
 @require_linux
 def test_reduce_scatter():
     temp_dir = "collective_reduce_scatter"
-    process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
+    process1 = mp.Process(target=worker_reduce_scatter, args=(0, temp_dir))
     process1.start()
-    process2 = mp.Process(target=worker_gather, args=(1, temp_dir))
+    process2 = mp.Process(target=worker_reduce_scatter, args=(1, temp_dir))
     process2.start()
-    process3 = mp.Process(target=worker_gather, args=(2, temp_dir))
+    process3 = mp.Process(target=worker_reduce_scatter, args=(2, temp_dir))
     process3.start()
 
     process1.join()
@@ -443,13 +448,14 @@ def worker_reduce(rank, fileStore_path):
         )
 
 
+@require_unix
 def test_reduce():
     temp_dir = "collective_reduce"
-    process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
+    process1 = mp.Process(target=worker_reduce, args=(0, temp_dir))
     process1.start()
-    process2 = mp.Process(target=worker_gather, args=(1, temp_dir))
+    process2 = mp.Process(target=worker_reduce, args=(1, temp_dir))
     process2.start()
-    process3 = mp.Process(target=worker_gather, args=(2, temp_dir))
+    process3 = mp.Process(target=worker_reduce, args=(2, temp_dir))
     process3.start()
 
     process1.join()
@@ -512,11 +518,12 @@ def worker_scatter(rank, fileStore_path):
     # (pid=18952)  [1. 2. 3.]]
 
 
+@require_unix
 def test_scatter():
     temp_dir = "collective_scatter"
-    process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
+    process1 = mp.Process(target=worker_scatter, args=(0, temp_dir))
     process1.start()
-    process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
+    process2 = mp.Process(target=worker_scatter, args=(1, temp_dir))
     process2.start()
 
     process1.join()
@@ -580,11 +587,12 @@ def worker_send_recv(rank, fileStore_path):
         )
 
 
+@require_unix
 def test_send_recv():
     temp_dir = "collective_send_recv"
-    process1 = mp.Process(target=worker_allgather, args=(0, temp_dir))
+    process1 = mp.Process(target=worker_send_recv, args=(0, temp_dir))
     process1.start()
-    process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
+    process2 = mp.Process(target=worker_send_recv, args=(1, temp_dir))
     process2.start()
 
     process1.join()
@@ -630,15 +638,17 @@ def worker_all_to_all(rank, fileStore_path):
     xp.all_to_all(context, sendptr, recvptr, data_size, datatype)
 
     np.testing.assert_array_equal(recvbuf, np.array([0.0, 0.0, 1.0, 1.0, 2.0, 2.0]))
+    print(recvbuf)
 
 
+@require_unix
 def test_all_to_all():
     temp_dir = "collective_all_to_all"
-    process1 = mp.Process(target=worker_gather, args=(0, temp_dir))
+    process1 = mp.Process(target=worker_all_to_all, args=(0, temp_dir))
     process1.start()
-    process2 = mp.Process(target=worker_gather, args=(1, temp_dir))
+    process2 = mp.Process(target=worker_all_to_all, args=(1, temp_dir))
     process2.start()
-    process3 = mp.Process(target=worker_gather, args=(2, temp_dir))
+    process3 = mp.Process(target=worker_all_to_all, args=(2, temp_dir))
     process3.start()
 
     process1.join()
