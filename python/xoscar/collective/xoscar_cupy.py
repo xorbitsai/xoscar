@@ -217,7 +217,7 @@ def reduce_scatter(
 def barrier(
     context: Context,
 ):
-    barrier_tensors = [None] * context.n_devices
+    barrier_tensors = cupy.array([i for i in range(context.n_devices)], dtype=cupy.float32)
     for i in range(context.n_devices):
         with cupy.cuda.Device(i):
             barrier_tensors[i] = cupy.array([1])
