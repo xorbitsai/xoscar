@@ -63,7 +63,6 @@ def worker_allgather(rank):
     np.testing.assert_array_equal(recvbuf, np.array([sendbuf] * 2))
 
 
-# @require_unix
 def test_allgather():
     process1 = mp.Process(target=worker_allgather, args=(0,))
     process1.start()
