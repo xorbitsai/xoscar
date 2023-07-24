@@ -152,6 +152,7 @@ def gather(
                 temp_recv = sendbuf.copy()
                 recv(context, temp_recv, peer)
                 buffs.append(temp_recv)
+
         buffs = cupy.concatenate(buffs)
         recvbuf[:] = buffs.reshape(recvbuf.shape)
     else:
