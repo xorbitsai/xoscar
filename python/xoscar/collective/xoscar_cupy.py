@@ -79,9 +79,9 @@ def allgather(
 
 
 def all_to_all(
-    context: Context = None,
-    sendbuf: cupy.ndarray = None,
-    recvbuf: cupy.ndarray = None,
+    context: Optional[Context] = None,
+    sendbuf: Optional[cupy.ndarray] = None,
+    recvbuf: Optional[cupy.ndarray] = None,
 ):
     assert context.n_devices == sendbuf.shape[0]
 
@@ -95,17 +95,17 @@ def all_to_all(
                     temp_recv = sendbuf[i].copy()
                     recv(context, temp_recv, peer)
                     buf_i.append(temp_recv)
-            buf_i = cupy.concatenate(buf_i)
-            recvbuf[:] = buf_i.reshape(recvbuf.shape)
+            cupy_buf_i = cupy.concatenate(buf_i)
+            recvbuf[:] = cupy_buf_i.reshape(recvbuf.shape)
         else:
             send(context, sendbuf[i], i)
 
 
 def reduce(
-    context: Context = None,
-    sendbuf: cupy.ndarray = None,
-    recvbuf: cupy.ndarray = None,
-    root: int = None,
+    context: Optional[Context] = None,
+    sendbuf: Optional[cupy.ndarray] = None,
+    recvbuf: Optional[cupy.ndarray] = None,
+    root: Optional[int] = None,
     op: Optional[ReduceOp] = ReduceOp.SUM,
 ):
     context.communicator.reduce(
@@ -120,10 +120,10 @@ def reduce(
 
 
 def scatter(
-    context: Context = None,
-    sendbuf: cupy.ndarray = None,
-    recvbuf: cupy.ndarray = None,
-    root: int = None,
+    context: Optional[Context] = None,
+    sendbuf: Optional[cupy.ndarray] = None,
+    recvbuf: Optional[cupy.ndarray] = None,
+    root: Optional[int] = None,
 ):
     if context.rank == root:
         # make sendbuf equally scattered into context.n_devices chunks
@@ -138,10 +138,10 @@ def scatter(
 
 
 def gather(
-    context: Context = None,
-    sendbuf: cupy.ndarray = None,
-    recvbuf: cupy.ndarray = None,
-    root: int = None,
+    context: Optional[Context] = None,
+    sendbuf: Optional[cupy.ndarray] = None,
+    recvbuf: Optional[cupy.ndarray] = None,
+    root: Optional[int] = None,
 ):
     if context.rank == root:
         buffs = []
@@ -160,9 +160,9 @@ def gather(
 
 
 def send(
-    context: Context = None,
-    sendbuf: cupy.ndarray = None,
-    peer: int = None,
+    context: Optional[Context] = None,
+    sendbuf: Optional[cupy.ndarray] = None,
+    peer: Optional[int] = None,
 ):
     context.communicator.send(
         get_buffer_ptr(sendbuf),
@@ -174,9 +174,9 @@ def send(
 
 
 def recv(
-    context: Context = None,
-    recvbuf: cupy.ndarray = None,
-    peer: int = None,
+    context: Optional[Context] = None,
+    recvbuf: Optional[cupy.ndarray] = None,
+    peer: Optional[int] = None,
 ):
     context.communicator.recv(
         get_buffer_ptr(recvbuf),
@@ -188,10 +188,10 @@ def recv(
 
 
 def broadcast(
-    context: Context = None,
-    sendbuf: cupy.ndarray = None,
-    recvbuf: cupy.ndarray = None,
-    root: int = None,
+    context: Optional[Context] = None,
+    sendbuf: Optional[cupy.ndarray] = None,
+    recvbuf: Optional[cupy.ndarray] = None,
+    root: Optional[int] = None,
 ):
     context.communicator.broadcast(
         get_buffer_ptr(sendbuf),
@@ -204,9 +204,9 @@ def broadcast(
 
 
 def reduce_scatter(
-    context: Context = None,
-    sendbuf: cupy.ndarray = None,
-    recvbuf: cupy.ndarray = None,
+    context: Optional[Context] = None,
+    sendbuf: Optional[cupy.ndarray] = None,
+    recvbuf: Optional[cupy.ndarray] = None,
     op: Optional[ReduceOp] = ReduceOp.SUM,
 ):
     reduce_recv = sendbuf.copy()
@@ -215,7 +215,7 @@ def reduce_scatter(
 
 
 def barrier(
-    context: Context = None,
+    context: Optional[Context] = None,
 ):
     barrier_tensors = [None] * len(context.n_devices)
     for i, d in enumerate(context.n_devices):
