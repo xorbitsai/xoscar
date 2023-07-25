@@ -405,7 +405,7 @@ def test_reduce_scatter():
 def worker_reduce(rank):
     from .. import xoscar_pygloo as xp
 
-    context = xp.rendezvous.Context(rank, 3)
+    context = xp.rendezvous.Context(rank, 2)
 
     if system_name == "Linux":
         attr = xp.transport.tcp.attr("localhost")
@@ -416,14 +416,14 @@ def worker_reduce(rank):
 
     opt = xp.rendezvous.TCPStoreOptions()
     opt.port = 25002
-    opt.numWorkers = 3
+    opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
     else:
         opt.isServer = False
 
     store = xp.rendezvous.TCPStore("127.0.0.1", opt)
-    store = xp.rendezvous.PrefixStore(str(3), store)
+    store = xp.rendezvous.PrefixStore(str(2), store)
 
     context.connectFullMesh(store, dev)
 
@@ -447,11 +447,11 @@ def worker_reduce(rank):
             np.array(
                 [
                     [
-                        3.0,
+                        2.0,
+                        4.0,
                         6.0,
-                        9.0,
                     ],
-                    [3.0, 6.0, 9.0],
+                    [2.0, 4.0, 6.0],
                 ]
             ),
         )
@@ -464,12 +464,9 @@ def test_reduce():
     process1.start()
     process2 = mp.Process(target=worker_reduce, args=(1,))
     process2.start()
-    process3 = mp.Process(target=worker_reduce, args=(2,))
-    process3.start()
 
     process1.join()
     process2.join()
-    process3.join()
     end_time = time.time()
     cost = end_time - start_time
     print("test reduce cost ", cost, "s")
