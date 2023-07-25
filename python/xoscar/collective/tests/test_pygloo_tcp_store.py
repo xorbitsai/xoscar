@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# When testing Gloo on Windows, the number of processes used for testing must be less than or equal to the number of cores of the testing device.
+
 import multiprocessing as mp
 import platform
-import time
 
 import numpy as np
 
@@ -62,11 +63,9 @@ def worker_allgather(rank):
     xp.allgather(context, sendptr, recvptr, data_size, datatype)
 
     np.testing.assert_array_equal(recvbuf, np.array([sendbuf] * 2))
-    time.sleep(2)
 
 
 def test_allgather():
-    start_time = time.time()
     process1 = mp.Process(target=worker_allgather, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_allgather, args=(1,))
@@ -74,9 +73,6 @@ def test_allgather():
 
     process1.join()
     process2.join()
-    end_time = time.time()
-    cost = end_time - start_time
-    print("test allgather cost ", cost, "s")
 
 
 def worker_allreduce(rank):
@@ -119,11 +115,9 @@ def worker_allreduce(rank):
     xp.allreduce(context, sendptr, recvptr, data_size, datatype, op, algorithm)
 
     np.testing.assert_array_equal(recvbuf, np.array(sendbuf * 2))
-    time.sleep(2)
 
 
 def test_allreduce():
-    start_time = time.time()
     process1 = mp.Process(target=worker_allreduce, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_allreduce, args=(1,))
@@ -131,9 +125,6 @@ def test_allreduce():
 
     process1.join()
     process2.join()
-    end_time = time.time()
-    cost = end_time - start_time
-    print("test allreduce cost ", cost, "s")
 
 
 def worker_barrier(rank):
@@ -177,11 +168,9 @@ def worker_barrier(rank):
     xp.barrier(context)
 
     np.testing.assert_array_equal(recvbuf, sendbuf * 2)
-    time.sleep(2)
 
 
 def test_barrier():
-    start_time = time.time()
     process1 = mp.Process(target=worker_barrier, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_barrier, args=(1,))
@@ -189,9 +178,6 @@ def test_barrier():
 
     process1.join()
     process2.join()
-    end_time = time.time()
-    cost = end_time - start_time
-    print("test barrier cost ", cost, "s")
 
 
 def worker_broadcast(rank):
@@ -239,7 +225,6 @@ def worker_broadcast(rank):
     np.testing.assert_array_equal(
         recvbuf, np.array([[1, 2, 3], [1, 2, 3]], dtype=np.float32)
     )
-    time.sleep(2)
     ## example output
     # (pid=36435) rank 1 sends [[0. 0. 0.]
     # (pid=36435)  [0. 0. 0.]], receives [[1. 2. 3.]
@@ -250,7 +235,6 @@ def worker_broadcast(rank):
 
 
 def test_broadcast():
-    start_time = time.time()
     process1 = mp.Process(target=worker_broadcast, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_broadcast, args=(1,))
@@ -258,9 +242,6 @@ def test_broadcast():
 
     process1.join()
     process2.join()
-    end_time = time.time()
-    cost = end_time - start_time
-    print("test broadcast cost ", cost, "s")
 
 
 def worker_gather(rank):
@@ -303,7 +284,6 @@ def worker_gather(rank):
 
     if rank == 0:
         np.testing.assert_array_equal(recvbuf, np.array([[0.0, 1.0, 1.0, 2.0]]))
-    time.sleep(2)
 
     ## example output
     # (pid=23172) rank 2 sends [2. 3.], receives [[0. 0. 0. 0. 0. 0.]]
@@ -312,7 +292,6 @@ def worker_gather(rank):
 
 
 def test_gather():
-    start_time = time.time()
     process1 = mp.Process(target=worker_gather, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_gather, args=(1,))
@@ -320,9 +299,6 @@ def test_gather():
 
     process1.join()
     process2.join()
-    end_time = time.time()
-    cost = end_time - start_time
-    print("test gather cost ", cost, "s")
 
 
 def worker_reduce_scatter(rank):
@@ -381,12 +357,10 @@ def worker_reduce_scatter(rank):
         np.testing.assert_array_equal(recvbuf, np.array([6.0, 9.0]))
     else:
         np.testing.assert_array_equal(recvbuf, np.array([12.0, 15.0, 18.0]))
-    time.sleep(2)
 
 
 @require_linux
 def test_reduce_scatter():
-    start_time = time.time()
     process1 = mp.Process(target=worker_reduce_scatter, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_reduce_scatter, args=(1,))
@@ -397,9 +371,6 @@ def test_reduce_scatter():
     process1.join()
     process2.join()
     process3.join()
-    end_time = time.time()
-    cost = end_time - start_time
-    print("test reduce_scatter cost ", cost, "s")
 
 
 def worker_reduce(rank):
@@ -455,11 +426,9 @@ def worker_reduce(rank):
                 ]
             ),
         )
-    time.sleep(2)
 
 
 def test_reduce():
-    start_time = time.time()
     process1 = mp.Process(target=worker_reduce, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_reduce, args=(1,))
@@ -467,9 +436,6 @@ def test_reduce():
 
     process1.join()
     process2.join()
-    end_time = time.time()
-    cost = end_time - start_time
-    print("test reduce cost ", cost, "s")
 
 
 def worker_scatter(rank):
@@ -515,7 +481,6 @@ def worker_scatter(rank):
     xp.scatter(context, sendptr, recvptr, data_size, datatype, root)
 
     np.testing.assert_array_equal(recvbuf, np.array([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]))
-    time.sleep(2)
     ## example output, root is 0.
     # (pid=18951) rank 1 sends [array([[1., 2., 3.],
     # (pid=18951)        [1., 2., 3.]], dtype=float32), array([[1., 2., 3.],
@@ -528,7 +493,6 @@ def worker_scatter(rank):
 
 
 def test_scatter():
-    start_time = time.time()
     process1 = mp.Process(target=worker_scatter, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_scatter, args=(1,))
@@ -536,9 +500,6 @@ def test_scatter():
 
     process1.join()
     process2.join()
-    end_time = time.time()
-    cost = end_time - start_time
-    print("test scatter cost ", cost, "s")
 
 
 def worker_send_recv(rank):
@@ -595,12 +556,10 @@ def worker_send_recv(rank):
         raise Exception(
             "Only support 2 process to test send function and recv function"
         )
-    time.sleep(2)
     ## example output
 
 
 def test_send_recv():
-    start_time = time.time()
     process1 = mp.Process(target=worker_send_recv, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_send_recv, args=(1,))
@@ -608,9 +567,6 @@ def test_send_recv():
 
     process1.join()
     process2.join()
-    end_time = time.time()
-    cost = end_time - start_time
-    print("test send_recv cost ", cost, "s")
 
 
 def worker_all_to_all(rank):
@@ -650,11 +606,9 @@ def worker_all_to_all(rank):
     xp.all_to_all(context, sendptr, recvptr, data_size, datatype)
 
     np.testing.assert_array_equal(recvbuf, np.array([0.0, 0.0, 1.0, 1.0]))
-    time.sleep(2)
 
 
 def test_all_to_all():
-    start_time = time.time()
     process1 = mp.Process(target=worker_all_to_all, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_all_to_all, args=(1,))
@@ -662,6 +616,3 @@ def test_all_to_all():
 
     process1.join()
     process2.join()
-    end_time = time.time()
-    cost = end_time - start_time
-    print("test all_to_all cost ", cost, "s ")
