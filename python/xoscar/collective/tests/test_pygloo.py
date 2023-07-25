@@ -176,6 +176,7 @@ def worker_barrier(rank, fileStore_path):
     np.testing.assert_array_equal(recvbuf, np.array(sendbuf * 2))
 
 
+@require_unix
 def test_barrier():
     temp_dir = "collective_barrier"
     process1 = mp.Process(target=worker_barrier, args=(0, temp_dir))
@@ -190,7 +191,6 @@ def test_barrier():
         shutil.rmtree(temp_dir)
 
 
-@require_unix
 def worker_broadcast(rank, fileStore_path):
     from .. import xoscar_pygloo as xp
 
