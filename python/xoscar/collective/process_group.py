@@ -302,11 +302,22 @@ class ProcessGroupGloo(ProcessGroup):
         root: Optional[int] = 0,
         tag: Optional[int] = 0,
     ):
-        send_buf = convert_data_to_np_array(send_data)
+        if send_data is not None:
+            send_buf = convert_data_to_np_array(send_data)
+            sendptr = send_buf.ctypes.data
+        else:
+            sendptr = None
         recv_buf = convert_data_to_np_array(recv_data)
-        size = send_buf.size
-        dtype = send_buf.dtype
-        sendptr = send_buf.ctypes.data
+        size = recv_buf.size
+        dtype = recv_buf.dtype
         recvptr = recv_buf.ctypes.data
         gloo_type = TypeMappingGloo[dtype.type]
-        xp.broadcast(self._context, sendptr, recvptr, size, gloo_type, root, tag)
+        xp.broadcast(
+            self._context,
+            recvptr if sendptr is None else sendptr,
+            recvptr,
+            size,
+            gloo_type,
+            root,
+            tag,
+        )
