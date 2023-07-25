@@ -370,7 +370,7 @@ void sendBytes(int socket,
 #ifdef MSG_NOSIGNAL
     flags |= MSG_NOSIGNAL;
 #endif
-    std::cout << "senbyte" << std::endl;
+
     while (bytesToSend > 0) {
         ssize_t bytesSent;
         SYSCHECK_ERR_RETURN_NEG1(
@@ -383,7 +383,6 @@ void sendBytes(int socket,
         bytesToSend -= bytesSent;
         currentBytes += bytesSent;
     }
-    std::cout << "not senbyte" << std::endl;
 }
 
 template <typename T>
@@ -395,7 +394,7 @@ void recvBytes(int socket, T *buffer, size_t length) {
 
     auto bytes = reinterpret_cast<uint8_t *>(buffer);
     uint8_t *currentBytes = bytes;
-    std::cout << "recvBytes" << std::endl;
+
     while (bytesToReceive > 0) {
         ssize_t bytesReceived;
         SYSCHECK_ERR_RETURN_NEG1(bytesReceived
@@ -410,7 +409,6 @@ void recvBytes(int socket, T *buffer, size_t length) {
         bytesToReceive -= bytesReceived;
         currentBytes += bytesReceived;
     }
-    std::cout << "not recvBytes" << std::endl;
 }
 
 // send a vector's length and data

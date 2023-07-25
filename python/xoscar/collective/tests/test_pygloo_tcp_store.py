@@ -14,6 +14,7 @@
 
 import multiprocessing as mp
 import platform
+import time
 
 import numpy as np
 
@@ -34,7 +35,7 @@ def worker_allgather(rank):
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25001
+    opt.port = 25002
     opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
@@ -64,6 +65,7 @@ def worker_allgather(rank):
 
 
 def test_allgather():
+    start_time = time.time()
     process1 = mp.Process(target=worker_allgather, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_allgather, args=(1,))
@@ -71,6 +73,9 @@ def test_allgather():
 
     process1.join()
     process2.join()
+    end_time = time.time()
+    cost = end_time - start_time
+    print("test allgather cost ", cost, "s")
 
 
 def worker_allreduce(rank):
@@ -86,7 +91,7 @@ def worker_allreduce(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25001
+    opt.port = 25002
     opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
@@ -116,6 +121,7 @@ def worker_allreduce(rank):
 
 
 def test_allreduce():
+    start_time = time.time()
     process1 = mp.Process(target=worker_allreduce, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_allreduce, args=(1,))
@@ -123,6 +129,9 @@ def test_allreduce():
 
     process1.join()
     process2.join()
+    end_time = time.time()
+    cost = end_time - start_time
+    print("test allreduce cost ", cost, "s")
 
 
 def worker_barrier(rank):
@@ -138,7 +147,7 @@ def worker_barrier(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25001
+    opt.port = 25002
     opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
@@ -169,6 +178,7 @@ def worker_barrier(rank):
 
 
 def test_barrier():
+    start_time = time.time()
     process1 = mp.Process(target=worker_barrier, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_barrier, args=(1,))
@@ -176,6 +186,9 @@ def test_barrier():
 
     process1.join()
     process2.join()
+    end_time = time.time()
+    cost = end_time - start_time
+    print("test barrier cost ", cost, "s")
 
 
 def worker_broadcast(rank):
@@ -191,7 +204,7 @@ def worker_broadcast(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25001
+    opt.port = 25002
     opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
@@ -233,6 +246,7 @@ def worker_broadcast(rank):
 
 
 def test_broadcast():
+    start_time = time.time()
     process1 = mp.Process(target=worker_broadcast, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_broadcast, args=(1,))
@@ -240,6 +254,9 @@ def test_broadcast():
 
     process1.join()
     process2.join()
+    end_time = time.time()
+    cost = end_time - start_time
+    print("test broadcast cost ", cost, "s")
 
 
 def worker_gather(rank):
@@ -255,7 +272,7 @@ def worker_gather(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25001
+    opt.port = 25002
     opt.numWorkers = 3
     if rank == 0:
         opt.isServer = True
@@ -292,6 +309,7 @@ def worker_gather(rank):
 
 
 def test_gather():
+    start_time = time.time()
     process1 = mp.Process(target=worker_gather, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_gather, args=(1,))
@@ -302,6 +320,9 @@ def test_gather():
     process1.join()
     process2.join()
     process3.join()
+    end_time = time.time()
+    cost = end_time - start_time
+    print("test gather cost ", cost, "s")
 
 
 def worker_reduce_scatter(rank):
@@ -317,7 +338,7 @@ def worker_reduce_scatter(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25001
+    opt.port = 25002
     opt.numWorkers = 3
     if rank == 0:
         opt.isServer = True
@@ -364,6 +385,7 @@ def worker_reduce_scatter(rank):
 
 @require_linux
 def test_reduce_scatter():
+    start_time = time.time()
     process1 = mp.Process(target=worker_reduce_scatter, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_reduce_scatter, args=(1,))
@@ -374,6 +396,9 @@ def test_reduce_scatter():
     process1.join()
     process2.join()
     process3.join()
+    end_time = time.time()
+    cost = end_time - start_time
+    print("test reduce_scatter cost ", cost, "s")
 
 
 def worker_reduce(rank):
@@ -389,7 +414,7 @@ def worker_reduce(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25001
+    opt.port = 25002
     opt.numWorkers = 3
     if rank == 0:
         opt.isServer = True
@@ -432,6 +457,7 @@ def worker_reduce(rank):
 
 
 def test_reduce():
+    start_time = time.time()
     process1 = mp.Process(target=worker_reduce, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_reduce, args=(1,))
@@ -442,6 +468,9 @@ def test_reduce():
     process1.join()
     process2.join()
     process3.join()
+    end_time = time.time()
+    cost = end_time - start_time
+    print("test reduce cost ", cost, "s")
 
 
 def worker_scatter(rank):
@@ -457,7 +486,7 @@ def worker_scatter(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25001
+    opt.port = 25002
     opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
@@ -499,6 +528,7 @@ def worker_scatter(rank):
 
 
 def test_scatter():
+    start_time = time.time()
     process1 = mp.Process(target=worker_scatter, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_scatter, args=(1,))
@@ -506,6 +536,9 @@ def test_scatter():
 
     process1.join()
     process2.join()
+    end_time = time.time()
+    cost = end_time - start_time
+    print("test scatter cost ", cost, "s")
 
 
 def worker_send_recv(rank):
@@ -521,7 +554,7 @@ def worker_send_recv(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25001
+    opt.port = 25002
     opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
@@ -566,6 +599,7 @@ def worker_send_recv(rank):
 
 
 def test_send_recv():
+    start_time = time.time()
     process1 = mp.Process(target=worker_send_recv, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_send_recv, args=(1,))
@@ -573,6 +607,9 @@ def test_send_recv():
 
     process1.join()
     process2.join()
+    end_time = time.time()
+    cost = end_time - start_time
+    print("test send_recv cost ", cost, "s")
 
 
 def worker_all_to_all(rank):
@@ -587,7 +624,7 @@ def worker_all_to_all(rank):
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25001
+    opt.port = 25002
     opt.numWorkers = 3
     if rank == 0:
         opt.isServer = True
@@ -615,6 +652,7 @@ def worker_all_to_all(rank):
 
 
 def test_all_to_all():
+    start_time = time.time()
     process1 = mp.Process(target=worker_all_to_all, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_all_to_all, args=(1,))
@@ -625,3 +663,6 @@ def test_all_to_all():
     process1.join()
     process2.join()
     process3.join()
+    end_time = time.time()
+    cost = end_time - start_time
+    print("test all_to_all cost ", cost, "s")
