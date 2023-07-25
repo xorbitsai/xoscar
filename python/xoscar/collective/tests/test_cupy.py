@@ -21,8 +21,6 @@ import pytest
 
 from .. import xoscar_cupy as xc
 
-mp.set_start_method("spawn")
-
 
 def worker_allreduce(rank, nccl_id, device_id):
     cupy.cuda.Device(device_id).use()
@@ -239,6 +237,8 @@ def worker_scatter_buffer(rank, nccl_id, device_id):
     ],
 )
 def test_driver(worker_func):
+    mp.set_start_method("spawn", force=True)
+
     nccl_id = nccl.get_unique_id()
     device_id = [0, 1]
 
