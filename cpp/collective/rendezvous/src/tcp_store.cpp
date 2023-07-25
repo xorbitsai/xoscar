@@ -573,6 +573,7 @@ void TCPStoreMasterDaemon::run() {
 
     // receive the queries
     bool finished = false;
+    std::cout << "TCPStoreMasterDaemon::run()" << std::endl;
     while (!finished) {
         // for (const auto i : c10::irange(sockets_.size())) {
         //     fds[i].revents = 0;
@@ -609,6 +610,7 @@ void TCPStoreMasterDaemon::run() {
         }
         queryFds(fds);
     }
+    std::cout << "not TCPStoreMasterDaemon::run()" << std::endl;
 }
 #else
 void TCPStoreMasterDaemon::run() {
@@ -758,7 +760,7 @@ void TCPStoreWorkerDaemon::callbackHandler(int socket) {
 void TCPStoreWorkerDaemon::run() {
     std::vector<struct pollfd> fds;
     tcputil::addPollfd(fds, storeListenSocket_.handle(), POLLIN);
-
+    std::cout << "TCPStoreWorkerDaemon::run()" << std::endl;
     while (true) {
         // Check control and exit early if triggered
         int res;
@@ -787,6 +789,7 @@ void TCPStoreWorkerDaemon::run() {
         // valid request, perform callback logic
         callbackHandler(fds[0].fd);
     }
+    std::cout << "not TCPStoreWorkerDaemon::run()" << std::endl;
 }
 #else
 void TCPStoreWorkerDaemon::run() {
