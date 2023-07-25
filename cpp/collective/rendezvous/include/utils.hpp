@@ -308,9 +308,10 @@ using SizeType = uint64_t;
             if (!(success_cond)) {                                             \
                 if (errno == EINTR) {                                          \
                     continue;                                                  \
-                } else if (errno_local == WSAETIMEDOUT                         \
-                           || errno_local == WSAEWOULDBLOCK) {                 \
+                } else if (errno_local == WSAETIMEDOUT) {                      \
                     TORCH_CHECK(false, "Socket Timeout");                      \
+                } else if (errno_local == WSAEWOULDBLOCK) {                    \
+                    TORCH_CHECK(false, "Buffer Full");                         \
                 } else {                                                       \
                     throw std::system_error(errno_local,                       \
                                             std::system_category());           \
