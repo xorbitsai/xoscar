@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# When testing Gloo on Windows, the number of processes used for testing must be less than or equal to the number of cores of the testing device.
+# When testing Gloo on Windows, the number of processes used for testing
+# must be less than or equal to the number of cores of the testing device.
 
 import multiprocessing as mp
 import platform

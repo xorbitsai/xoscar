@@ -22,6 +22,10 @@ from ...tests.core import require_linux, require_unix
 
 system_name = platform.system()
 
+# When running tests on Windows, some tests may fail due to file system
+# permission issues. Therefore, we skip the relevant tests related to
+# filestore on Windows.
+
 
 def worker_allgather(rank, fileStore_path):
     from .. import xoscar_pygloo as xp
