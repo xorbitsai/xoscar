@@ -665,4 +665,4 @@ def test_all_to_all():
     process3.join()
     end_time = time.time()
     cost = end_time - start_time
-    print("test all_to_all cost ", cost, "s")
+    print("test all_to_all cost ", cost, "s ")
