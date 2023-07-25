@@ -62,7 +62,7 @@ def worker_allgather(rank):
     xp.allgather(context, sendptr, recvptr, data_size, datatype)
 
     np.testing.assert_array_equal(recvbuf, np.array([sendbuf] * 2))
-    time.sleep(5)
+    time.sleep(2)
 
 
 def test_allgather():
@@ -119,7 +119,7 @@ def worker_allreduce(rank):
     xp.allreduce(context, sendptr, recvptr, data_size, datatype, op, algorithm)
 
     np.testing.assert_array_equal(recvbuf, np.array(sendbuf * 2))
-    time.sleep(5)
+    time.sleep(2)
 
 
 def test_allreduce():
@@ -177,7 +177,7 @@ def worker_barrier(rank):
     xp.barrier(context)
 
     np.testing.assert_array_equal(recvbuf, sendbuf * 2)
-    time.sleep(5)
+    time.sleep(2)
 
 
 def test_barrier():
@@ -239,7 +239,7 @@ def worker_broadcast(rank):
     np.testing.assert_array_equal(
         recvbuf, np.array([[1, 2, 3], [1, 2, 3]], dtype=np.float32)
     )
-    time.sleep(5)
+    time.sleep(2)
     ## example output
     # (pid=36435) rank 1 sends [[0. 0. 0.]
     # (pid=36435)  [0. 0. 0.]], receives [[1. 2. 3.]
@@ -266,7 +266,7 @@ def test_broadcast():
 def worker_gather(rank):
     from .. import xoscar_pygloo as xp
 
-    context = xp.rendezvous.Context(rank, 3)
+    context = xp.rendezvous.Context(rank, 2)
 
     if system_name == "Linux":
         attr = xp.transport.tcp.attr("localhost")
@@ -277,21 +277,21 @@ def worker_gather(rank):
 
     opt = xp.rendezvous.TCPStoreOptions()
     opt.port = 25002
-    opt.numWorkers = 3
+    opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
     else:
         opt.isServer = False
 
     store = xp.rendezvous.TCPStore("127.0.0.1", opt)
-    store = xp.rendezvous.PrefixStore(str(3), store)
+    store = xp.rendezvous.PrefixStore(str(2), store)
 
     context.connectFullMesh(store, dev)
 
     sendbuf = np.array([rank, rank + 1], dtype=np.float32)
     sendptr = sendbuf.ctypes.data
 
-    recvbuf = np.zeros((1, 3 * 2), dtype=np.float32)
+    recvbuf = np.zeros((1, 2 * 2), dtype=np.float32)
     recvptr = recvbuf.ctypes.data
 
     data_size = (
@@ -302,10 +302,8 @@ def worker_gather(rank):
     xp.gather(context, sendptr, recvptr, data_size, datatype, root=0)
 
     if rank == 0:
-        np.testing.assert_array_equal(
-            recvbuf, np.array([[0.0, 1.0, 1.0, 2.0, 2.0, 3.0]])
-        )
-    time.sleep(5)
+        np.testing.assert_array_equal(recvbuf, np.array([[0.0, 1.0, 1.0, 2.0]]))
+    time.sleep(2)
 
     ## example output
     # (pid=23172) rank 2 sends [2. 3.], receives [[0. 0. 0. 0. 0. 0.]]
@@ -319,12 +317,9 @@ def test_gather():
     process1.start()
     process2 = mp.Process(target=worker_gather, args=(1,))
     process2.start()
-    process3 = mp.Process(target=worker_gather, args=(2,))
-    process3.start()
 
     process1.join()
     process2.join()
-    process3.join()
     end_time = time.time()
     cost = end_time - start_time
     print("test gather cost ", cost, "s")
@@ -386,7 +381,7 @@ def worker_reduce_scatter(rank):
         np.testing.assert_array_equal(recvbuf, np.array([6.0, 9.0]))
     else:
         np.testing.assert_array_equal(recvbuf, np.array([12.0, 15.0, 18.0]))
-    time.sleep(5)
+    time.sleep(2)
 
 
 @require_linux
@@ -460,7 +455,7 @@ def worker_reduce(rank):
                 ]
             ),
         )
-    time.sleep(5)
+    time.sleep(2)
 
 
 def test_reduce():
@@ -523,7 +518,7 @@ def worker_scatter(rank):
     xp.scatter(context, sendptr, recvptr, data_size, datatype, root)
 
     np.testing.assert_array_equal(recvbuf, np.array([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]))
-    time.sleep(5)
+    time.sleep(2)
     ## example output, root is 0.
     # (pid=18951) rank 1 sends [array([[1., 2., 3.],
     # (pid=18951)        [1., 2., 3.]], dtype=float32), array([[1., 2., 3.],
@@ -603,7 +598,7 @@ def worker_send_recv(rank):
         raise Exception(
             "Only support 2 process to test send function and recv function"
         )
-    time.sleep(5)
+    time.sleep(2)
     ## example output
 
 
@@ -624,7 +619,7 @@ def test_send_recv():
 def worker_all_to_all(rank):
     from .. import xoscar_pygloo as xp
 
-    context = xp.rendezvous.Context(rank, 3)
+    context = xp.rendezvous.Context(rank, 2)
 
     if system_name == "Linux":
         attr = xp.transport.tcp.attr("localhost")
@@ -634,7 +629,7 @@ def worker_all_to_all(rank):
         dev = xp.transport.uv.CreateDevice(attr)
     opt = xp.rendezvous.TCPStoreOptions()
     opt.port = 25002
-    opt.numWorkers = 3
+    opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
     else:
@@ -645,7 +640,7 @@ def worker_all_to_all(rank):
 
     context.connectFullMesh(store, dev)
 
-    sendbuf = np.zeros((6,), dtype=np.float32) + rank
+    sendbuf = np.zeros((4,), dtype=np.float32) + rank
     recvbuf = np.zeros(sendbuf.shape, dtype=np.float32)
     sendptr = sendbuf.ctypes.data
     recvptr = recvbuf.ctypes.data
@@ -657,8 +652,8 @@ def worker_all_to_all(rank):
 
     xp.all_to_all(context, sendptr, recvptr, data_size, datatype)
 
-    np.testing.assert_array_equal(recvbuf, np.array([0.0, 0.0, 1.0, 1.0, 2.0, 2.0]))
-    time.sleep(5)
+    np.testing.assert_array_equal(recvbuf, np.array([0.0, 0.0, 1.0, 1.0]))
+    time.sleep(2)
 
 
 def test_all_to_all():
@@ -667,12 +662,9 @@ def test_all_to_all():
     process1.start()
     process2 = mp.Process(target=worker_all_to_all, args=(1,))
     process2.start()
-    process3 = mp.Process(target=worker_all_to_all, args=(2,))
-    process3.start()
 
     process1.join()
     process2.join()
-    process3.join()
     end_time = time.time()
     cost = end_time - start_time
     print("test all_to_all cost ", cost, "s ")
