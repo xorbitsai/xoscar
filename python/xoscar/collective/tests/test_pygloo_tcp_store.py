@@ -62,6 +62,7 @@ def worker_allgather(rank):
     xp.allgather(context, sendptr, recvptr, data_size, datatype)
 
     np.testing.assert_array_equal(recvbuf, np.array([sendbuf] * 2))
+    time.sleep(2)
 
 
 def test_allgather():
@@ -118,6 +119,7 @@ def worker_allreduce(rank):
     xp.allreduce(context, sendptr, recvptr, data_size, datatype, op, algorithm)
 
     np.testing.assert_array_equal(recvbuf, np.array(sendbuf * 2))
+    time.sleep(2)
 
 
 def test_allreduce():
@@ -175,6 +177,7 @@ def worker_barrier(rank):
     xp.barrier(context)
 
     np.testing.assert_array_equal(recvbuf, sendbuf * 2)
+    time.sleep(2)
 
 
 def test_barrier():
@@ -236,6 +239,7 @@ def worker_broadcast(rank):
     np.testing.assert_array_equal(
         recvbuf, np.array([[1, 2, 3], [1, 2, 3]], dtype=np.float32)
     )
+    time.sleep(2)
     ## example output
     # (pid=36435) rank 1 sends [[0. 0. 0.]
     # (pid=36435)  [0. 0. 0.]], receives [[1. 2. 3.]
@@ -301,6 +305,7 @@ def worker_gather(rank):
         np.testing.assert_array_equal(
             recvbuf, np.array([[0.0, 1.0, 1.0, 2.0, 2.0, 3.0]])
         )
+    time.sleep(2)
 
     ## example output
     # (pid=23172) rank 2 sends [2. 3.], receives [[0. 0. 0. 0. 0. 0.]]
@@ -381,6 +386,7 @@ def worker_reduce_scatter(rank):
         np.testing.assert_array_equal(recvbuf, np.array([6.0, 9.0]))
     else:
         np.testing.assert_array_equal(recvbuf, np.array([12.0, 15.0, 18.0]))
+    time.sleep(2)
 
 
 @require_linux
@@ -454,6 +460,7 @@ def worker_reduce(rank):
                 ]
             ),
         )
+    time.sleep(2)
 
 
 def test_reduce():
@@ -516,6 +523,7 @@ def worker_scatter(rank):
     xp.scatter(context, sendptr, recvptr, data_size, datatype, root)
 
     np.testing.assert_array_equal(recvbuf, np.array([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]))
+    time.sleep(2)
     ## example output, root is 0.
     # (pid=18951) rank 1 sends [array([[1., 2., 3.],
     # (pid=18951)        [1., 2., 3.]], dtype=float32), array([[1., 2., 3.],
@@ -595,6 +603,7 @@ def worker_send_recv(rank):
         raise Exception(
             "Only support 2 process to test send function and recv function"
         )
+    time.sleep(2)
     ## example output
 
 
@@ -649,6 +658,7 @@ def worker_all_to_all(rank):
     xp.all_to_all(context, sendptr, recvptr, data_size, datatype)
 
     np.testing.assert_array_equal(recvbuf, np.array([0.0, 0.0, 1.0, 1.0, 2.0, 2.0]))
+    time.sleep(2)
 
 
 def test_all_to_all():
