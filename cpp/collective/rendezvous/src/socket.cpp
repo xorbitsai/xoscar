@@ -22,7 +22,7 @@ limitations under the License. */
 #include <vector>
 
 #ifdef _WIN32
-#    include <CallOnce.h>
+#    include <call_once.h>
 #    include <mutex>
 #    include <winsock2.h>
 #    include <ws2tcpip.h>

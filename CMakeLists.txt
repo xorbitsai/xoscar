@@ -52,9 +52,9 @@ set_target_properties(
              CXX_STANDARD_REQUIRED ON
              CXX_EXTENSIONS OFF)
 if(NOT DEFINED BUILD_TMP_DIR)
-  file(GLOB MY_DIRS "python/build/temp*")
-  foreach(MY_DIR ${MY_DIRS})
-    set(BUILD_TMP_DIR ${MY_DIR}/xoscar_pygloo)
+  file(GLOB TMP_DIRS "python/build/temp*")
+  foreach(TMP_DIR ${TMP_DIRS})
+    set(BUILD_TMP_DIR ${TMP_DIR}/xoscar_pygloo)
   endforeach()
 else()
   set(BUILD_TMP_DIR python/${BUILD_TMP_DIR})

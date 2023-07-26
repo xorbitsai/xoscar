@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# When testing Gloo on Windows, the number of processes used for testing
-# must be less than or equal to the number of cores of the testing device.
-
 import multiprocessing as mp
 import platform
 
 import numpy as np
 
-from ...tests.core import require_linux
+from ...tests.core import require_linux, require_unix
 
 system_name = platform.system()
 
@@ -37,7 +34,7 @@ def worker_allgather(rank):
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25002
+    opt.port = 25001
     opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
@@ -89,7 +86,7 @@ def worker_allreduce(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25002
+    opt.port = 25001
     opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
@@ -141,7 +138,7 @@ def worker_barrier(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25002
+    opt.port = 25001
     opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
@@ -194,7 +191,7 @@ def worker_broadcast(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25002
+    opt.port = 25001
     opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
@@ -248,7 +245,7 @@ def test_broadcast():
 def worker_gather(rank):
     from .. import xoscar_pygloo as xp
 
-    context = xp.rendezvous.Context(rank, 2)
+    context = xp.rendezvous.Context(rank, 3)
 
     if system_name == "Linux":
         attr = xp.transport.tcp.attr("localhost")
@@ -258,22 +255,22 @@ def worker_gather(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25002
-    opt.numWorkers = 2
+    opt.port = 25001
+    opt.numWorkers = 3
     if rank == 0:
         opt.isServer = True
     else:
         opt.isServer = False
 
     store = xp.rendezvous.TCPStore("127.0.0.1", opt)
-    store = xp.rendezvous.PrefixStore(str(2), store)
+    store = xp.rendezvous.PrefixStore(str(3), store)
 
     context.connectFullMesh(store, dev)
 
     sendbuf = np.array([rank, rank + 1], dtype=np.float32)
     sendptr = sendbuf.ctypes.data
 
-    recvbuf = np.zeros((1, 2 * 2), dtype=np.float32)
+    recvbuf = np.zeros((1, 3 * 2), dtype=np.float32)
     recvptr = recvbuf.ctypes.data
 
     data_size = (
@@ -284,7 +281,9 @@ def worker_gather(rank):
     xp.gather(context, sendptr, recvptr, data_size, datatype, root=0)
 
     if rank == 0:
-        np.testing.assert_array_equal(recvbuf, np.array([[0.0, 1.0, 1.0, 2.0]]))
+        np.testing.assert_array_equal(
+            recvbuf, np.array([[0.0, 1.0, 1.0, 2.0, 2.0, 3.0]])
+        )
 
     ## example output
     # (pid=23172) rank 2 sends [2. 3.], receives [[0. 0. 0. 0. 0. 0.]]
@@ -292,14 +291,20 @@ def worker_gather(rank):
     # (pid=23173) rank 0 sends [0. 1.], receives [[0. 1. 1. 2. 2. 3.]]
 
 
+# When testing Gloo on Windows, the number of processes used for testing
+# must be less than or equal to the number of cores of the testing device.
+@require_unix
 def test_gather():
     process1 = mp.Process(target=worker_gather, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_gather, args=(1,))
     process2.start()
+    process3 = mp.Process(target=worker_gather, args=(2,))
+    process3.start()
 
     process1.join()
     process2.join()
+    process3.join()
 
 
 def worker_reduce_scatter(rank):
@@ -315,7 +320,7 @@ def worker_reduce_scatter(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25002
+    opt.port = 25001
     opt.numWorkers = 3
     if rank == 0:
         opt.isServer = True
@@ -377,7 +382,7 @@ def test_reduce_scatter():
 def worker_reduce(rank):
     from .. import xoscar_pygloo as xp
 
-    context = xp.rendezvous.Context(rank, 2)
+    context = xp.rendezvous.Context(rank, 3)
 
     if system_name == "Linux":
         attr = xp.transport.tcp.attr("localhost")
@@ -387,15 +392,15 @@ def worker_reduce(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25002
-    opt.numWorkers = 2
+    opt.port = 25001
+    opt.numWorkers = 3
     if rank == 0:
         opt.isServer = True
     else:
         opt.isServer = False
 
     store = xp.rendezvous.TCPStore("127.0.0.1", opt)
-    store = xp.rendezvous.PrefixStore(str(2), store)
+    store = xp.rendezvous.PrefixStore(str(3), store)
 
     context.connectFullMesh(store, dev)
 
@@ -419,24 +424,30 @@ def worker_reduce(rank):
             np.array(
                 [
                     [
-                        2.0,
-                        4.0,
+                        3.0,
                         6.0,
+                        9.0,
                     ],
-                    [2.0, 4.0, 6.0],
+                    [3.0, 6.0, 9.0],
                 ]
             ),
         )
 
 
+# When testing Gloo on Windows, the number of processes used for testing
+# must be less than or equal to the number of cores of the testing device.
+@require_unix
 def test_reduce():
     process1 = mp.Process(target=worker_reduce, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_reduce, args=(1,))
     process2.start()
+    process3 = mp.Process(target=worker_reduce, args=(2,))
+    process3.start()
 
     process1.join()
     process2.join()
+    process3.join()
 
 
 def worker_scatter(rank):
@@ -452,7 +463,7 @@ def worker_scatter(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25002
+    opt.port = 25001
     opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
@@ -516,7 +527,7 @@ def worker_send_recv(rank):
         dev = xp.transport.uv.CreateDevice(attr)
 
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25002
+    opt.port = 25001
     opt.numWorkers = 2
     if rank == 0:
         opt.isServer = True
@@ -573,7 +584,7 @@ def test_send_recv():
 def worker_all_to_all(rank):
     from .. import xoscar_pygloo as xp
 
-    context = xp.rendezvous.Context(rank, 2)
+    context = xp.rendezvous.Context(rank, 3)
 
     if system_name == "Linux":
         attr = xp.transport.tcp.attr("localhost")
@@ -582,8 +593,8 @@ def worker_all_to_all(rank):
         attr = xp.transport.uv.attr("localhost")
         dev = xp.transport.uv.CreateDevice(attr)
     opt = xp.rendezvous.TCPStoreOptions()
-    opt.port = 25002
-    opt.numWorkers = 2
+    opt.port = 25001
+    opt.numWorkers = 3
     if rank == 0:
         opt.isServer = True
     else:
@@ -594,7 +605,7 @@ def worker_all_to_all(rank):
 
     context.connectFullMesh(store, dev)
 
-    sendbuf = np.zeros((4,), dtype=np.float32) + rank
+    sendbuf = np.zeros((6,), dtype=np.float32) + rank
     recvbuf = np.zeros(sendbuf.shape, dtype=np.float32)
     sendptr = sendbuf.ctypes.data
     recvptr = recvbuf.ctypes.data
@@ -606,14 +617,20 @@ def worker_all_to_all(rank):
 
     xp.all_to_all(context, sendptr, recvptr, data_size, datatype)
 
-    np.testing.assert_array_equal(recvbuf, np.array([0.0, 0.0, 1.0, 1.0]))
+    np.testing.assert_array_equal(recvbuf, np.array([0.0, 0.0, 1.0, 1.0, 2.0, 2.0]))
 
 
+# When testing Gloo on Windows, the number of processes used for testing
+# must be less than or equal to the number of cores of the testing device.
+@require_unix
 def test_all_to_all():
     process1 = mp.Process(target=worker_all_to_all, args=(0,))
     process1.start()
     process2 = mp.Process(target=worker_all_to_all, args=(1,))
     process2.start()
+    process3 = mp.Process(target=worker_all_to_all, args=(2,))
+    process3.start()
 
     process1.join()
     process2.join()
+    process3.join()

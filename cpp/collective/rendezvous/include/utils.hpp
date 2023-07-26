@@ -173,9 +173,6 @@ Error::Error(std::string msg, std::string backtrace, const void *caller)
     refresh_what();
 }
 
-// PyTorch-style error message
-// Error::Error(SourceLocation source_location, const std::string& msg)
-// NB: This is defined in Logging.cpp for access to GetFetchStackTrace
 std::string charToString(const char *chars) {
     std::string ret = chars;
     return ret;
@@ -198,17 +195,17 @@ Error::Error(SourceLocation source_location, std::string msg)
             "Exception raised from " + charToString(source_location.file)
                 + " (most recent call first):\n") {}
 
-void torchCheckFail(const char *func,
-                    const char *file,
-                    uint32_t line,
-                    const std::string &msg) {
+void xoscarCheckFail(const char *func,
+                     const char *file,
+                     uint32_t line,
+                     const std::string &msg) {
     throw ::xoscar::Error({func, file, line}, msg);
 }
 
-void torchCheckFail(const char *func,
-                    const char *file,
-                    uint32_t line,
-                    const char *msg) {
+void xoscarCheckFail(const char *func,
+                     const char *file,
+                     uint32_t line,
+                     const char *msg) {
     throw ::xoscar::Error({func, file, line}, msg);
 }
 
@@ -253,38 +250,39 @@ inline decltype(auto) str(const Args &...args) {
 }
 
 template <typename... Args>
-decltype(auto) torchCheckMsgImpl(const char * /*msg*/, const Args &...args) {
+decltype(auto) xoscarCheckMsgImpl(const char * /*msg*/, const Args &...args) {
     return ::xoscar::str(args...);
 }
-inline const char *torchCheckMsgImpl(const char *msg) { return msg; }
+inline const char *xoscarCheckMsgImpl(const char *msg) { return msg; }
 // If there is just 1 user-provided C-string argument, use it.
-inline const char *torchCheckMsgImpl(const char * /*msg*/, const char *args) {
+inline const char *xoscarCheckMsgImpl(const char * /*msg*/, const char *args) {
     return args;
 }
 
-#define TORCH_CHECK_MSG(cond, type, ...)                                       \
-    (::xoscar::torchCheckMsgImpl(                                              \
+#define XOSCAR_CHECK_MSG(cond, type, ...)                                      \
+    (::xoscar::xoscarCheckMsgImpl(                                             \
         "Expected " #cond " to be true, but got false.  "                      \
         "(Could this error message be improved?  If so, "                      \
-        "please report an enhancement request to PyTorch.)",                   \
+        "please report an enhancement request to xoscar.)",                    \
         ##__VA_ARGS__))
 
 #ifdef STRIP_ERROR_MESSAGES
-#    define TORCH_CHECK(cond, ...)                                             \
+#    define XOSCAR_CHECK(cond, ...)                                            \
         if (C10_UNLIKELY_OR_CONST(!(cond))) {                                  \
-            ::xoscar::torchCheckFail(__func__,                                 \
-                                     __FILE__,                                 \
-                                     static_cast<uint32_t>(__LINE__),          \
-                                     TORCH_CHECK_MSG(cond, "", __VA_ARGS__));  \
-        }
-#else
-#    define TORCH_CHECK(cond, ...)                                             \
-        if (C10_UNLIKELY_OR_CONST(!(cond))) {                                  \
-            ::xoscar::torchCheckFail(                                          \
+            ::xoscar::xoscarCheckFail(                                         \
                 __func__,                                                      \
                 __FILE__,                                                      \
                 static_cast<uint32_t>(__LINE__),                               \
-                TORCH_CHECK_MSG(cond, "", ##__VA_ARGS__));                     \
+                XOSCAR_CHECK_MSG(cond, "", __VA_ARGS__));                      \
+        }
+#else
+#    define XOSCAR_CHECK(cond, ...)                                            \
+        if (C10_UNLIKELY_OR_CONST(!(cond))) {                                  \
+            ::xoscar::xoscarCheckFail(                                         \
+                __func__,                                                      \
+                __FILE__,                                                      \
+                static_cast<uint32_t>(__LINE__),                               \
+                XOSCAR_CHECK_MSG(cond, "", ##__VA_ARGS__));                    \
         }
 #endif
 
@@ -309,9 +307,9 @@ using SizeType = uint64_t;
                 if (errno == EINTR) {                                          \
                     continue;                                                  \
                 } else if (errno_local == WSAETIMEDOUT) {                      \
-                    TORCH_CHECK(false, "Socket Timeout");                      \
+                    XOSCAR_CHECK(false, "Socket Timeout");                     \
                 } else if (errno_local == WSAEWOULDBLOCK) {                    \
-                    TORCH_CHECK(false, "Buffer Full");                         \
+                    XOSCAR_CHECK(false, "Buffer Full");                        \
                 } else {                                                       \
                     throw std::system_error(errno_local,                       \
                                             std::system_category());           \

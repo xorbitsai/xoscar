@@ -35,7 +35,7 @@ limitations under the License. */
 #endif
 
 #ifdef _WIN32
-#    include <WinSockUtils.hpp>
+#    include <win_sock_utils.hpp>
 #else
 #    include "unix_sock_utils.hpp"
 #endif
@@ -110,9 +110,9 @@ void BackgroundThread::join() { daemonThread_.join(); }
 void BackgroundThread::initStopSignal() {
     ghStopEvent_ = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (ghStopEvent_ == NULL) {
-        TORCH_CHECK(false,
-                    "Failed to create the control pipe to start the "
-                    "BackgroundThread run");
+        XOSCAR_CHECK(false,
+                     "Failed to create the control pipe to start the "
+                     "BackgroundThread run");
     }
 }
 
