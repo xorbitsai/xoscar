@@ -74,8 +74,7 @@ public:
     constexpr
 #endif
 
-        once_flag() noexcept
-        = default;
+        once_flag() noexcept = default;
     once_flag(const once_flag &) = delete;
     once_flag &operator=(const once_flag &) = delete;
 
