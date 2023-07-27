@@ -268,7 +268,7 @@ inline const char *xoscarCheckMsgImpl(const char * /*msg*/, const char *args) {
 
 #ifdef STRIP_ERROR_MESSAGES
 #    define XOSCAR_CHECK(cond, ...)                                            \
-        if (C10_UNLIKELY_OR_CONST(!(cond))) {                                  \
+        if (XOSCAR_UNLIKELY_OR_CONST(!(cond))) {                               \
             ::xoscar::xoscarCheckFail(                                         \
                 __func__,                                                      \
                 __FILE__,                                                      \
@@ -277,7 +277,7 @@ inline const char *xoscarCheckMsgImpl(const char * /*msg*/, const char *args) {
         }
 #else
 #    define XOSCAR_CHECK(cond, ...)                                            \
-        if (C10_UNLIKELY_OR_CONST(!(cond))) {                                  \
+        if (XOSCAR_UNLIKELY_OR_CONST(!(cond))) {                               \
             ::xoscar::xoscarCheckFail(                                         \
                 __func__,                                                      \
                 __FILE__,                                                      \
