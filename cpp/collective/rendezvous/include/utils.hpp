@@ -210,11 +210,17 @@ void xoscarCheckFail(const char *func,
 }
 
 #if defined(__GNUC__) || defined(__ICL) || defined(__clang__)
-#    define XOSCAR_LIKELY(expr) (__builtin_expect(static_cast<bool>(expr), 1))
-#    define XOSCAR_UNLIKELY(expr) (__builtin_expect(static_cast<bool>(expr), 0))
+#    ifndef XOSCAR_LIKELY
+#        define XOSCAR_LIKELY(expr)                                            \
+            (__builtin_expect(static_cast<bool>(expr), 1))
+#        define XOSCAR_UNLIKELY(expr)                                          \
+            (__builtin_expect(static_cast<bool>(expr), 0))
+#    endif
 #else
-#    define XOSCAR_LIKELY(expr) (expr)
-#    define XOSCAR_UNLIKELY(expr) (expr)
+#    ifndef XOSCAR_LIKELY
+#        define XOSCAR_LIKELY(expr) (expr)
+#        define XOSCAR_UNLIKELY(expr) (expr)
+#    endif
 #endif
 
 #if defined(__CUDACC__)
