@@ -20,7 +20,14 @@ limitations under the License. */
 #include <mutex>
 #include <thread>
 #include <utility>
-#include <utils.hpp>
+
+#if defined(__GNUC__) || defined(__ICL) || defined(__clang__)
+#    define XOSCAR_LIKELY(expr) (__builtin_expect(static_cast<bool>(expr), 1))
+#    define XOSCAR_UNLIKELY(expr) (__builtin_expect(static_cast<bool>(expr), 0))
+#else
+#    define XOSCAR_LIKELY(expr) (expr)
+#    define XOSCAR_UNLIKELY(expr) (expr)
+#endif
 
 namespace xoscar {
 
