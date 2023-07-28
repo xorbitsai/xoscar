@@ -20,6 +20,7 @@ import sys
 from distutils.command.build_ext import build_ext as _du_build_ext
 from distutils.file_util import copy_file
 from pathlib import Path
+
 from sysconfig import get_config_vars
 
 import numpy as np
@@ -175,14 +176,33 @@ class CMakeBuild(build_ext):
                 )
                 if ext._needs_stub:
                     self.write_stub(package_dir or os.curdir, ext, True)
+            elif sys.platform.startswith('win'):
+                fullname = self.get_ext_fullname(ext.name)
+                filename = self.get_ext_filename(fullname)
+                modpath = fullname.split('.')
+                package = '.'.join(modpath[:-1])
+                package_dir = build_py.get_package_dir(package)
+                if package_dir=="" and ext.name=="xoscar_pygloo":
+                    package_dir="xoscar/collective"
+                dest_filename = os.path.join(package_dir,
+                                                os.path.basename(filename))
+                src_filename = os.path.join(self.build_lib, filename)
+
+                # Always copy, even if source is older than destination, to ensure
+                # that the right extensions for the current Python/platform are
+                # used.
+                copy_file(
+                    src_filename, dest_filename, verbose=self.verbose,
+                    dry_run=self.dry_run
+                )
+                if ext._needs_stub:
+                    self.write_stub(package_dir or os.curdir, ext, True)
 
     def build_extension(self, ext):
         # TODO: support windows compilation
         is_windows = sys.platform.startswith('win')
-        if isinstance(ext, XoscarCmakeExtension) and not is_windows:
+        if isinstance(ext, XoscarCmakeExtension):
             self.build_Cmake(ext)
-        elif isinstance(ext, XoscarCmakeExtension) and is_windows:
-            pass
         else:
             ext._convert_pyx_sources_to_lang()
             _compiler = self.compiler
@@ -296,7 +316,7 @@ class CMakeBuild(build_ext):
 
 setup_options = dict(
     version=versioneer.get_version(),
-    ext_modules=extensions + [XoscarCmakeExtension("xoscar_cmake")],
+    ext_modules=extensions + [XoscarCmakeExtension("xoscar_pygloo")],
     cmdclass={"build_ext": CMakeBuild},
     long_description=build_long_description(),
     long_description_content_type="text/markdown",

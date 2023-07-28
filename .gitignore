@@ -145,3 +145,6 @@ cpp/collective/gloo/include/config.h
 
 #filestore
 python/xoscar/collective/tests/collective
+
+#libuv
+python/xoscar/collective/uv.dll

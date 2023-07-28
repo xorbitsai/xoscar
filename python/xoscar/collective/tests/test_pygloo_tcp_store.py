@@ -63,7 +63,6 @@ def worker_allgather(rank):
     np.testing.assert_array_equal(recvbuf, np.array([sendbuf] * 2))
 
 
-@require_unix
 def test_allgather():
     process1 = mp.Process(target=worker_allgather, args=(0,))
     process1.start()
@@ -116,7 +115,6 @@ def worker_allreduce(rank):
     np.testing.assert_array_equal(recvbuf, np.array(sendbuf * 2))
 
 
-@require_unix
 def test_allreduce():
     process1 = mp.Process(target=worker_allreduce, args=(0,))
     process1.start()
@@ -170,7 +168,6 @@ def worker_barrier(rank):
     np.testing.assert_array_equal(recvbuf, sendbuf * 2)
 
 
-@require_unix
 def test_barrier():
     process1 = mp.Process(target=worker_barrier, args=(0,))
     process1.start()
@@ -235,7 +232,6 @@ def worker_broadcast(rank):
     # (pid=36432)  [1. 2. 3.]]
 
 
-@require_unix
 def test_broadcast():
     process1 = mp.Process(target=worker_broadcast, args=(0,))
     process1.start()
@@ -295,6 +291,8 @@ def worker_gather(rank):
     # (pid=23173) rank 0 sends [0. 1.], receives [[0. 1. 1. 2. 2. 3.]]
 
 
+# When testing Gloo on Windows, the number of processes used for testing
+# must be less than or equal to the number of cores of the testing device.
 @require_unix
 def test_gather():
     process1 = mp.Process(target=worker_gather, args=(0,))
@@ -436,6 +434,8 @@ def worker_reduce(rank):
         )
 
 
+# When testing Gloo on Windows, the number of processes used for testing
+# must be less than or equal to the number of cores of the testing device.
 @require_unix
 def test_reduce():
     process1 = mp.Process(target=worker_reduce, args=(0,))
@@ -504,7 +504,6 @@ def worker_scatter(rank):
     # (pid=18952)  [1. 2. 3.]]
 
 
-@require_unix
 def test_scatter():
     process1 = mp.Process(target=worker_scatter, args=(0,))
     process1.start()
@@ -572,7 +571,6 @@ def worker_send_recv(rank):
     ## example output
 
 
-@require_unix
 def test_send_recv():
     process1 = mp.Process(target=worker_send_recv, args=(0,))
     process1.start()
@@ -622,6 +620,8 @@ def worker_all_to_all(rank):
     np.testing.assert_array_equal(recvbuf, np.array([0.0, 0.0, 1.0, 1.0, 2.0, 2.0]))
 
 
+# When testing Gloo on Windows, the number of processes used for testing
+# must be less than or equal to the number of cores of the testing device.
 @require_unix
 def test_all_to_all():
     process1 = mp.Process(target=worker_all_to_all, args=(0,))
