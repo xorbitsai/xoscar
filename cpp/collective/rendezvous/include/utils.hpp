@@ -32,6 +32,7 @@ typedef SSIZE_T ssize_t;
 #    include <unistd.h>
 #endif
 
+#include <call_once.h>
 #include <iostream>
 #include <numeric>
 #include <sstream>
@@ -208,20 +209,6 @@ void xoscarCheckFail(const char *func,
                      const char *msg) {
     throw ::xoscar::Error({func, file, line}, msg);
 }
-
-#if defined(__GNUC__) || defined(__ICL) || defined(__clang__)
-#    ifndef XOSCAR_LIKELY
-#        define XOSCAR_LIKELY(expr)                                            \
-            (__builtin_expect(static_cast<bool>(expr), 1))
-#        define XOSCAR_UNLIKELY(expr)                                          \
-            (__builtin_expect(static_cast<bool>(expr), 0))
-#    endif
-#else
-#    ifndef XOSCAR_LIKELY
-#        define XOSCAR_LIKELY(expr) (expr)
-#        define XOSCAR_UNLIKELY(expr) (expr)
-#    endif
-#endif
 
 #if defined(__CUDACC__)
 #    define XOSCAR_UNLIKELY_OR_CONST(e) e
