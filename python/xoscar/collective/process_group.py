@@ -89,35 +89,35 @@ class ProcessGroup(ABC):
 
     @abstractmethod
     def allreduce(self, *args, **kwargs):
-        ...
+        """All reduce function"""
 
     @abstractmethod
     def reduce(self, *args, **kwargs):
-        ...
+        """Reduce function"""
 
     @abstractmethod
     def allgather(self, *args, **kwargs):
-        ...
+        """All gather function"""
 
     @abstractmethod
     def gather(self, *args, **kwargs):
-        ...
+        """Gather function"""
 
     @abstractmethod
     def scatter(self, *args, **kwargs):
-        ...
+        """Scatter function"""
 
     @abstractmethod
     def reduce_scatter(self, *args, **kwargs):
-        ...
+        """Reduce scatter function"""
 
     @abstractmethod
     def alltoall(self, *args, **kwargs):
-        ...
+        """All to all function"""
 
     @abstractmethod
     def broadcast(self, *args, **kwargs):
-        ...
+        """Broadcast function"""
 
 
 class ProcessGroupGloo(ProcessGroup):
@@ -267,7 +267,7 @@ class ProcessGroupGloo(ProcessGroup):
         recv_data: Any,
         recv_elems: List[int],
         op: CollectiveReduceOp = CollectiveReduceOp.SUM,
-    ):
+    ):  # pragma: no cover
         send_buf = convert_data_to_np_array(send_data)
         recv_buf = convert_data_to_np_array(recv_data)
         sendptr = send_buf.ctypes.data

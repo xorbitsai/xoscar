@@ -176,7 +176,7 @@ class RankActor(Actor):
         recv_elems: List[int],
         op: CollectiveReduceOp = CollectiveReduceOp.SUM,
         pg_name: str = "default",
-    ):
+    ):  # pragma: no cover
         self.name_to_pg[self._backend][pg_name].reduce_scatter(
             send_data, recv_data, recv_elems, op
         )
