@@ -52,6 +52,10 @@ class WorkerActor(Actor):
         os.environ[RANK_ADDRESS_ENV_KEY] = self.address
         return await init_process_group(self._rank, self._world)
 
+    async def init_process_group_without_env(self):
+        with pytest.raises(RuntimeError):
+            await init_process_group(self._rank, self._world)
+
     async def test_params(self):
         rank_ref: ActorRefType[RankActor] = await actor_ref(
             address=self.address, uid="RankActor"
@@ -227,3 +231,32 @@ async def test_collective():
         t1 = r1.test_collective_np()
         t2 = r2.test_collective_np()
         await asyncio.gather(*[t0, t1, t2])
+
+
+@pytest.mark.asyncio
+@require_unix
+async def test_collective_without_env():
+    pool = await create_actor_pool(
+        "127.0.0.1",
+        n_process=3,
+    )
+    main_addr = pool.external_address
+    config = (await get_pool_config(pool.external_address)).as_dict()
+    all_addrs = list(config["mapping"].keys())
+    all_addrs.remove(main_addr)
+
+    async with pool:
+        ctx = get_context()
+        r0 = await ctx.create_actor(WorkerActor, 0, 3, address=all_addrs[0])
+        r1 = await ctx.create_actor(WorkerActor, 1, 3, address=all_addrs[1])
+        r2 = await ctx.create_actor(WorkerActor, 2, 3, address=all_addrs[2])
+        t0 = r0.init_process_group_without_env()
+        t1 = r1.init_process_group_without_env()
+        t2 = r2.init_process_group_without_env()
+        await asyncio.gather(*[t0, t1, t2])
+
+        t0 = r0.init_process_group()
+        t1 = r1.init_process_group()
+        t2 = r2.init_process_group()
+        with pytest.raises(ValueError):
+            await asyncio.gather(*[t0, t1, t2])
