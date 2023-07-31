@@ -187,6 +187,7 @@ class WorkerActor(Actor):
         await self.test_gather()
         await self.test_allgather()
         await self.test_scatter()
+        # reduce_scatter has problem on non-linux os since uv has issue in gloo
         if is_linux():
             await self.test_reduce_scatter()
         await self.test_alltoall()
