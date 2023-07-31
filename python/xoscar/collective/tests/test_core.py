@@ -20,6 +20,7 @@ import pytest
 
 from ... import Actor, create_actor_pool, get_pool_config
 from ...context import get_context
+from ...tests.core import require_unix
 from ...utils import is_linux
 from ..common import (
     RANK_ADDRESS_ENV_KEY,
@@ -166,6 +167,7 @@ class WorkerActor(Actor):
 
 
 @pytest.mark.asyncio
+@require_unix
 async def test_collective():
     pool = await create_actor_pool(
         "127.0.0.1",
