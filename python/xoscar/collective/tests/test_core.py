@@ -20,7 +20,7 @@ import pytest
 
 from ... import Actor, create_actor_pool, get_pool_config
 from ...context import get_context
-from ...utils import is_macos
+from ...utils import is_linux
 from ..common import (
     RANK_ADDRESS_ENV_KEY,
     RENDEZVOUS_MASTER_IP_ENV_KEY,
@@ -159,7 +159,7 @@ class WorkerActor(Actor):
         await self.test_gather()
         await self.test_allgather()
         await self.test_scatter()
-        if not is_macos():
+        if is_linux():
             await self.test_reduce_scatter()
         await self.test_alltoall()
         await self.test_broadcast()
