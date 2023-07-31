@@ -18,7 +18,7 @@ import os
 import numpy as np
 import pytest
 
-from ... import Actor, create_actor_pool, get_pool_config
+from ... import Actor, ActorRefType, actor_ref, create_actor_pool, get_pool_config
 from ...context import get_context
 from ...tests.core import require_unix
 from ...utils import is_linux
@@ -28,6 +28,7 @@ from ..common import (
     RENDEZVOUS_MASTER_PORT_ENV_KEY,
 )
 from ..core import (
+    RankActor,
     allgather,
     allreduce,
     alltoall,
@@ -39,6 +40,7 @@ from ..core import (
     reduce_scatter,
     scatter,
 )
+from ..process_group import ProcessGroup
 
 
 class WorkerActor(Actor):
@@ -49,6 +51,30 @@ class WorkerActor(Actor):
     async def init_process_group(self):
         os.environ[RANK_ADDRESS_ENV_KEY] = self.address
         return await init_process_group(self._rank, self._world)
+
+    async def test_params(self):
+        rank_ref: ActorRefType[RankActor] = await actor_ref(
+            address=self.address, uid="RankActor"
+        )
+        uid = rank_ref.uid
+        assert uid == bytes(RankActor.default_uid(), "utf-8")
+
+        rank = await rank_ref.rank()
+        assert rank == self._rank
+
+        world = await rank_ref.world()
+        assert world == self._world
+
+        backend = await rank_ref.backend()
+        assert backend == "gloo"
+
+        pg: ProcessGroup = await rank_ref.process_group("default")
+        assert pg is not None
+
+        assert pg.rank == self._rank
+        assert pg.name == "default"
+        assert pg.world_size == self._world
+        assert pg.options is None
 
     async def test_reduce(self):
         sendbuf = np.array([1, 2, 3, 4], dtype=np.int32)
@@ -155,6 +181,7 @@ class WorkerActor(Actor):
         np.testing.assert_array_equal(recvbuf, np.zeros_like(recvbuf) + _group[root])
 
     async def test_collective_np(self):
+        await self.test_params()
         await self.test_reduce()
         await self.test_allreduce()
         await self.test_gather()

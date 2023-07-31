@@ -44,6 +44,7 @@ class RankActor(Actor):
         self.name_to_pg: Dict[str, Dict[str, "ProcessGroup"]] = defaultdict(dict)
         self._pg_options = pg_options
 
+    @classmethod
     def default_uid(cls):
         return "RankActor"
 
@@ -52,9 +53,16 @@ class RankActor(Actor):
         _ip = self._get_ip()
         if self._backend == "gloo":
             pg = ProcessGroupGloo(
-                _ip, self._rank, self._world, pg_options=self._pg_options
+                _ip,
+                self._rank,
+                self._world,
+                group_name="default",
+                pg_options=self._pg_options,
             )
             self.name_to_pg["gloo"]["default"] = pg
+
+    def process_group(self, pg_name: str) -> ProcessGroup:
+        return self.name_to_pg[self._backend][pg_name]
 
     def rank(self) -> int:
         return self._rank
