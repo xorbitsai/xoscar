@@ -312,8 +312,7 @@ class UCXChannel(Channel):
                     for buf in meta_buffers:
                         await self.ucp_endpoint.send(buf)
                 for buffer in buffers:
-                    if buffer.nbytes if hasattr(buffer, "nbytes") else len(buffer) > 0:
-                        await self.ucp_endpoint.send(buffer)
+                    await self.ucp_endpoint.send(buffer)
         except ucp.exceptions.UCXBaseException:  # pragma: no cover
             self.abort()
             raise ChannelClosed("While writing, the connection was closed")
