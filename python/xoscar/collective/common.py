@@ -22,25 +22,19 @@ ReduceOpMappingGloo: Dict["CollectiveReduceOp", "xp.ReduceOp"] = {}
 AllReduceAlgorithmMappingGloo: Dict["AllReduceAlgorithm", "xp.AllreduceAlgorithm"] = {}
 
 
-def _register_reduce_op():
-    def wrap(reduce_op):
-        for op_type in reduce_op:
-            ReduceOpMappingGloo[op_type] = xp.ReduceOp(op_type)
-        return reduce_op
-
-    return wrap
+def _register_reduce_op(reduce_op):
+    for op_type in reduce_op:
+        ReduceOpMappingGloo[op_type] = xp.ReduceOp(op_type)
+    return reduce_op
 
 
-def _register_allreduce_algo():
-    def wrap(algorithms):
-        for algo in algorithms:
-            AllReduceAlgorithmMappingGloo[algo] = xp.AllreduceAlgorithm(algo)
-        return algorithms
-
-    return wrap
+def _register_allreduce_algo(algorithms):
+    for algo in algorithms:
+        AllReduceAlgorithmMappingGloo[algo] = xp.AllreduceAlgorithm(algo)
+    return algorithms
 
 
-@_register_reduce_op()
+@_register_reduce_op
 class CollectiveReduceOp(IntEnum):
     SUM = 0
     PRODUCT = 1
@@ -52,7 +46,7 @@ class CollectiveReduceOp(IntEnum):
     UNUSED = 7
 
 
-@_register_allreduce_algo()
+@_register_allreduce_algo
 class AllReduceAlgorithm(IntEnum):
     UNSPECIFIED = 0
     RING = 1

@@ -60,6 +60,8 @@ class RankActor(Actor):
                 pg_options=self._pg_options,
             )
             self.name_to_pg["gloo"]["default"] = pg
+        else:
+            raise NotImplementedError("Not impl other backends for now!")
 
     def process_group(self, pg_name: str) -> ProcessGroup:
         return self.name_to_pg[self._backend][pg_name]
