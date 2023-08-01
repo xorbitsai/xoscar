@@ -35,7 +35,12 @@ from typing import List, Optional
 from ..._utils import reset_id_random_seed
 from ...utils import dataslots, ensure_coverage
 from ..config import ActorPoolConfig
-from ..message import CreateActorMessage
+from ..message import (
+    ControlMessage,
+    ControlMessageType,
+    CreateActorMessage,
+    new_message_id,
+)
 from ..pool import MainActorPoolBase, SubActorPoolBase, _register_message_handler
 
 _is_windows: bool = sys.platform.startswith("win")
@@ -283,6 +288,113 @@ class MainActorPool(MainActorPoolBase):
         finally:
             status_queue.put(process_status)
         await pool.join()
+
+    @classmethod
+    async def _append_sub_pool(
+        cls,
+        config: ActorPoolConfig,
+        process_index: int,
+        status_queue: multiprocessing.Queue,
+    ):
+        await cls._create_sub_pool(config, process_index, status_queue)
+
+    @classmethod
+    def append_sub_pool(
+        cls,
+        config: ActorPoolConfig,
+        process_index: int,
+        status_queue: multiprocessing.Queue,
+    ):
+        coro = cls._create_sub_pool(config, process_index, status_queue)
+        asyncio.run(coro)
+
+    async def add_new_sub_pool(
+        self,
+        label: str | None = None,
+        internal_address: str | None = None,
+        external_address: str | None = None,
+        env: dict | None = None,
+        modules: list[str] | None = None,
+        suspend_sigint: bool | None = None,
+        use_uvloop: bool | None = None,
+        logging_conf: dict | None = None,
+        start_method: str | None = None,
+        kwargs: dict | None = None,
+    ):
+        external_address = (
+            external_address
+            or MainActorPool.get_external_addresses(self.external_address, n_process=1)[
+                -1
+            ]
+        )
+
+        actor_pool_config = self._config.as_dict()
+        last_process_index = self._config.get_process_indexes()[-1]
+        last_logging_conf = actor_pool_config["pools"][last_process_index][
+            "logging_conf"
+        ]
+        last_use_uv_loop = actor_pool_config["pools"][last_process_index]["use_uvloop"]
+        _logging_conf = logging_conf or last_logging_conf
+        _use_uv_loop = use_uvloop if use_uvloop is not None else last_use_uv_loop
+
+        process_index = next(MainActorPool.process_index_gen(external_address))
+        print(f"PP process index: {process_index}")
+        internal_address = internal_address or MainActorPool.gen_internal_address(
+            process_index, external_address
+        )
+        print(f"PP internal address: {internal_address}")
+
+        # cur_config = ActorPoolConfig()
+        self._config.add_pool_conf(
+            process_index,
+            label,
+            internal_address,
+            external_address,
+            env,
+            modules,
+            suspend_sigint,
+            _use_uv_loop,
+            _logging_conf,
+            kwargs,
+        )
+        # cur_config = self._config.get_pool_config(process_index)
+
+        def start_pool_in_process():
+            ctx = multiprocessing.get_context(method=start_method)
+            status_queue = ctx.Queue()
+
+            with _suspend_init_main():
+                process = ctx.Process(
+                    target=MainActorPool.append_sub_pool,
+                    args=(self._config, process_index, status_queue),
+                    name=f"IndigenActorPool{process_index}",
+                )
+                process.daemon = True
+                process.start()
+
+            # wait for sub actor pool to finish starting
+            process_status = status_queue.get()
+            return process, process_status
+
+        loop = asyncio.get_running_loop()
+        with futures.ThreadPoolExecutor(1) as executor:
+            create_pool_task = loop.run_in_executor(executor, start_pool_in_process)
+            process, process_status = await create_pool_task
+
+        self._config.reset_pool_external_address(
+            process_index, process_status.external_addresses[0]
+        )
+        self.attach_sub_process(process_status.external_addresses[0], process)
+
+        control_message = ControlMessage(
+            message_id=new_message_id(),
+            address=self.external_address,
+            control_message_type=ControlMessageType.sync_config,
+            content=actor_pool_config,
+        )
+        await self.handle_control_command(control_message)
+
+        return process_status.external_addresses[0]
 
     async def kill_sub_pool(
         self, process: multiprocessing.Process, force: bool = False
