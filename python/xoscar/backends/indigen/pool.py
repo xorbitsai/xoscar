@@ -338,13 +338,10 @@ class MainActorPool(MainActorPoolBase):
         _use_uv_loop = use_uvloop if use_uvloop is not None else last_use_uv_loop
 
         process_index = next(MainActorPool.process_index_gen(external_address))
-        print(f"PP process index: {process_index}")
         internal_address = internal_address or MainActorPool.gen_internal_address(
             process_index, external_address
         )
-        print(f"PP internal address: {internal_address}")
 
-        # cur_config = ActorPoolConfig()
         self._config.add_pool_conf(
             process_index,
             label,
@@ -357,7 +354,6 @@ class MainActorPool(MainActorPoolBase):
             _logging_conf,
             kwargs,
         )
-        # cur_config = self._config.get_pool_config(process_index)
 
         def start_pool_in_process():
             ctx = multiprocessing.get_context(method=start_method)
