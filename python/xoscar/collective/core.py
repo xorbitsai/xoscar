@@ -253,7 +253,7 @@ async def allreduce(
     group_name: str = "default",
 ):
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
-    ref = await actor_ref(address=address, uid=f"RankActor")
+    ref = await actor_ref(address=address, uid="RankActor")
     await ref.allreduce(
         send_data, recv_data, op=op, algorithm=algorithm, tag=tag, pg_name=group_name
     )
