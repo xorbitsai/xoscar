@@ -11,17 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 
-from .core import (
-    RankActor,
-    allgather,
-    allreduce,
-    alltoall,
-    broadcast,
-    gather,
-    init_process_group,
-    new_group,
-    reduce,
-    reduce_scatter,
-    scatter,
-)
+import numpy as np
+
+
+def convert_data_to_np_array(data):
+    if isinstance(data, np.ndarray):
+        return data
+    else:
+        return np.frombuffer(data, dtype="u1")
+
+
+def get_rank_address_via_env(env_key: str, err_message: str) -> str:
+    address = os.environ.get(env_key, None)
+    if address is None:
+        raise RuntimeError(err_message)
+    return address
