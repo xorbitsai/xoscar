@@ -993,6 +993,7 @@ async def test_append_sub_pool():
     config = await get_pool_config(pool.external_address)
     assert len(config.get_process_indexes()) == 3
 
+    # test add a new sub pool
     sub_external_address = await pool.append_sub_pool(env={"foo": "bar"})
     assert sub_external_address is not None
 
@@ -1014,6 +1015,7 @@ async def test_append_sub_pool():
     assert ref.address == sub_external_address
     assert await ref.test() == "this is dummy!"
 
+    # test remove
     await pool.remove_sub_pool(sub_external_address)
     config = await get_pool_config(pool.external_address)
     assert len(config.get_process_indexes()) == 3
