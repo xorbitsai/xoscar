@@ -289,6 +289,16 @@ class MainActorPool(MainActorPoolBase):
             status_queue.put(process_status)
         await pool.join()
 
+    @classmethod
+    def _append_sub_pool(
+        cls,
+        config: ActorPoolConfig,
+        _process_index: int,
+        _status_queue: multiprocessing.Queue,
+    ):
+        coro = cls._create_sub_pool(config, _process_index, _status_queue)
+        asyncio.run(coro)
+
     async def append_sub_pool(
         self,
         label: str | None = None,
@@ -341,19 +351,9 @@ class MainActorPool(MainActorPoolBase):
             ctx = multiprocessing.get_context(method=start_method)
             status_queue = ctx.Queue()
 
-            def _append_sub_pool(
-                config: ActorPoolConfig,
-                _process_index: int,
-                _status_queue: multiprocessing.Queue,
-            ):
-                coro = MainActorPool._create_sub_pool(
-                    config, _process_index, _status_queue
-                )
-                asyncio.run(coro)
-
             with _suspend_init_main():
                 process = ctx.Process(
-                    target=_append_sub_pool,
+                    target=MainActorPool._append_sub_pool,
                     args=(self._config, process_index, status_queue),
                     name=f"IndigenActorPool{process_index}",
                 )
