@@ -108,6 +108,10 @@ jobs:
       if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version == '3.11') }}
       run: |
         conda install -c conda-forge libstdcxx-ng
+    
+    - name: Install cupy
+      run: |
+        conda install -c conda-forge cupy
 
     - name: Install dependencies
       env:
