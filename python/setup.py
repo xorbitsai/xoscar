@@ -201,8 +201,11 @@ class CMakeBuild(build_ext):
     def build_extension(self, ext):
         # TODO: support windows compilation
         is_windows = sys.platform.startswith('win')
-        if isinstance(ext, XoscarCmakeExtension):
+        bit_number = platform.architecture()[0]
+        if isinstance(ext, XoscarCmakeExtension) and not (is_windows and bit_number=="32bit"):
             self.build_Cmake(ext)
+        elif isinstance(ext, XoscarCmakeExtension) and (is_windows and bit_number=="32bit"):
+            pass
         else:
             ext._convert_pyx_sources_to_lang()
             _compiler = self.compiler
