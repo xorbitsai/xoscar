@@ -1503,7 +1503,6 @@ async def create_actor_pool(
     external_addresses = pool_cls.get_external_addresses(
         address, n_process=n_process, ports=ports, schemes=external_address_schemes
     )
-    print(f"External address: {external_addresses}")
     actor_pool_config = ActorPoolConfig()
     actor_pool_config.add_metric_configs(kwargs.get("metrics", {}))
     # add main config

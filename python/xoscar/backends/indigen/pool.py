@@ -289,26 +289,7 @@ class MainActorPool(MainActorPoolBase):
             status_queue.put(process_status)
         await pool.join()
 
-    @classmethod
-    async def _append_sub_pool(
-        cls,
-        config: ActorPoolConfig,
-        process_index: int,
-        status_queue: multiprocessing.Queue,
-    ):
-        await cls._create_sub_pool(config, process_index, status_queue)
-
-    @classmethod
-    def append_sub_pool(
-        cls,
-        config: ActorPoolConfig,
-        process_index: int,
-        status_queue: multiprocessing.Queue,
-    ):
-        coro = cls._create_sub_pool(config, process_index, status_queue)
-        asyncio.run(coro)
-
-    async def add_new_sub_pool(
+    async def append_sub_pool(
         self,
         label: str | None = None,
         internal_address: str | None = None,
@@ -328,6 +309,7 @@ class MainActorPool(MainActorPoolBase):
             ]
         )
 
+        # use last process index's logging_conf and use_uv_loop config if not provide
         actor_pool_config = self._config.as_dict()
         last_process_index = self._config.get_process_indexes()[-1]
         last_logging_conf = actor_pool_config["pools"][last_process_index][
@@ -359,9 +341,19 @@ class MainActorPool(MainActorPoolBase):
             ctx = multiprocessing.get_context(method=start_method)
             status_queue = ctx.Queue()
 
+            def _append_sub_pool(
+                config: ActorPoolConfig,
+                _process_index: int,
+                _status_queue: multiprocessing.Queue,
+            ):
+                coro = MainActorPool._create_sub_pool(
+                    config, _process_index, _status_queue
+                )
+                asyncio.run(coro)
+
             with _suspend_init_main():
                 process = ctx.Process(
-                    target=MainActorPool.append_sub_pool,
+                    target=_append_sub_pool,
                     args=(self._config, process_index, status_queue),
                     name=f"IndigenActorPool{process_index}",
                 )
@@ -386,11 +378,28 @@ class MainActorPool(MainActorPoolBase):
             message_id=new_message_id(),
             address=self.external_address,
             control_message_type=ControlMessageType.sync_config,
-            content=actor_pool_config,
+            content=self._config,
         )
         await self.handle_control_command(control_message)
 
         return process_status.external_addresses[0]
+
+    async def remove_sub_pool(
+        self, external_address: str, timeout: float | None = None, force: bool = False
+    ):
+        process = self.sub_processes[external_address]
+        process_index = self._config.get_process_index(external_address)
+        await self.stop_sub_pool(external_address, process, timeout, force)
+        del self.sub_processes[external_address]
+        self._config.remove_pool_config(process_index)
+
+        control_message = ControlMessage(
+            message_id=new_message_id(),
+            address=self.external_address,
+            control_message_type=ControlMessageType.sync_config,
+            content=self._config,
+        )
+        await self.handle_control_command(control_message)
 
     async def kill_sub_pool(
         self, process: multiprocessing.Process, force: bool = False
