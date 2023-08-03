@@ -135,7 +135,8 @@ class RankActor(Actor):
         group_rank = global_ranks.index(self._rank)
         group_world = len(global_ranks)
         group_name = self._process_group_name(global_ranks)
-        device_id = self._device_id
+        device_id = self._device_id if self._device_id != None else -1
+        cid = cid if cid != None else ()
         if group_name in self.name_to_pg[self._backend]:
             return group_name
         _ip = self._get_ip()
@@ -147,9 +148,9 @@ class RankActor(Actor):
                 group_name=group_name,
                 pg_options=pg_options,
             )
-        else:
-            assert device_id != -1, "device_id can not be None"
-            assert cid != (), "cid can not be None"
+        elif self._backend == "nccl":
+            assert device_id != -1, "device_id should be set to a int no less than 0"
+            assert cid != (), "cid should be set"
             pg = ProcessGroupNCCL(
                 _ip,
                 group_rank,
