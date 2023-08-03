@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+import multiprocessing as mp
 import os
 
 import numpy as np
@@ -41,7 +42,7 @@ from ..core import (
 )
 
 
-class WorkerActor(Actor):
+class NcclWorkerActor(Actor):
     def __init__(self, rank, device_id, world, commId, *args, **kwargs):
         self._rank = rank
         self.device_id = device_id
@@ -189,8 +190,7 @@ class WorkerActor(Actor):
 @pytest.mark.asyncio
 @require_cupy
 async def test_collective():
-    from cupy.cuda import nccl
-
+    mp.set_start_method("spawn", force=True)
     pool = await create_actor_pool(
         "127.0.0.1",
         n_process=2,
@@ -205,14 +205,16 @@ async def test_collective():
     config = (await get_pool_config(pool.external_address)).as_dict()
     all_addrs = list(config["mapping"].keys())
     async with pool:
+        from cupy.cuda import nccl
+
         ctx = get_context()
         cid = nccl.get_unique_id()
-        r0 = await ctx.create_actor(WorkerActor, 0, 0, 2, cid, address=all_addrs[0])
-        r1 = await ctx.create_actor(WorkerActor, 1, 1, 2, cid, address=all_addrs[1])
+        r0 = await ctx.create_actor(NcclWorkerActor, 0, 0, 2, cid, address=all_addrs[0])
+        r1 = await ctx.create_actor(NcclWorkerActor, 1, 1, 2, cid, address=all_addrs[1])
         t0 = r0.init_process_group()
         t1 = r1.init_process_group()
-        await asyncio.gather(*[t0, t1])
+        await asyncio.gather(t0, t1)
         cid = nccl.get_unique_id()
         t0 = r0.test_collective_np(cid)
         t1 = r1.test_collective_np(cid)
-        await asyncio.gather(*[t0, t1])
+        await asyncio.gather(t0, t1)
