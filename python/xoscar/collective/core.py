@@ -47,7 +47,7 @@ class RankActor(Actor):
             backend == "nccl" and device_id != -1 and commId != ()
         ), "The device id or cid should be set when using nccl as backend."
         assert backend == "gloo" or (
-            backend == "nccl" and cupy != None
+            backend == "nccl" and cupy is not None
         ), "cupy is required when using nccl as backend."
         self._rank = rank
         self._device_id = device_id
@@ -135,23 +135,24 @@ class RankActor(Actor):
         group_rank = global_ranks.index(self._rank)
         group_world = len(global_ranks)
         group_name = self._process_group_name(global_ranks)
-        device_id = self._device_id if self._device_id != None else -1
-        cid = cid if cid != None else ()
+        device_id = self._device_id if self._device_id is not None else -1
+        cid = cid if cid is not None else ()
         if group_name in self.name_to_pg[self._backend]:
             return group_name
         _ip = self._get_ip()
         if self._backend == "gloo":
-            pg = ProcessGroupGloo(
+            pg_gloo = ProcessGroupGloo(
                 _ip,
                 group_rank,
                 group_world,
                 group_name=group_name,
                 pg_options=pg_options,
             )
+            self.name_to_pg[self._backend][group_name] = pg_gloo
         elif self._backend == "nccl":
             assert device_id != -1, "device_id should be set to a int no less than 0"
             assert cid != (), "cid should be set"
-            pg = ProcessGroupNCCL(
+            pg_nccl = ProcessGroupNCCL(
                 _ip,
                 group_rank,
                 device_id,
@@ -160,7 +161,9 @@ class RankActor(Actor):
                 group_name=group_name,
                 pg_options=pg_options,
             )
-        self.name_to_pg[self._backend][group_name] = pg
+            self.name_to_pg[self._backend][group_name] = pg_nccl
+        else:
+            raise NotImplementedError("Not impl other backends for now!")
         return group_name
 
     def reduce(
@@ -320,7 +323,7 @@ async def init_process_group(
         backend == "nccl" and device_id != -1 and commId != ()
     ), "The device id or cid should be set when using nccl as backend."
     assert backend == "gloo" or (
-        backend == "nccl" and cupy != None
+        backend == "nccl" and cupy is not None
     ), "cupy is required when using nccl as backend."
     address = address or os.environ.get(RANK_ADDRESS_ENV_KEY, None)
     if address is None:
