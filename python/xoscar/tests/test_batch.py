@@ -18,7 +18,16 @@ import sys
 
 import pytest
 
+from .. import (
+    Actor,
+    StatelessActor,
+    actor_ref,
+    create_actor,
+    create_actor_pool,
+    get_pool_config,
+)
 from ..batch import build_args_binder, extensible
+from ..core import NO_LOCK_ATTRIBUTE_HINT, no_lock
 
 
 def _wrap_async(use_async):
@@ -215,3 +224,60 @@ async def test_extensible_single_with_batch(use_async):
     assert ret == [3, 3]
     assert test_inst.arg_list == [(30,), (33,), (35,)]
     assert test_inst.kwarg_list == [{"kwarg": 112}, {"kwarg": 115}, {"kwarg": 117}]
+
+
+@pytest.mark.asyncio
+async def test_no_lock():
+    pool = await create_actor_pool("127.0.0.1", n_process=1)
+    addr = pool.external_address
+    config = await get_pool_config(addr)
+    addrs = list(config.as_dict()["mapping"].keys())
+
+    class DummyActor(Actor):
+        def __init__(self):
+            super().__init__()
+            self.arg_list = []
+            self.kwarg_list = []
+
+        @classmethod
+        def default_uid(cls):
+            return "DummyActor"
+
+        @extensible
+        @no_lock
+        def method(self, *args, **kwargs):
+            self.arg_list.append(tuple(a * 2 for a in args))
+            self.kwarg_list.append({k: v * 2 for k, v in kwargs.items()})
+            return len(self.kwarg_list)
+
+        @method.batch
+        @no_lock
+        def b_method(self, args_list, kwargs_list):
+            self.arg_list.extend([tuple(a * 2 + 1 for a in args) for args in args_list])
+            self.kwarg_list.extend(
+                [{k: v * 2 + 1 for k, v in kwargs.items()} for kwargs in kwargs_list]
+            )
+            return [len(self.kwarg_list)] * len(args_list)
+
+    class WorkerActor(StatelessActor):
+        def __init__(self):
+            super().__init__()
+
+        async def __post_create__(self):
+            self._dummy_ref = await actor_ref(
+                address=self.address, uid=DummyActor.default_uid()
+            )
+
+        async def test_method(self):
+            assert await self._dummy_ref.method(1, kwarg=2) == 1
+            assert getattr(DummyActor.method, NO_LOCK_ATTRIBUTE_HINT, False) is True
+
+            assert await self._dummy_ref.method.batch(
+                self._dummy_ref.method.delay(1, kwarg=2),
+                self._dummy_ref.method.delay(3, kwarg=4),
+            ) == [3, 3]
+            assert getattr(DummyActor.b_method, NO_LOCK_ATTRIBUTE_HINT, False) is True
+
+    await create_actor(DummyActor, address=addrs[0], uid=DummyActor.default_uid())
+    ref = await create_actor(WorkerActor, address=addrs[0])
+    await ref.test_method()
