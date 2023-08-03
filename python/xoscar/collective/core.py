@@ -37,15 +37,15 @@ class RankActor(Actor):
         rank: int,
         world: int,
         backend: str = "gloo",
-        device_id: Optional[int] = None,
-        commId: Optional[tuple] = None,
+        device_id: Optional[int] = -1,
+        commId: Optional[tuple] = (),
         pg_options: Optional[ProcessGroup.Options] = None,
         *args,
         **kwargs,
     ):
         assert backend == "gloo" or (
-            backend == "nccl" and device_id != None and commId != None
-        ), "The device id or cid can not be None when using nccl as backend."
+            backend == "nccl" and device_id != -1 and commId != ()
+        ), "The device id or cid should be set when using nccl as backend."
         assert backend == "gloo" or (
             backend == "nccl" and cupy != None
         ), "cupy is required when using nccl as backend."
@@ -115,7 +115,7 @@ class RankActor(Actor):
     def new_group(
         self,
         ranks: List[int],
-        cid: Optional[tuple] = None,
+        cid: Optional[tuple] = (),
         pg_options: Optional[ProcessGroup.Options] = None,
     ) -> Optional[str]:
         assert (
@@ -148,8 +148,8 @@ class RankActor(Actor):
                 pg_options=pg_options,
             )
         else:
-            assert device_id != None, "device_id can not be None"
-            assert cid != None, "cid can not be None"
+            assert device_id != -1, "device_id can not be None"
+            assert cid != (), "cid can not be None"
             pg = ProcessGroupNCCL(
                 _ip,
                 group_rank,
@@ -311,13 +311,13 @@ async def init_process_group(
     rank: int,
     world_size: int,
     backend: str = "gloo",
-    device_id: Optional[int] = None,
-    commId: Optional[tuple] = None,
+    device_id: Optional[int] = -1,
+    commId: Optional[tuple] = (),
     address: Optional[str] = None,
 ):
     assert backend == "gloo" or (
-        backend == "nccl" and device_id != None and commId != None
-    ), "The device id or cid can not be None when using nccl as backend."
+        backend == "nccl" and device_id != -1 and commId != ()
+    ), "The device id or cid should be set when using nccl as backend."
     assert backend == "gloo" or (
         backend == "nccl" and cupy != None
     ), "cupy is required when using nccl as backend."
@@ -341,7 +341,7 @@ async def init_process_group(
 
 async def new_group(
     ranks: List[int],
-    cid: Optional[tuple] = None,
+    cid: Optional[tuple] = (),
     pg_options: Optional[ProcessGroup.Options] = None,
 ):
     address = os.environ.get(RANK_ADDRESS_ENV_KEY, None)
