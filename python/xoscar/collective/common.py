@@ -89,6 +89,13 @@ else:
         CollectiveReduceOp.MAX: nccl.NCCL_MAX,
         CollectiveReduceOp.MIN: nccl.NCCL_MIN,
     }
+
+    ReduceOpMappingNCCLStr: Dict[CollectiveReduceOp, str] = {
+        CollectiveReduceOp.SUM: "sum",
+        CollectiveReduceOp.PRODUCT: "prod",
+        CollectiveReduceOp.MAX: "max",
+        CollectiveReduceOp.MIN: "min",
+    }
 # Some static variables
 INVOKE_ERROR_MESSAGE = "Collective-related functions must be called in a process that is involved in collection communication."
 RANK_ADDRESS_ENV_KEY = "COLLECTIVE_RANK_ADDRESS"

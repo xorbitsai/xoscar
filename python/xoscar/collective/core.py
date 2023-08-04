@@ -38,14 +38,13 @@ class RankActor(Actor):
         world: int,
         backend: str = "gloo",
         device_id: Optional[int] = -1,
-        commId: Optional[tuple] = (),
         pg_options: Optional[ProcessGroup.Options] = None,
         *args,
         **kwargs,
     ):
         assert backend == "gloo" or (
-            backend == "nccl" and device_id != -1 and commId != ()
-        ), "The device id or cid should be set when using nccl as backend."
+            backend == "nccl" and device_id != -1
+        ), "The device id should be set when using nccl as backend."
         assert backend == "gloo" or (
             backend == "nccl" and cupy is not None
         ), "cupy is required when using nccl as backend."
@@ -54,7 +53,6 @@ class RankActor(Actor):
         self._world = world
         self._backend = backend
         self.name_to_pg: Dict[str, Dict[str, "ProcessGroup"]] = defaultdict(dict)
-        self._commId = commId
         self._pg_options = pg_options
 
     @classmethod
@@ -79,7 +77,6 @@ class RankActor(Actor):
                 self._rank,
                 self._device_id,
                 self._world,
-                self._commId,
                 pg_options=self._pg_options,
             )
             self.name_to_pg["nccl"]["default"] = pg
@@ -98,9 +95,6 @@ class RankActor(Actor):
     def device_id(self):
         return self._device_id
 
-    def commId(self):
-        return self._commId
-
     def backend(self) -> str:
         return self._backend
 
@@ -115,7 +109,6 @@ class RankActor(Actor):
     def new_group(
         self,
         ranks: List[int],
-        cid: Optional[tuple] = (),
         pg_options: Optional[ProcessGroup.Options] = None,
     ) -> Optional[str]:
         assert (
@@ -136,7 +129,6 @@ class RankActor(Actor):
         group_world = len(global_ranks)
         group_name = self._process_group_name(global_ranks)
         device_id = self._device_id if self._device_id is not None else -1
-        cid = cid if cid is not None else ()
         if group_name in self.name_to_pg[self._backend]:
             return group_name
         _ip = self._get_ip()
@@ -151,13 +143,11 @@ class RankActor(Actor):
             self.name_to_pg[self._backend][group_name] = pg_gloo
         elif self._backend == "nccl":
             assert device_id != -1, "device_id should be set to a int no less than 0"
-            assert cid != (), "cid should be set"
             pg_nccl = ProcessGroupNCCL(
                 _ip,
                 group_rank,
                 device_id,
                 group_world,
-                cid,
                 group_name=group_name,
                 pg_options=pg_options,
             )
@@ -316,12 +306,11 @@ async def init_process_group(
     world_size: int,
     backend: str = "gloo",
     device_id: Optional[int] = -1,
-    commId: Optional[tuple] = (),
     address: Optional[str] = None,
 ):
     assert backend == "gloo" or (
-        backend == "nccl" and device_id != -1 and commId != ()
-    ), "The device id or cid should be set when using nccl as backend."
+        backend == "nccl" and device_id != -1
+    ), "The device id should be set when using nccl as backend."
     assert backend == "gloo" or (
         backend == "nccl" and cupy is not None
     ), "cupy is required when using nccl as backend."
@@ -337,7 +326,6 @@ async def init_process_group(
         world_size,
         backend=backend,
         device_id=device_id,
-        commId=commId,
         address=address,
         uid="RankActor",
     )
@@ -345,14 +333,13 @@ async def init_process_group(
 
 async def new_group(
     ranks: List[int],
-    cid: Optional[tuple] = (),
     pg_options: Optional[ProcessGroup.Options] = None,
 ):
     address = os.environ.get(RANK_ADDRESS_ENV_KEY, None)
     if address is None:
         raise RuntimeError(INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
-    return await ref.new_group(ranks, cid, pg_options)
+    return await ref.new_group(ranks, pg_options)
 
 
 async def reduce(
