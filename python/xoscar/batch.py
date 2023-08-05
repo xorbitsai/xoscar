@@ -22,6 +22,8 @@ from collections import namedtuple
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from .core import NO_LOCK_ATTRIBUTE_HINT
+
 
 def build_args_binder(func, remove_self: bool = True) -> Callable | None:
     try:
@@ -221,9 +223,16 @@ class _ExtensibleAccessor(_ExtensibleCallable):
             else None
         )
 
-        return _ExtensibleWrapper(
+        wrapper = _ExtensibleWrapper(
             func, batch_func=batch_func, bind_func=bind_func, is_async=self.is_async
         )
+
+        if (
+            getattr(self.func, NO_LOCK_ATTRIBUTE_HINT, None) is True
+            or getattr(self.batch_func, NO_LOCK_ATTRIBUTE_HINT, None) is True
+        ):
+            setattr(wrapper, NO_LOCK_ATTRIBUTE_HINT, True)
+        return wrapper
 
 
 def extensible(func: Callable):
