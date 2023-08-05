@@ -15,7 +15,7 @@
 import os
 from pathlib import Path
 
-XOSCAR_TEMP_DIR = Path.home() / ".xoscar"
+XOSCAR_TEMP_DIR = Path(os.getenv("XOSCAR_DIR", Path.home())) / ".xoscar"
 
 # unix socket.
-XOSCAR_UNIX_SOCKET_DIR = os.path.join(XOSCAR_TEMP_DIR, "socket")
+XOSCAR_UNIX_SOCKET_DIR = XOSCAR_TEMP_DIR / "socket"
