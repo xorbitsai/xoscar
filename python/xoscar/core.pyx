@@ -18,7 +18,7 @@ import inspect
 import logging
 import sys
 import weakref
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Callable
 
 cimport cython
 
@@ -31,6 +31,7 @@ from ._utils cimport is_async_generator
 
 CALL_METHOD_DEFAULT = 0
 CALL_METHOD_BATCH = 1
+NO_LOCK_ATTRIBUTE_HINT = "__XOSCAR_ACTOR_METHOD_NO_LOCK__"
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,10 @@ cdef:
     bint _log_cycle_send = False
     dict _local_pool_map = dict()
     object _actor_method_wrapper
+
+def no_lock(func: Callable):
+    setattr(func, NO_LOCK_ATTRIBUTE_HINT, True)
+    return func
 
 
 def set_debug_options(options):
@@ -262,11 +267,24 @@ cdef class LocalActorRef(ActorRef):
             self.uid, self.address, self._actor_weakref)
 
 
+def _has_no_lock_hint_for_method(method) -> bool:
+    if getattr(method, NO_LOCK_ATTRIBUTE_HINT, False) is True:
+        return True
+    if hasattr(method, "__self__"):
+        return getattr(method.__self__, NO_LOCK_ATTRIBUTE_HINT, False) is True
+    return False
+
+
 async def __pyx_actor_method_wrapper(method, result_handler, lock, args, kwargs):
-    async with lock:
+    if _has_no_lock_hint_for_method(method):
         result = method(*args, **kwargs)
         if asyncio.iscoroutine(result):
             result = await result
+    else:
+        async with lock:
+            result = method(*args, **kwargs)
+            if asyncio.iscoroutine(result):
+                result = await result
     return await result_handler(result)
 
 # Avoid global lookup.
