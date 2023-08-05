@@ -284,7 +284,12 @@ async def test_copy_to_file_objects():
             address=pool.external_address,
             allocate_strategy=ProcessIndex(2),
         )
-        sizes = [10 * 1024**2, 3 * 1024**2, 0.5 * 1024**2, 0.25 * 1024**2]
+        sizes = [
+            10 * 1024**2,
+            3 * 1024**2,
+            int(0.5 * 1024**2),
+            int(0.25 * 1024**2),
+        ]
         names = []
         for _ in range(2 * len(sizes)):
             _, p = tempfile.mkstemp(dir=d)
