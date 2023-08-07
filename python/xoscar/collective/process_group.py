@@ -460,24 +460,21 @@ class ProcessGroupNCCL(ProcessGroup):
             self._backend.gather(send_buf, recv_buf, root, stream)
         else:
             if self.rank == root:
-                buffs = []
                 cupy.cuda.nccl.groupStart()
                 for peer in range(self.world_size):
                     if peer == self.rank:
-                        buffs.append(send_buf)
+                        recv_buf[peer : peer + 1] = send_buf.reshape(1, -1)
                     else:
-                        temp_recv = send_buf.copy()
                         self._backend.recv(
-                            temp_recv.data.ptr,
-                            temp_recv.size,
+                            recv_buf[peer : peer + 1].data.ptr,
+                            recv_buf[peer : peer + 1].size,
                             TypeMappingNCCL[dtype.type],
                             peer,
                             stream.ptr,
                         )
-                        buffs.append(temp_recv)
                 cupy.cuda.nccl.groupEnd()
-                recv_buf[:] = cupy.concatenate(buffs).reshape(recv_buf.shape)
             else:
+                send_buf = send_buf.reshape(1, -1)
                 self._backend.send(
                     send_buf.data.ptr,
                     send_buf.size,
@@ -652,7 +649,8 @@ class ProcessGroupNCCL(ProcessGroup):
         if self._is_world:
             if self._rank == root:
                 self._backend.broadcast(send_buf, root, stream)
-                recv_buf[:] = send_buf
+                if recv_buf is not None and (recv_buf != send_buf).any():
+                    recv_buf[:] = send_buf
             else:
                 self._backend.broadcast(recv_buf, root, stream)
         else:

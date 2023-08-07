@@ -122,8 +122,8 @@ class RankActor(Actor):
         ), "there can be no duplicate ranks in the ``ranks``."
         if self._rank not in ranks:
             return None
-        if len(ranks) == self._world:
-            return "default"
+        # if len(ranks) == self._world:
+        #     return "default"
         global_ranks = sorted(ranks)
         group_rank = global_ranks.index(self._rank)
         group_world = len(global_ranks)

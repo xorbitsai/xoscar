@@ -74,6 +74,9 @@ class NcclWorkerActor(Actor):
         recvbuf = cp.zeros_like(sendbuf)
         _group = [0, 1]
         group = await new_group(_group)
+        # This class handles the CUDA stream handle in RAII way, i.e.,
+        # when an Stream instance is destroyed by the GC, its handle is also destroyed.
+        # for more information about cupy.cuda.Stream, see: https://docs.cupy.dev/en/stable/reference/generated/cupy.cuda.Stream.html
         stream = cp.cuda.Stream(null=False, non_blocking=True, ptds=False)
         if group is not None:
             await allreduce(sendbuf, recvbuf, group_name=group, stream=stream)
