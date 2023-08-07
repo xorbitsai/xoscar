@@ -202,7 +202,7 @@ class NcclWorkerActor(Actor):
 
 @pytest.mark.asyncio
 @require_cupy
-# @pytest.mark.skip(reason="There is only a GPU on CI, but this UT is required 2 GPU!")
+@pytest.mark.skip(reason="There is only a GPU on CI, but this UT is required 2 GPU!")
 async def test_collective():
     mp.set_start_method("spawn", force=True)
     pool = await create_actor_pool(
