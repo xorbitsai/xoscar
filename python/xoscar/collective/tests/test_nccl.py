@@ -74,8 +74,9 @@ class NcclWorkerActor(Actor):
         recvbuf = cp.zeros_like(sendbuf)
         _group = [0, 1]
         group = await new_group(_group)
+        stream = cp.cuda.Stream(null=False, non_blocking=True, ptds=False)
         if group is not None:
-            await allreduce(sendbuf, recvbuf, group_name=group)
+            await allreduce(sendbuf, recvbuf, group_name=group, stream=stream)
         if self._rank in _group:
             cp.testing.assert_array_equal(recvbuf, sendbuf * len(_group))
         else:
@@ -201,7 +202,7 @@ class NcclWorkerActor(Actor):
 
 @pytest.mark.asyncio
 @require_cupy
-@pytest.mark.skip(reason="There is only a GPU on CI, but this UT is required 2 GPU!")
+# @pytest.mark.skip(reason="There is only a GPU on CI, but this UT is required 2 GPU!")
 async def test_collective():
     mp.set_start_method("spawn", force=True)
     pool = await create_actor_pool(

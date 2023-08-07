@@ -163,8 +163,8 @@ class RankActor(Actor):
         op: CollectiveReduceOp = CollectiveReduceOp.SUM,
         root: Optional[int] = 0,
         tag: Optional[int] = 0,
-        stream: Optional[int] = 0,
         pg_name: str = "default",
+        **kwargs,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].reduce(
@@ -172,7 +172,11 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].reduce(
-                send_data, recv_data, op=op, root=root, stream=stream
+                send_data,
+                recv_data,
+                op=op,
+                root=root,
+                stream=kwargs.get("stream", None),
             )
 
     def allreduce(
@@ -182,8 +186,8 @@ class RankActor(Actor):
         op: CollectiveReduceOp = CollectiveReduceOp.SUM,
         algorithm: AllReduceAlgorithm = AllReduceAlgorithm.RING,
         tag: Optional[int] = 0,
-        stream: Optional[int] = 0,
         pg_name: str = "default",
+        **kwargs,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].allreduce(
@@ -191,7 +195,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].allreduce(
-                send_data, recv_data, op=op, stream=stream
+                send_data, recv_data, op=op, stream=kwargs.get("stream", None)
             )
 
     def gather(
@@ -200,8 +204,8 @@ class RankActor(Actor):
         recv_data: Any,
         root: Optional[int] = 0,
         tag: Optional[int] = 0,
-        stream: Optional[int] = 0,
         pg_name: str = "default",
+        **kwargs,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].gather(
@@ -209,7 +213,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].gather(
-                send_data, recv_data, root=root, stream=stream
+                send_data, recv_data, root=root, stream=kwargs.get("stream", None)
             )
 
     def allgather(
@@ -217,8 +221,8 @@ class RankActor(Actor):
         send_data: Any,
         recv_data: Any,
         tag: Optional[int] = 0,
-        stream: Optional[int] = 0,
         pg_name: str = "default",
+        **kwargs,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].allgather(
@@ -226,7 +230,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].allgather(
-                send_data, recv_data, stream=stream
+                send_data, recv_data, stream=kwargs.get("stream", None)
             )
 
     def scatter(
@@ -235,8 +239,8 @@ class RankActor(Actor):
         recv_data: Any,
         root: Optional[int] = 0,
         tag: Optional[int] = 0,
-        stream: Optional[int] = 0,
         pg_name: str = "default",
+        **kwargs,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].scatter(
@@ -244,7 +248,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].scatter(
-                send_data, recv_data, root=root, stream=stream
+                send_data, recv_data, root=root, stream=kwargs.get("stream", None)
             )
 
     def reduce_scatter(
@@ -253,8 +257,8 @@ class RankActor(Actor):
         recv_data: Any,
         recv_elems: List[int],
         op: CollectiveReduceOp = CollectiveReduceOp.SUM,
-        stream: Optional[int] = 0,
         pg_name: str = "default",
+        **kwargs,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].reduce_scatter(
@@ -262,7 +266,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].reduce_scatter(
-                send_data, recv_data, recv_elems, op, stream
+                send_data, recv_data, recv_elems, op, stream=kwargs.get("stream", None)
             )
 
     def alltoall(
@@ -270,8 +274,8 @@ class RankActor(Actor):
         send_data: Any,
         recv_data: Any,
         tag: Optional[int] = 0,
-        stream: Optional[int] = 0,
         pg_name: str = "default",
+        **kwargs,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].alltoall(
@@ -279,7 +283,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].alltoall(
-                send_data, recv_data, stream
+                send_data, recv_data, stream=kwargs.get("stream", None)
             )
 
     def broadcast(
@@ -288,8 +292,8 @@ class RankActor(Actor):
         recv_data: Any,
         root: Optional[int] = 0,
         tag: Optional[int] = 0,
-        stream: Optional[int] = 0,
         pg_name: str = "default",
+        **kwargs,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].broadcast(
@@ -297,7 +301,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].broadcast(
-                send_data, recv_data, root, stream
+                send_data, recv_data, root, stream=kwargs.get("stream", None)
             )
 
 
@@ -348,8 +352,8 @@ async def reduce(
     op: CollectiveReduceOp = CollectiveReduceOp.SUM,
     root: Optional[int] = 0,
     tag: Optional[int] = 0,
-    stream: Optional[int] = 0,
     group_name: str = "default",
+    **kwargs,
 ):
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
@@ -359,8 +363,8 @@ async def reduce(
         op=op,
         root=root,
         tag=tag,
-        stream=stream,
         pg_name=group_name,
+        stream=kwargs.get("stream", None),
     )
 
 
@@ -370,8 +374,8 @@ async def allreduce(
     op: CollectiveReduceOp = CollectiveReduceOp.SUM,
     algorithm: AllReduceAlgorithm = AllReduceAlgorithm.RING,
     tag: Optional[int] = 0,
-    stream: Optional[int] = 0,
     group_name: str = "default",
+    **kwargs,
 ):
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid="RankActor")
@@ -381,8 +385,8 @@ async def allreduce(
         op=op,
         algorithm=algorithm,
         tag=tag,
-        stream=stream,
         pg_name=group_name,
+        stream=kwargs.get("stream", None),
     )
 
 
@@ -391,13 +395,18 @@ async def gather(
     recv_data: Any,
     root: Optional[int] = 0,
     tag: Optional[int] = 0,
-    stream: Optional[int] = 0,
     group_name: str = "default",
+    **kwargs,
 ):
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
     await ref.gather(
-        send_data, recv_data, root=root, tag=tag, stream=stream, pg_name=group_name
+        send_data,
+        recv_data,
+        root=root,
+        tag=tag,
+        pg_name=group_name,
+        stream=kwargs.get("stream", None),
     )
 
 
@@ -405,13 +414,17 @@ async def allgather(
     send_data: Any,
     recv_data: Any,
     tag: Optional[int] = 0,
-    stream: Optional[int] = 0,
     group_name: str = "default",
+    **kwargs,
 ):
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
     await ref.allgather(
-        send_data, recv_data, tag=tag, stream=stream, pg_name=group_name
+        send_data,
+        recv_data,
+        tag=tag,
+        pg_name=group_name,
+        stream=kwargs.get("stream", None),
     )
 
 
@@ -420,13 +433,18 @@ async def scatter(
     recv_data: Any,
     root: Optional[int] = 0,
     tag: Optional[int] = 0,
-    stream: Optional[int] = 0,
     group_name: str = "default",
+    **kwargs,
 ):
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
     await ref.scatter(
-        send_data, recv_data, root=root, tag=tag, stream=stream, pg_name=group_name
+        send_data,
+        recv_data,
+        root=root,
+        tag=tag,
+        pg_name=group_name,
+        stream=kwargs.get("stream", None),
     )
 
 
@@ -435,13 +453,18 @@ async def reduce_scatter(
     recv_data: Any,
     recv_elems: List[int],
     op: CollectiveReduceOp = CollectiveReduceOp.SUM,
-    stream: Optional[int] = 0,
     group_name: str = "default",
+    **kwargs,
 ):
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
     await ref.reduce_scatter(
-        send_data, recv_data, recv_elems, op, stream=stream, pg_name=group_name
+        send_data,
+        recv_data,
+        recv_elems,
+        op,
+        pg_name=group_name,
+        stream=kwargs.get("stream", None),
     )
 
 
@@ -449,12 +472,18 @@ async def alltoall(
     send_data: Any,
     recv_data: Any,
     tag: Optional[int] = 0,
-    stream: Optional[int] = 0,
     group_name: str = "default",
+    **kwargs,
 ):
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
-    await ref.alltoall(send_data, recv_data, tag=tag, stream=stream, pg_name=group_name)
+    await ref.alltoall(
+        send_data,
+        recv_data,
+        tag=tag,
+        pg_name=group_name,
+        stream=kwargs.get("stream", None),
+    )
 
 
 async def broadcast(
@@ -462,11 +491,16 @@ async def broadcast(
     recv_data: Any,
     root: Optional[int] = 0,
     tag: Optional[int] = 0,
-    stream: Optional[int] = 0,
     group_name: str = "default",
+    **kwargs,
 ):
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
     await ref.broadcast(
-        send_data, recv_data, root, tag, stream=stream, pg_name=group_name
+        send_data,
+        recv_data,
+        root,
+        tag,
+        pg_name=group_name,
+        stream=kwargs.get("stream", None),
     )
