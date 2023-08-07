@@ -27,10 +27,11 @@ from .common import (
     ReduceOpMappingGloo,
     TypeMappingGloo,
 )
-from .nccl_backend import TCPStore, XoscarNCCLBackend
 from .utils import convert_data_to_np_array
 
 cupy = lazy_import("cupy")
+if cupy is not None:
+    from .nccl_backend import TCPStore, XoscarNCCLBackend
 if cupy != None:
     from .common import ReduceOpMappingNCCL, ReduceOpMappingNCCLStr, TypeMappingNCCL
 
