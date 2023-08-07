@@ -27,7 +27,7 @@ from .common import (
     ReduceOpMappingGloo,
     TypeMappingGloo,
 )
-from .utils import convert_data_to_np_array
+from .utils import convert_data_to_cp_array, convert_data_to_np_array
 
 cupy = lazy_import("cupy")
 if cupy is not None:
@@ -387,81 +387,72 @@ class ProcessGroupNCCL(ProcessGroup):
 
     def reduce(
         self,
-        send_data: Any,
-        recv_data: Any,
+        send_buf: Any,
+        recv_buf: Any,
         op: CollectiveReduceOp = CollectiveReduceOp.SUM,
         root: Optional[int] = 0,
         stream: Optional[int] = 0,
     ):
-        send_buf = convert_data_to_np_array(send_data)
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
         dtype = send_buf.dtype
-        send_buf = cupy.asarray(send_buf)
-        recv_buf = convert_data_to_np_array(recv_data)
-        recv_buf_cp = cupy.asarray(recv_buf)
         if self._is_world:
             stream = stream if stream != 0 else None
             self._backend.reduce(
-                send_buf, recv_buf_cp, root, ReduceOpMappingNCCLStr[op], stream
+                send_buf, recv_buf, root, ReduceOpMappingNCCLStr[op], stream
             )
         else:
             self._backend.reduce(
                 send_buf.data.ptr,
-                recv_buf_cp.data.ptr,
+                recv_buf.data.ptr,
                 send_buf.size,
                 TypeMappingNCCL[dtype.type],
                 ReduceOpMappingNCCL[op],
                 root,
                 stream,
             )
-        recv_buf[:] = cupy.asnumpy(recv_buf_cp)
 
     def allreduce(
         self,
-        send_data: Any,
-        recv_data: Any,
+        send_buf: Any,
+        recv_buf: Any,
         op: CollectiveReduceOp = CollectiveReduceOp.SUM,
         stream: Optional[int] = 0,
     ):
-        send_buf = convert_data_to_np_array(send_data)
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
         dtype = send_buf.dtype
-        send_buf = cupy.asarray(send_buf)
-        recv_buf = convert_data_to_np_array(recv_data)
-        recv_buf_cp = cupy.asarray(recv_buf)
         if self._is_world:
             stream = stream if stream != 0 else None
             self._backend.all_reduce(
-                send_buf, recv_buf_cp, ReduceOpMappingNCCLStr[op], stream
+                send_buf, recv_buf, ReduceOpMappingNCCLStr[op], stream
             )
         else:
             self._backend.allReduce(
                 send_buf.data.ptr,
-                recv_buf_cp.data.ptr,
+                recv_buf.data.ptr,
                 send_buf.size,
                 TypeMappingNCCL[dtype.type],
                 ReduceOpMappingNCCL[op],
                 stream,
             )
-        recv_buf[:] = cupy.asnumpy(recv_buf_cp)
 
     def gather(
         self,
-        send_data: Any,
-        recv_data: Any,
+        send_buf: Any,
+        recv_buf: Any,
         root: Optional[int] = 0,
         stream: Optional[int] = 0,
     ):
         assert (
-            send_data.size * self.world_size == recv_data.size
+            send_buf.size * self.world_size == recv_buf.size
         ), "Send_size * world_number must be equal to recv_size"
-        send_buf = convert_data_to_np_array(send_data)
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
         dtype = send_buf.dtype
-        send_buf = cupy.asarray(send_buf).reshape((1, -1))
-        recv_buf = convert_data_to_np_array(recv_data)
-        recv_buf_cp = cupy.asarray(recv_buf)
         if self._is_world:
             stream = stream if stream != 0 else None
-            self._backend.gather(send_buf, recv_buf_cp, root, stream)
-            recv_buf[:] = cupy.asnumpy(recv_buf_cp)
+            self._backend.gather(send_buf, recv_buf, root, stream)
         else:
             if self.rank == root:
                 buffs = []
@@ -478,9 +469,7 @@ class ProcessGroupNCCL(ProcessGroup):
                             stream,
                         )
                         buffs.append(temp_recv)
-
-                cupy_buff = cupy.concatenate(buffs)
-                recv_buf[:] = cupy.asnumpy(cupy_buff.reshape(recv_buf.shape))
+                recv_buf[:] = cupy.concatenate(buffs).reshape(recv_buf.shape)
             else:
                 self._backend.send(
                     send_buf.data.ptr,
@@ -490,59 +479,49 @@ class ProcessGroupNCCL(ProcessGroup):
                     stream,
                 )
 
-    def allgather(self, send_data: Any, recv_data: Any, stream: Optional[int] = 0):
-        send_buf = convert_data_to_np_array(send_data)
+    def allgather(self, send_buf: Any, recv_buf: Any, stream: Optional[int] = 0):
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
         dtype = send_buf.dtype
-        send_buf = cupy.asarray(send_buf)
-        recv_buf = convert_data_to_np_array(recv_data)
-        recv_buf_cp = cupy.asarray(recv_buf)
         if self._is_world:
             stream = stream if stream != 0 else None
-            self._backend.all_gather(send_buf, recv_buf_cp, send_buf.size, stream=None)
+            self._backend.all_gather(send_buf, recv_buf, send_buf.size, stream)
         else:
             self._backend.allGather(
                 send_buf.data.ptr,
-                recv_buf_cp.data.ptr,
+                recv_buf.data.ptr,
                 send_buf.size,
                 TypeMappingNCCL[dtype.type],
                 stream,
             )
-        recv_buf[:] = cupy.asnumpy(recv_buf_cp)
 
     def scatter(
         self,
-        send_data: List[Any],
-        recv_data: Any,
+        send_buf: List[Any],
+        recv_buf: Any,
         root: Optional[int] = 0,
         stream: Optional[int] = 0,
     ):
-        recv_buf = convert_data_to_np_array(recv_data)
-        recv_buf_cp = cupy.asarray(recv_buf)
+        send_buf = [convert_data_to_cp_array(d) for d in send_buf]
+        recv_buf = convert_data_to_cp_array(recv_buf)
         if self._is_world:
-            import numpy as np
-
-            send_buf = convert_data_to_np_array(
-                np.concatenate(send_data).reshape(self.world_size, -1)
-            )
-            send_buf = cupy.asarray(send_buf)
+            send_buf = cupy.concatenate(send_buf).reshape(self.world_size, -1)
             stream = stream if stream != 0 else None
-            self._backend.scatter(send_buf, recv_buf_cp, root, stream)
-            recv_buf[:] = cupy.asnumpy(recv_buf_cp)
+            self._backend.scatter(send_buf, recv_buf, root, stream)
         else:
             if self.rank == root:
                 assert (
-                    len(send_data) == self.world_size
+                    len(send_buf) == self.world_size
                 ), "Scatter size must be equal to the size of group"
                 for peer in range(self.world_size):
-                    send_buf = convert_data_to_np_array(send_data[peer])
+                    send_data = send_buf[peer]
                     if peer == root:
-                        recv_buf[:] = send_buf
+                        recv_buf[:] = send_data
                     else:
-                        dtype = send_buf.dtype
-                        send_buf = cupy.asarray(send_buf).reshape((1, -1))
+                        dtype = send_data.dtype
                         self._backend.send(
-                            send_buf.data.ptr,
-                            send_buf.size,
+                            send_data.data.ptr,
+                            send_data.size,
                             TypeMappingNCCL[dtype.type],
                             peer,
                             stream,
@@ -550,32 +529,29 @@ class ProcessGroupNCCL(ProcessGroup):
             else:
                 dtype = recv_buf.dtype
                 self._backend.recv(
-                    recv_buf_cp.data.ptr,
-                    recv_buf_cp.size,
+                    recv_buf.data.ptr,
+                    recv_buf.size,
                     TypeMappingNCCL[dtype.type],
                     root,
                     stream,
                 )
-                recv_buf[:] = cupy.asnumpy(recv_buf_cp)
 
     def reduce_scatter(
         self,
-        send_data: Any,
-        recv_data: Any,
+        send_buf: Any,
+        recv_buf: Any,
         recv_elems: List[int],
         op: CollectiveReduceOp = CollectiveReduceOp.SUM,
         stream: Optional[int] = 0,
     ):
-        send_buf = convert_data_to_np_array(send_data)
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
         dtype = send_buf.dtype
-        send_buf = cupy.asarray(send_buf)
-        recv_buf = convert_data_to_np_array(recv_data)
-        recv_buf_cp = cupy.asarray(recv_buf)
         if self._is_world:
             stream = stream if stream != 0 else None
             self._backend.reduce_scatter(
                 send_buf,
-                recv_buf_cp,
+                recv_buf,
                 recv_elems[self.rank],
                 ReduceOpMappingNCCLStr[op],
                 stream,
@@ -583,97 +559,85 @@ class ProcessGroupNCCL(ProcessGroup):
         else:
             self._backend.reduceScatter(
                 send_buf.data.ptr,
-                recv_buf_cp.data.ptr,
+                recv_buf.data.ptr,
                 recv_elems[self.rank],
                 TypeMappingNCCL[dtype.type],
                 ReduceOpMappingNCCL[op],
                 stream,
             )
-        recv_buf[:] = cupy.asnumpy(recv_buf_cp)
 
-    def alltoall(self, send_data: Any, recv_data: Any, stream: Optional[int] = 0):
-        send_buf = convert_data_to_np_array(send_data)
-        dtype = send_buf.dtype
-        send_buf = cupy.asarray(send_buf)
-        recv_buf = convert_data_to_np_array(recv_data)
+    def alltoall(self, send_buf: Any, recv_buf: Any, stream: Optional[int] = 0):
         assert (
             self.world_size == send_buf.shape[0]
         ), "The first dim of send data must be equal to world size."
         assert (
             recv_buf.size == send_buf.size
         ), "The size of send data must be equal to the size of recv data."
-        buffs = []
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
+        dtype = send_buf.dtype
         if self._is_world:
             stream = stream if stream != 0 else None
-            recv_buf_cp = cupy.asarray(recv_buf)
-            self._backend.all_to_all(send_buf, recv_buf_cp, stream)
-            recv_buf[:] = cupy.asnumpy(recv_buf_cp)
+            self._backend.all_to_all(send_buf, recv_buf, stream)
         else:
             for peer in range(self.world_size):
                 if peer == self.rank:
-                    buffs.append(send_buf[peer : peer + 1])
+                    recv_buf[peer : peer + 1] = send_buf[peer : peer + 1]
                 else:
-                    temp_send = send_buf[peer : peer + 1].copy()
-                    temp_recv = cupy.asarray(recv_buf[peer : peer + 1].copy())
                     if self.rank > peer:
                         self._backend.recv(
-                            temp_recv.data.ptr,
-                            temp_recv.size,
+                            recv_buf[peer : peer + 1].data.ptr,
+                            recv_buf[peer : peer + 1].size,
                             TypeMappingNCCL[dtype.type],
                             peer,
                             stream,
                         )
                         self._backend.send(
-                            temp_send.data.ptr,
-                            temp_send.size,
+                            send_buf[peer : peer + 1].data.ptr,
+                            send_buf[peer : peer + 1].size,
                             TypeMappingNCCL[dtype.type],
                             peer,
                             stream,
                         )
                     else:
                         self._backend.send(
-                            temp_send.data.ptr,
-                            temp_send.size,
+                            send_buf[peer : peer + 1].data.ptr,
+                            send_buf[peer : peer + 1].size,
                             TypeMappingNCCL[dtype.type],
                             peer,
                             stream,
                         )
                         self._backend.recv(
-                            temp_recv.data.ptr,
-                            temp_recv.size,
+                            recv_buf[peer : peer + 1].data.ptr,
+                            recv_buf[peer : peer + 1].size,
                             TypeMappingNCCL[dtype.type],
                             peer,
                             stream,
                         )
-                    buffs.append(temp_recv)
-            recv_buf[:] = cupy.asnumpy(cupy.concatenate(buffs))
 
     def broadcast(
         self,
-        send_data: Any,
-        recv_data: Any,
+        send_buf: Any,
+        recv_buf: Any,
         root: Optional[int] = 0,
         stream: Optional[int] = 0,
     ):
-        send_buf = convert_data_to_np_array(send_data)
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
         dtype = send_buf.dtype
-        send_buf = cupy.asarray(send_buf)
-        recv_buf = convert_data_to_np_array(recv_data)
-        recv_buf_cp = cupy.asarray(recv_buf)
         if self._is_world:
             stream = stream if stream != 0 else None
             if self._rank == root:
                 self._backend.broadcast(send_buf, root, stream)
-                recv_buf_cp[:] = send_buf
+                recv_buf[:] = send_buf
             else:
-                self._backend.broadcast(recv_buf_cp, root, stream=None)
+                self._backend.broadcast(recv_buf, root, stream)
         else:
             self._backend.broadcast(
                 send_buf.data.ptr,
-                recv_buf_cp.data.ptr,
+                recv_buf.data.ptr,
                 send_buf.size,
                 TypeMappingNCCL[dtype.type],
                 root,
                 stream,
             )
-        recv_data[:] = cupy.asnumpy(recv_buf_cp)
