@@ -38,3 +38,6 @@ async def test_basic_cases():
         assert await ref1.add(1) == 1
         assert await ref2.add(2) == 2
         assert await ref1.add_from(ref2) == 3
+
+def test_pygloo():
+    import xoscar.collective.xoscar_pygloo
