@@ -312,6 +312,8 @@ class CMakeBuild(build_ext):
                                             os.path.basename(file))
                     dest_filename = os.path.join(self.build_lib,
                                                     "xoscar\\collective")
+                    if not os.path.exists(dest_filename):
+                        os.mkdir(dest_filename)
                     dest_filename = os.path.join(dest_filename,
                                             os.path.basename(file))
                     move_file(
