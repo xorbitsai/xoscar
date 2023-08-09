@@ -18,7 +18,7 @@ import re
 import subprocess
 import sys
 from distutils.command.build_ext import build_ext as _du_build_ext
-from distutils.file_util import copy_file
+from distutils.file_util import copy_file, move_file
 from pathlib import Path
 
 from sysconfig import get_config_vars
@@ -197,6 +197,19 @@ class CMakeBuild(build_ext):
                 )
                 if ext._needs_stub:
                     self.write_stub(package_dir or os.curdir, ext, True)
+            else:
+                fullname = self.get_ext_fullname(ext.name)
+                collective_dir = "xoscar/collective"
+                filename = self.get_ext_filename(fullname)
+                src_dir = os.path.join(self.build_lib , collective_dir)
+                src_filename = os.path.join(src_dir , filename)
+                dest_filename = os.path.join(collective_dir,
+                                                os.path.basename(filename))
+                copy_file(
+                    src_filename, dest_filename, verbose=self.verbose,
+                    dry_run=self.dry_run
+                )
+
 
     def build_extension(self, ext):
         # TODO: support windows compilation
@@ -224,7 +237,6 @@ class CMakeBuild(build_ext):
         ext_fullpath = Path.cwd() / self.get_ext_fullpath(ext.name)
         extdir = ext_fullpath.parent.resolve()
         source_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        output_directory_collective = Path(source_dir) / "python" / "xoscar" / "collective"
         build_temp = Path(self.build_temp) / ext.name
         if not build_temp.exists():
             build_temp.mkdir(parents=True)
@@ -244,7 +256,6 @@ class CMakeBuild(build_ext):
         # from Python.
         cmake_args = [
             f"-DBUILD_TMP_DIR={build_temp}",
-            f"-DLIBRARY_OUTPUT_DIRECTORY={output_directory_collective}",
             f"-DPYTHON_PATH={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
         ]
