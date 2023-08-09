@@ -178,7 +178,7 @@ class CMakeBuild(build_ext):
                     self.write_stub(package_dir or os.curdir, ext, True)
             else:
                 fullname = self.get_ext_fullname(ext.name)
-                collective_dir = "xoscar/collective"
+                collective_dir = os.path.join("xoscar" , "collective")
                 filename = self.get_ext_filename(fullname)
                 src_dir = os.path.join(self.build_lib , collective_dir)
                 src_filename = os.path.join(src_dir , filename)
@@ -311,7 +311,9 @@ class CMakeBuild(build_ext):
                     src_filename = os.path.join(self.build_lib,
                                             os.path.basename(file))
                     dest_filename = os.path.join(self.build_lib,
-                                                    "xoscar/collective")
+                                                    "xoscar\\collective")
+                    dest_filename = os.path.join(dest_filename,
+                                            os.path.basename(file))
                     move_file(
                         src_filename, dest_filename, verbose=self.verbose,
                         dry_run=self.dry_run
