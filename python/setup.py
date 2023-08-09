@@ -310,14 +310,20 @@ class CMakeBuild(build_ext):
                 if file.startswith("xoscar_pygloo"):
                     src_filename = os.path.join(self.build_lib,
                                             os.path.basename(file))
-                    dest_filename = os.path.join(self.build_lib,
+                    dest_dir = os.path.join(self.build_lib,
                                                     "xoscar\\collective")
-                    if not os.path.exists(dest_filename):
-                        os.mkdir(dest_filename)
-                    dest_filename = os.path.join(dest_filename,
+                    if not os.path.exists(dest_dir):
+                        os.mkdir(dest_dir)
+                    dest_filename = os.path.join(dest_dir,
                                             os.path.basename(file))
                     move_file(
                         src_filename, dest_filename, verbose=self.verbose,
+                        dry_run=self.dry_run
+                    )
+                    libuv_filename = "xoscar\\collective\\uv.dll"
+                    libuv_dest_filename = os.path.join(dest_dir, "uv.dll")
+                    copy_file(
+                        libuv_filename, libuv_dest_filename, verbose=self.verbose,
                         dry_run=self.dry_run
                     )
 
