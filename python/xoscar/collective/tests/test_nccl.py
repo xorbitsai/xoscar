@@ -24,6 +24,7 @@ from ...context import get_context
 from ...tests.core import require_cupy
 from ...utils import is_linux
 from ..common import (
+    DEVICE_ID_ENV_KEY,
     RANK_ADDRESS_ENV_KEY,
     RENDEZVOUS_MASTER_IP_ENV_KEY,
     RENDEZVOUS_MASTER_PORT_ENV_KEY,
@@ -43,14 +44,13 @@ from ..core import (
 
 
 class NcclWorkerActor(Actor):
-    def __init__(self, rank, device_id, world, *args, **kwargs):
+    def __init__(self, rank, world, *args, **kwargs):
         self._rank = rank
-        self.device_id = device_id
         self._world = world
 
     async def init_process_group(self):
         os.environ[RANK_ADDRESS_ENV_KEY] = self.address
-        return await init_process_group(self._rank, self._world, "nccl", self.device_id)
+        return await init_process_group(self._rank, self._world, "nccl")
 
     async def test_reduce(self):
         import cupy as cp
@@ -215,16 +215,21 @@ async def test_collective():
             {
                 RENDEZVOUS_MASTER_IP_ENV_KEY: "127.0.0.1",
                 RENDEZVOUS_MASTER_PORT_ENV_KEY: "25001",
-            }
-        ]
-        * 2,
+                DEVICE_ID_ENV_KEY: "0",
+            },
+            {
+                RENDEZVOUS_MASTER_IP_ENV_KEY: "127.0.0.1",
+                RENDEZVOUS_MASTER_PORT_ENV_KEY: "25001",
+                DEVICE_ID_ENV_KEY: "1",
+            },
+        ],
     )
     config = (await get_pool_config(pool.external_address)).as_dict()
     all_addrs = list(config["mapping"].keys())
     async with pool:
         ctx = get_context()
-        r0 = await ctx.create_actor(NcclWorkerActor, 0, 0, 2, address=all_addrs[0])
-        r1 = await ctx.create_actor(NcclWorkerActor, 1, 1, 2, address=all_addrs[1])
+        r0 = await ctx.create_actor(NcclWorkerActor, 0, 2, address=all_addrs[0])
+        r1 = await ctx.create_actor(NcclWorkerActor, 1, 2, address=all_addrs[1])
         t0 = r0.init_process_group()
         t1 = r1.init_process_group()
         await asyncio.gather(t0, t1)

@@ -14,12 +14,13 @@
 import hashlib
 import os
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from .. import Actor, actor_ref
 from ..context import get_context
 from ..tests.core import lazy_import
 from .common import (
+    DEVICE_ID_ENV_KEY,
     INVOKE_ERROR_MESSAGE,
     RANK_ADDRESS_ENV_KEY,
     AllReduceAlgorithm,
@@ -37,13 +38,13 @@ class RankActor(Actor):
         rank: int,
         world: int,
         backend: str = "gloo",
-        device_id: Optional[int] = -1,
+        device_id: Optional[Union[int, None]] = None,
         pg_options: Optional[ProcessGroup.Options] = None,
         *args,
         **kwargs,
     ):
         assert backend == "gloo" or (
-            backend == "nccl" and device_id != -1
+            backend == "nccl" and device_id != None
         ), "The device id should be set when using nccl as backend."
         assert backend == "gloo" or (
             backend == "nccl" and cupy is not None
@@ -122,8 +123,8 @@ class RankActor(Actor):
         ), "there can be no duplicate ranks in the ``ranks``."
         if self._rank not in ranks:
             return None
-        # if len(ranks) == self._world:
-        #     return "default"
+        if len(ranks) == self._world:
+            return "default"
         global_ranks = sorted(ranks)
         group_rank = global_ranks.index(self._rank)
         group_world = len(global_ranks)
@@ -142,7 +143,7 @@ class RankActor(Actor):
             )
             self.name_to_pg[self._backend][group_name] = pg_gloo
         elif self._backend == "nccl":
-            assert device_id != -1, "device_id should be set to a int no less than 0"
+            assert device_id != None, "device_id should be set!"
             pg_nccl = ProcessGroupNCCL(
                 _ip,
                 group_rank,
@@ -309,11 +310,40 @@ async def init_process_group(
     rank: int,
     world_size: int,
     backend: str = "gloo",
-    device_id: Optional[int] = -1,
+    device_id: Optional[Union[int, None]] = None,
     address: Optional[str] = None,
 ):
+    """
+    Initializes the default distributed process group, and this will also
+    initialize the distributed package.
+
+    Args:
+        rank (int): Rank of the current process (it should be a
+                              number between 0 and ``world_size``-1).
+
+        world_size (int): Number of processes participating in
+                                    the job.
+
+        backend (str optional): The backend to use. Depending on
+                        build-time configurations, valid values include  ``gloo`` and
+                        ``nccl``. If the backend is not provided, then  a ``gloo`` backend
+                        will be created.
+
+        device_id(Union[int, None], optional): GPU ID the actor will bind,
+        If it is None, it will try to get it from the environment variable DEVICE_ID_ENV_KEY.
+        If the environment variable is not set either, it will return an error.
+
+        address(str, optional): actor address.
+    """
+    env_device_id = os.environ.get(DEVICE_ID_ENV_KEY, None)
     assert backend == "gloo" or (
-        backend == "nccl" and device_id != -1
+        backend == "nccl"
+        and (
+            device_id is not None
+            and device_id >= 0
+            or env_device_id is not None
+            and int(env_device_id) >= 0
+        )
     ), "The device id should be set when using nccl as backend."
     assert backend == "gloo" or (
         backend == "nccl" and cupy is not None
@@ -324,6 +354,8 @@ async def init_process_group(
             "Cannot decide which process to involve in the collective communication."
         )
     ctx = get_context()
+    if backend == "nccl" and device_id is None and env_device_id is not None:
+        device_id = int(env_device_id)
     await ctx.create_actor(
         RankActor,
         rank,
@@ -339,6 +371,25 @@ async def new_group(
     ranks: List[int],
     pg_options: Optional[ProcessGroup.Options] = None,
 ):
+    """
+    Creates a new distributed group.
+
+    This function requires that all processes in the main group (i.e. all
+    processes that are part of the distributed job) enter this function, even
+    if they are not going to be members of the group. Additionally, groups
+    should be created in the same order in all processes.
+
+    Args:
+        ranks (list[int]): List of ranks of group members. If ``None``, will be
+            set to all ranks. Default is ``None``.
+
+        pg_options (ProcessGroupOptions, optional): process group options
+            specifying what additional options need to be passed in during
+            the construction of specific process groups.
+
+    Returns:
+        A handle of distributed group that can be given to collective calls.
+    """
     address = os.environ.get(RANK_ADDRESS_ENV_KEY, None)
     if address is None:
         raise RuntimeError(INVOKE_ERROR_MESSAGE)
@@ -355,6 +406,32 @@ async def reduce(
     group_name: str = "default",
     **kwargs,
 ):
+    """
+    Reduces the numpy or cupy data across all machines.
+
+    Only the process with rank ``root`` is going to receive the final result.
+
+    Args:
+        send_data (Any): Input of the collective. The function
+            operates in-place.
+
+        recv_data (Any): Output of the collective. The function
+            operates in-place.
+
+        root (int): Destination rank
+
+        op (optional): One of the values from
+            ``xoscar.collective.common.CollectiveReduceOp``
+            enum.  Specifies an operation used for element-wise reductions.
+
+        tag (int): Tag for this operation
+
+        group_name (str): The process group to work on. If None,
+            the default process group will be used.
+
+        **kwargs (dict): Optional keyword arguments as a dictionary.
+        If using nccl as backend, kwargs["stream"] should be set
+    """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
     await ref.reduce(
@@ -377,6 +454,33 @@ async def allreduce(
     group_name: str = "default",
     **kwargs,
 ):
+    """
+    Reduces the numpy or cupy data across all machines in such a way that all get
+    the final result.
+
+    Args:
+        send_data (Any): Input of the collective. The function
+            operates in-place.
+
+        recv_data (Any): Output of the collective. The function
+            operates in-place.
+
+        op (optional): One of the values from
+            ``xoscar.collective.common.CollectiveReduceOp``
+            enum.  Specifies an operation used for element-wise reductions.
+
+        algorithm (optional): One of the values from
+            ``xoscar.collective.common.AllReduceAlgorithm``
+            enum.  Specifies an algorithm used for element-wise reductions.
+
+        tag (int): Tag for this operation
+
+        group_name (str): The process group to work on. If None,
+            the default process group will be used.
+
+        **kwargs (dict): Optional keyword arguments as a dictionary.
+        If using nccl as backend, kwargs["stream"] should be set
+    """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid="RankActor")
     await ref.allreduce(
@@ -398,6 +502,24 @@ async def gather(
     group_name: str = "default",
     **kwargs,
 ):
+    """
+    Gathers a list of numpy or cupy data in a single process.
+
+    Args:
+        send_data (Any): Input data.
+
+        recv_data (Any): Output data.
+
+        root (int, optional): Destination rank.
+
+        tag (int): Tag for this operation.
+
+        group_name (str): The process group to work on. If None,
+            the default process group will be used.
+
+        **kwargs (dict): Optional keyword arguments as a dictionary.
+        If using nccl as backend, kwargs["stream"] should be set
+    """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
     await ref.gather(
@@ -417,6 +539,22 @@ async def allgather(
     group_name: str = "default",
     **kwargs,
 ):
+    """
+    Gathers a list of numpy or cupy data to all devices.
+
+    Args:
+        send_data (Any): Input data.
+
+        recv_data (Any): Output data.
+
+        tag (int): Tag for this operation.
+
+        group_name (str): The process group to work on. If None,
+            the default process group will be used.
+
+        **kwargs (dict): Optional keyword arguments as a dictionary.
+        If using nccl as backend, kwargs["stream"] should be set
+    """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
     await ref.allgather(
@@ -436,6 +574,27 @@ async def scatter(
     group_name: str = "default",
     **kwargs,
 ):
+    """
+    Scatters a list of numpy or cupy data to all processes in a group.
+
+    Each process will receive exactly one tensor and store its data in the
+    recv_data.
+
+    Args:
+        send_data (List(Any)): Input data.
+
+        recv_data (Any): Output data.
+
+        root (int, optional): Source rank (default is 0).
+
+        tag (int): Tag for this operation.
+
+        group_name (str): The process group to work on. If None,
+            the default process group will be used.
+
+        **kwargs (dict): Optional keyword arguments as a dictionary.
+        If using nccl as backend, kwargs["stream"] should be set
+    """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
     await ref.scatter(
@@ -456,6 +615,26 @@ async def reduce_scatter(
     group_name: str = "default",
     **kwargs,
 ):
+    """
+    Reduces, then scatters a list of numpy or cupy data to all processes in a group.
+
+    Args:
+        send_data (Any): Input data.
+
+        recv_data (Any): Output data.
+
+        recv_elems (List[int]): the size of recv data for each process
+
+        op (optional): One of the values from
+            ``xoscar.collective.common.CollectiveReduceOp``
+            enum.  Specifies an operation used for element-wise reductions.
+
+        group_name (str): The process group to work on. If None,
+            the default process group will be used.
+
+        **kwargs (dict): Optional keyword arguments as a dictionary.
+        If using nccl as backend, kwargs["stream"] should be set
+    """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
     await ref.reduce_scatter(
@@ -475,6 +654,24 @@ async def alltoall(
     group_name: str = "default",
     **kwargs,
 ):
+    """
+    Each process scatters list of numpy or cupy data to all processes in a group
+
+    Complex tensors are supported.
+
+    Args:
+        send_data (List(Any)): Input data.
+
+        recv_data (Any): Output data.
+
+        tag (int): Tag for this operation.
+
+        group_name (str): The process group to work on. If None,
+            the default process group will be used.
+
+        **kwargs (dict): Optional keyword arguments as a dictionary.
+        If using nccl as backend, kwargs["stream"] should be set
+    """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
     await ref.alltoall(
@@ -494,6 +691,27 @@ async def broadcast(
     group_name: str = "default",
     **kwargs,
 ):
+    """
+    Broadcasts the tensor to the whole group.
+
+    data must have the same number of elements in all processes
+    participating in the collective.
+
+    Args:
+        send_data (List(Any)): Input data.
+
+        recv_data (Any): Output data.
+
+        root (int): Source rank.
+
+        tag (int): Tag for this operation.
+
+        group_name (str): The process group to work on. If None,
+            the default process group will be used.
+
+        **kwargs (dict): Optional keyword arguments as a dictionary.
+        If using nccl as backend, kwargs["stream"] should be set
+    """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
     await ref.broadcast(
