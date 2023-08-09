@@ -176,27 +176,6 @@ class CMakeBuild(build_ext):
                 )
                 if ext._needs_stub:
                     self.write_stub(package_dir or os.curdir, ext, True)
-            elif sys.platform.startswith('win'):
-                fullname = self.get_ext_fullname(ext.name)
-                filename = self.get_ext_filename(fullname)
-                modpath = fullname.split('.')
-                package = '.'.join(modpath[:-1])
-                package_dir = build_py.get_package_dir(package)
-                if package_dir=="" and ext.name=="xoscar_pygloo":
-                    package_dir="xoscar/collective"
-                dest_filename = os.path.join(package_dir,
-                                                os.path.basename(filename))
-                src_filename = os.path.join(self.build_lib, filename)
-
-                # Always copy, even if source is older than destination, to ensure
-                # that the right extensions for the current Python/platform are
-                # used.
-                copy_file(
-                    src_filename, dest_filename, verbose=self.verbose,
-                    dry_run=self.dry_run
-                )
-                if ext._needs_stub:
-                    self.write_stub(package_dir or os.curdir, ext, True)
             else:
                 fullname = self.get_ext_fullname(ext.name)
                 collective_dir = "xoscar/collective"
@@ -326,6 +305,17 @@ class CMakeBuild(build_ext):
         subprocess.run(
             ["cmake", "--build", ".", *build_args], cwd=build_temp, check=True
         )
+        if sys.platform.startswith('win'):
+            for file in os.listdir(self.build_lib):
+                if file.startswith("xoscar_pygloo"):
+                    src_filename = os.path.join(self.build_lib,
+                                            os.path.basename(file))
+                    dest_filename = os.path.join(self.build_lib,
+                                                    "xoscar/collective")
+                    move_file(
+                        src_filename, dest_filename, verbose=self.verbose,
+                        dry_run=self.dry_run
+                    )
 
 
 setup_options = dict(
