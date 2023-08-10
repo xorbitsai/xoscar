@@ -24,7 +24,7 @@ from ...context import get_context
 from ...tests.core import require_cupy
 from ...utils import is_linux
 from ..common import (
-    DEVICE_ID_ENV_KEY,
+    COLLECTIVE_DEVICE_ID_ENV_KEY,
     RANK_ADDRESS_ENV_KEY,
     RENDEZVOUS_MASTER_IP_ENV_KEY,
     RENDEZVOUS_MASTER_PORT_ENV_KEY,
@@ -215,12 +215,12 @@ async def test_collective():
             {
                 RENDEZVOUS_MASTER_IP_ENV_KEY: "127.0.0.1",
                 RENDEZVOUS_MASTER_PORT_ENV_KEY: "25001",
-                DEVICE_ID_ENV_KEY: "0",
+                COLLECTIVE_DEVICE_ID_ENV_KEY: "0",
             },
             {
                 RENDEZVOUS_MASTER_IP_ENV_KEY: "127.0.0.1",
                 RENDEZVOUS_MASTER_PORT_ENV_KEY: "25001",
-                DEVICE_ID_ENV_KEY: "1",
+                COLLECTIVE_DEVICE_ID_ENV_KEY: "1",
             },
         ],
     )

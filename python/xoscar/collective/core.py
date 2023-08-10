@@ -14,13 +14,13 @@
 import hashlib
 import os
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from .. import Actor, actor_ref
 from ..context import get_context
 from ..tests.core import lazy_import
 from .common import (
-    DEVICE_ID_ENV_KEY,
+    COLLECTIVE_DEVICE_ID_ENV_KEY,
     INVOKE_ERROR_MESSAGE,
     RANK_ADDRESS_ENV_KEY,
     AllReduceAlgorithm,
@@ -38,14 +38,9 @@ class RankActor(Actor):
         rank: int,
         world: int,
         backend: str = "gloo",
-        device_id: Optional[Union[int, None]] = None,
+        device_id: Optional[int] = None,
         pg_options: Optional[ProcessGroup.Options] = None,
-        *args,
-        **kwargs,
     ):
-        assert backend == "gloo" or (
-            backend == "nccl" and device_id != None
-        ), "The device id should be set when using nccl as backend."
         assert backend == "gloo" or (
             backend == "nccl" and cupy is not None
         ), "cupy is required when using nccl as backend."
@@ -129,7 +124,7 @@ class RankActor(Actor):
         group_rank = global_ranks.index(self._rank)
         group_world = len(global_ranks)
         group_name = self._process_group_name(global_ranks)
-        device_id = self._device_id if self._device_id is not None else -1
+        device_id = self._device_id
         if group_name in self.name_to_pg[self._backend]:
             return group_name
         _ip = self._get_ip()
@@ -143,11 +138,10 @@ class RankActor(Actor):
             )
             self.name_to_pg[self._backend][group_name] = pg_gloo
         elif self._backend == "nccl":
-            assert device_id != None, "device_id should be set!"
             pg_nccl = ProcessGroupNCCL(
                 _ip,
                 group_rank,
-                device_id,
+                device_id,  # type: ignore
                 group_world,
                 group_name=group_name,
                 pg_options=pg_options,
@@ -165,7 +159,7 @@ class RankActor(Actor):
         root: Optional[int] = 0,
         tag: Optional[int] = 0,
         pg_name: str = "default",
-        **kwargs,
+        stream: Optional[Any] = None,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].reduce(
@@ -177,7 +171,7 @@ class RankActor(Actor):
                 recv_data,
                 op=op,
                 root=root,
-                stream=kwargs.get("stream", None),
+                stream=stream,
             )
 
     def allreduce(
@@ -188,7 +182,7 @@ class RankActor(Actor):
         algorithm: AllReduceAlgorithm = AllReduceAlgorithm.RING,
         tag: Optional[int] = 0,
         pg_name: str = "default",
-        **kwargs,
+        stream: Optional[Any] = None,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].allreduce(
@@ -196,7 +190,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].allreduce(
-                send_data, recv_data, op=op, stream=kwargs.get("stream", None)
+                send_data, recv_data, op=op, stream=stream
             )
 
     def gather(
@@ -206,7 +200,7 @@ class RankActor(Actor):
         root: Optional[int] = 0,
         tag: Optional[int] = 0,
         pg_name: str = "default",
-        **kwargs,
+        stream: Optional[Any] = None,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].gather(
@@ -214,7 +208,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].gather(
-                send_data, recv_data, root=root, stream=kwargs.get("stream", None)
+                send_data, recv_data, root=root, stream=stream
             )
 
     def allgather(
@@ -223,7 +217,7 @@ class RankActor(Actor):
         recv_data: Any,
         tag: Optional[int] = 0,
         pg_name: str = "default",
-        **kwargs,
+        stream: Optional[Any] = None,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].allgather(
@@ -231,7 +225,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].allgather(
-                send_data, recv_data, stream=kwargs.get("stream", None)
+                send_data, recv_data, stream=stream
             )
 
     def scatter(
@@ -241,7 +235,7 @@ class RankActor(Actor):
         root: Optional[int] = 0,
         tag: Optional[int] = 0,
         pg_name: str = "default",
-        **kwargs,
+        stream: Optional[Any] = None,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].scatter(
@@ -249,7 +243,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].scatter(
-                send_data, recv_data, root=root, stream=kwargs.get("stream", None)
+                send_data, recv_data, root=root, stream=stream
             )
 
     def reduce_scatter(
@@ -259,7 +253,7 @@ class RankActor(Actor):
         recv_elems: List[int],
         op: CollectiveReduceOp = CollectiveReduceOp.SUM,
         pg_name: str = "default",
-        **kwargs,
+        stream: Optional[Any] = None,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].reduce_scatter(
@@ -267,7 +261,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].reduce_scatter(
-                send_data, recv_data, recv_elems, op, stream=kwargs.get("stream", None)
+                send_data, recv_data, recv_elems, op, stream=stream
             )
 
     def alltoall(
@@ -276,7 +270,7 @@ class RankActor(Actor):
         recv_data: Any,
         tag: Optional[int] = 0,
         pg_name: str = "default",
-        **kwargs,
+        stream: Optional[Any] = None,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].alltoall(
@@ -284,7 +278,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].alltoall(
-                send_data, recv_data, stream=kwargs.get("stream", None)
+                send_data, recv_data, stream=stream
             )
 
     def broadcast(
@@ -294,7 +288,7 @@ class RankActor(Actor):
         root: Optional[int] = 0,
         tag: Optional[int] = 0,
         pg_name: str = "default",
-        **kwargs,
+        stream: Optional[Any] = None,
     ):
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].broadcast(
@@ -302,7 +296,7 @@ class RankActor(Actor):
             )
         else:
             self.name_to_pg[self._backend][pg_name].broadcast(
-                send_data, recv_data, root, stream=kwargs.get("stream", None)
+                send_data, recv_data, root, stream=stream
             )
 
 
@@ -310,7 +304,7 @@ async def init_process_group(
     rank: int,
     world_size: int,
     backend: str = "gloo",
-    device_id: Optional[Union[int, None]] = None,
+    device_id: Optional[int] = None,
     address: Optional[str] = None,
 ):
     """
@@ -329,13 +323,13 @@ async def init_process_group(
                         ``nccl``. If the backend is not provided, then  a ``gloo`` backend
                         will be created.
 
-        device_id(Union[int, None], optional): GPU ID the actor will bind,
-        If it is None, it will try to get it from the environment variable DEVICE_ID_ENV_KEY.
+        device_id(int, optional): GPU ID the actor will bind, default ``None``
+        If it is None and backend is gloo, it will try to get it from the environment variable COLLECTIVE_DEVICE_ID_ENV_KEY.
         If the environment variable is not set either, it will return an error.
 
-        address(str, optional): actor address.
+        address(str, optional): actor address. default ``None``
     """
-    env_device_id = os.environ.get(DEVICE_ID_ENV_KEY, None)
+    env_device_id = os.environ.get(COLLECTIVE_DEVICE_ID_ENV_KEY, None)
     assert backend == "gloo" or (
         backend == "nccl"
         and (
@@ -404,7 +398,7 @@ async def reduce(
     root: Optional[int] = 0,
     tag: Optional[int] = 0,
     group_name: str = "default",
-    **kwargs,
+    stream: Optional[Any] = None,
 ):
     """
     Reduces the numpy or cupy data across all machines.
@@ -420,17 +414,17 @@ async def reduce(
 
         root (int): Destination rank
 
-        op (optional): One of the values from
+        op (xoscar.collective.common.CollectiveReduceOp): One of the values from
             ``xoscar.collective.common.CollectiveReduceOp``
             enum.  Specifies an operation used for element-wise reductions.
+            Default is ``xoscar.collective.common.CollectiveReduceOp.SUM``.
 
-        tag (int): Tag for this operation
+        tag (int optional): Tag for this operation. Default is 0.
 
         group_name (str): The process group to work on. If None,
             the default process group will be used.
 
-        **kwargs (dict): Optional keyword arguments as a dictionary.
-        If using nccl as backend, kwargs["stream"] should be set
+        stream (cupy.cuda.Stream, optional): stream handle for nccl, default is None.
     """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
@@ -441,7 +435,7 @@ async def reduce(
         root=root,
         tag=tag,
         pg_name=group_name,
-        stream=kwargs.get("stream", None),
+        stream=stream,
     )
 
 
@@ -452,7 +446,7 @@ async def allreduce(
     algorithm: AllReduceAlgorithm = AllReduceAlgorithm.RING,
     tag: Optional[int] = 0,
     group_name: str = "default",
-    **kwargs,
+    stream: Optional[Any] = None,
 ):
     """
     Reduces the numpy or cupy data across all machines in such a way that all get
@@ -465,21 +459,22 @@ async def allreduce(
         recv_data (Any): Output of the collective. The function
             operates in-place.
 
-        op (optional): One of the values from
+        op (xoscar.collective.common.CollectiveReduceOp): One of the values from
             ``xoscar.collective.common.CollectiveReduceOp``
             enum.  Specifies an operation used for element-wise reductions.
+            Default is ``xoscar.collective.common.CollectiveReduceOp.SUM``.
 
-        algorithm (optional): One of the values from
+        algorithm (xoscar.collective.common.AllReduceAlgorithm): One of the values from
             ``xoscar.collective.common.AllReduceAlgorithm``
             enum.  Specifies an algorithm used for element-wise reductions.
+            Default is ``xoscar.collective.common.AllReduceAlgorithm.RING``.
 
-        tag (int): Tag for this operation
+        tag (int optional): Tag for this operation. Default is 0.
 
         group_name (str): The process group to work on. If None,
             the default process group will be used.
 
-        **kwargs (dict): Optional keyword arguments as a dictionary.
-        If using nccl as backend, kwargs["stream"] should be set
+        stream (cupy.cuda.Stream, optional): stream handle for nccl, default is None.
     """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid="RankActor")
@@ -490,7 +485,7 @@ async def allreduce(
         algorithm=algorithm,
         tag=tag,
         pg_name=group_name,
-        stream=kwargs.get("stream", None),
+        stream=stream,
     )
 
 
@@ -500,7 +495,7 @@ async def gather(
     root: Optional[int] = 0,
     tag: Optional[int] = 0,
     group_name: str = "default",
-    **kwargs,
+    stream: Optional[Any] = None,
 ):
     """
     Gathers a list of numpy or cupy data in a single process.
@@ -510,15 +505,14 @@ async def gather(
 
         recv_data (Any): Output data.
 
-        root (int, optional): Destination rank.
+        root (int, optional): Destination rank. Default is 0.
 
-        tag (int): Tag for this operation.
+        tag (int optional): Tag for this operation. Default is 0.
 
         group_name (str): The process group to work on. If None,
             the default process group will be used.
 
-        **kwargs (dict): Optional keyword arguments as a dictionary.
-        If using nccl as backend, kwargs["stream"] should be set
+        stream (cupy.cuda.Stream, optional): stream handle for nccl, default is None.
     """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
@@ -528,7 +522,7 @@ async def gather(
         root=root,
         tag=tag,
         pg_name=group_name,
-        stream=kwargs.get("stream", None),
+        stream=stream,
     )
 
 
@@ -537,7 +531,7 @@ async def allgather(
     recv_data: Any,
     tag: Optional[int] = 0,
     group_name: str = "default",
-    **kwargs,
+    stream: Optional[Any] = None,
 ):
     """
     Gathers a list of numpy or cupy data to all devices.
@@ -547,13 +541,12 @@ async def allgather(
 
         recv_data (Any): Output data.
 
-        tag (int): Tag for this operation.
+        tag (int optional): Tag for this operation. Default is 0.
 
         group_name (str): The process group to work on. If None,
             the default process group will be used.
 
-        **kwargs (dict): Optional keyword arguments as a dictionary.
-        If using nccl as backend, kwargs["stream"] should be set
+        stream (cupy.cuda.Stream, optional): stream handle for nccl, default is None.
     """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
@@ -562,7 +555,7 @@ async def allgather(
         recv_data,
         tag=tag,
         pg_name=group_name,
-        stream=kwargs.get("stream", None),
+        stream=stream,
     )
 
 
@@ -572,7 +565,7 @@ async def scatter(
     root: Optional[int] = 0,
     tag: Optional[int] = 0,
     group_name: str = "default",
-    **kwargs,
+    stream: Optional[Any] = None,
 ):
     """
     Scatters a list of numpy or cupy data to all processes in a group.
@@ -587,13 +580,12 @@ async def scatter(
 
         root (int, optional): Source rank (default is 0).
 
-        tag (int): Tag for this operation.
+        tag (int optional): Tag for this operation. Default is 0.
 
         group_name (str): The process group to work on. If None,
             the default process group will be used.
 
-        **kwargs (dict): Optional keyword arguments as a dictionary.
-        If using nccl as backend, kwargs["stream"] should be set
+        stream (cupy.cuda.Stream, optional): stream handle for nccl, default is None.
     """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
@@ -603,7 +595,7 @@ async def scatter(
         root=root,
         tag=tag,
         pg_name=group_name,
-        stream=kwargs.get("stream", None),
+        stream=stream,
     )
 
 
@@ -613,7 +605,7 @@ async def reduce_scatter(
     recv_elems: List[int],
     op: CollectiveReduceOp = CollectiveReduceOp.SUM,
     group_name: str = "default",
-    **kwargs,
+    stream: Optional[Any] = None,
 ):
     """
     Reduces, then scatters a list of numpy or cupy data to all processes in a group.
@@ -625,15 +617,15 @@ async def reduce_scatter(
 
         recv_elems (List[int]): the size of recv data for each process
 
-        op (optional): One of the values from
+        op (xoscar.collective.common.CollectiveReduceOp): One of the values from
             ``xoscar.collective.common.CollectiveReduceOp``
             enum.  Specifies an operation used for element-wise reductions.
+            Default is ``xoscar.collective.common.CollectiveReduceOp.SUM``.
 
         group_name (str): The process group to work on. If None,
             the default process group will be used.
 
-        **kwargs (dict): Optional keyword arguments as a dictionary.
-        If using nccl as backend, kwargs["stream"] should be set
+        stream (cupy.cuda.Stream, optional): stream handle for nccl, default is None.
     """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
@@ -643,7 +635,7 @@ async def reduce_scatter(
         recv_elems,
         op,
         pg_name=group_name,
-        stream=kwargs.get("stream", None),
+        stream=stream,
     )
 
 
@@ -652,7 +644,7 @@ async def alltoall(
     recv_data: Any,
     tag: Optional[int] = 0,
     group_name: str = "default",
-    **kwargs,
+    stream: Optional[Any] = None,
 ):
     """
     Each process scatters list of numpy or cupy data to all processes in a group
@@ -664,13 +656,12 @@ async def alltoall(
 
         recv_data (Any): Output data.
 
-        tag (int): Tag for this operation.
+        tag (int, optional): Tag for this operation. default is 0.
 
         group_name (str): The process group to work on. If None,
             the default process group will be used.
 
-        **kwargs (dict): Optional keyword arguments as a dictionary.
-        If using nccl as backend, kwargs["stream"] should be set
+        stream (cupy.cuda.Stream, optional): stream handle for nccl, default is None.
     """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
@@ -679,7 +670,7 @@ async def alltoall(
         recv_data,
         tag=tag,
         pg_name=group_name,
-        stream=kwargs.get("stream", None),
+        stream=stream,
     )
 
 
@@ -689,7 +680,7 @@ async def broadcast(
     root: Optional[int] = 0,
     tag: Optional[int] = 0,
     group_name: str = "default",
-    **kwargs,
+    stream: Optional[Any] = None,
 ):
     """
     Broadcasts the tensor to the whole group.
@@ -702,15 +693,14 @@ async def broadcast(
 
         recv_data (Any): Output data.
 
-        root (int): Source rank.
+        root (int, optional): Source rank. Default is 0.
 
-        tag (int): Tag for this operation.
+        tag (int, optional): Tag for this operation. Default is 0.
 
         group_name (str): The process group to work on. If None,
             the default process group will be used.
 
-        **kwargs (dict): Optional keyword arguments as a dictionary.
-        If using nccl as backend, kwargs["stream"] should be set
+        stream (cupy.cuda.Stream, optional): stream handle for nccl, default is None.
     """
     address = get_rank_address_via_env(RANK_ADDRESS_ENV_KEY, INVOKE_ERROR_MESSAGE)
     ref = await actor_ref(address=address, uid=f"RankActor")
@@ -720,5 +710,5 @@ async def broadcast(
         root,
         tag,
         pg_name=group_name,
-        stream=kwargs.get("stream", None),
+        stream=stream,
     )

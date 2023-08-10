@@ -390,14 +390,14 @@ class ProcessGroupNCCL(ProcessGroup):
         recv_buf: Any,
         op: CollectiveReduceOp = CollectiveReduceOp.SUM,
         root: Optional[int] = 0,
-        **kwargs
+        stream: Optional[Any] = None,
     ):
         send_buf = convert_data_to_cp_array(send_buf)
         recv_buf = convert_data_to_cp_array(recv_buf)
         dtype = send_buf.dtype
         stream = (
-            kwargs.get("stream", None)
-            if kwargs.get("stream", None) is not None
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
             else cupy.cuda.Stream.null
         )
         if self._is_world:
@@ -420,14 +420,14 @@ class ProcessGroupNCCL(ProcessGroup):
         send_buf: Any,
         recv_buf: Any,
         op: CollectiveReduceOp = CollectiveReduceOp.SUM,
-        **kwargs
+        stream: Optional[Any] = None,
     ):
         send_buf = convert_data_to_cp_array(send_buf)
         recv_buf = convert_data_to_cp_array(recv_buf)
         dtype = send_buf.dtype
         stream = (
-            kwargs.get("stream", None)
-            if kwargs.get("stream", None) is not None
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
             else cupy.cuda.Stream.null
         )
         if self._is_world:
@@ -444,7 +444,13 @@ class ProcessGroupNCCL(ProcessGroup):
                 stream.ptr,
             )
 
-    def gather(self, send_buf: Any, recv_buf: Any, root: Optional[int] = 0, **kwargs):
+    def gather(
+        self,
+        send_buf: Any,
+        recv_buf: Any,
+        root: Optional[int] = 0,
+        stream: Optional[Any] = None,
+    ):
         assert (
             send_buf.size * self.world_size == recv_buf.size
         ), "Send_size * world_number must be equal to recv_size"
@@ -452,8 +458,8 @@ class ProcessGroupNCCL(ProcessGroup):
         recv_buf = convert_data_to_cp_array(recv_buf)
         dtype = send_buf.dtype
         stream = (
-            kwargs.get("stream", None)
-            if kwargs.get("stream", None) is not None
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
             else cupy.cuda.Stream.null
         )
         if self._is_world:
@@ -483,12 +489,17 @@ class ProcessGroupNCCL(ProcessGroup):
                     stream.ptr,
                 )
 
-    def allgather(self, send_buf: Any, recv_buf: Any, **kwargs):
+    def allgather(
+        self,
+        send_buf: Any,
+        recv_buf: Any,
+        stream: Optional[Any] = None,
+    ):
         send_buf = convert_data_to_cp_array(send_buf)
         recv_buf = convert_data_to_cp_array(recv_buf)
         stream = (
-            kwargs.get("stream", None)
-            if kwargs.get("stream", None) is not None
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
             else cupy.cuda.Stream.null
         )
         dtype = send_buf.dtype
@@ -504,13 +515,17 @@ class ProcessGroupNCCL(ProcessGroup):
             )
 
     def scatter(
-        self, send_buf: List[Any], recv_buf: Any, root: Optional[int] = 0, **kwargs
+        self,
+        send_buf: List[Any],
+        recv_buf: Any,
+        root: Optional[int] = 0,
+        stream: Optional[Any] = None,
     ):
         send_buf = [convert_data_to_cp_array(d) for d in send_buf]
         recv_buf = convert_data_to_cp_array(recv_buf)
         stream = (
-            kwargs.get("stream", None)
-            if kwargs.get("stream", None) is not None
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
             else cupy.cuda.Stream.null
         )
         if self._is_world:
@@ -552,14 +567,14 @@ class ProcessGroupNCCL(ProcessGroup):
         recv_buf: Any,
         recv_elems: List[int],
         op: CollectiveReduceOp = CollectiveReduceOp.SUM,
-        **kwargs
+        stream: Optional[Any] = None,
     ):
         send_buf = convert_data_to_cp_array(send_buf)
         recv_buf = convert_data_to_cp_array(recv_buf)
         dtype = send_buf.dtype
         stream = (
-            kwargs.get("stream", None)
-            if kwargs.get("stream", None) is not None
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
             else cupy.cuda.Stream.null
         )
         if self._is_world:
@@ -580,7 +595,12 @@ class ProcessGroupNCCL(ProcessGroup):
                 stream.ptr,
             )
 
-    def alltoall(self, send_buf: Any, recv_buf: Any, **kwargs):
+    def alltoall(
+        self,
+        send_buf: Any,
+        recv_buf: Any,
+        stream: Optional[Any] = None,
+    ):
         assert (
             self.world_size == send_buf.shape[0]
         ), "The first dim of send data must be equal to world size."
@@ -591,8 +611,8 @@ class ProcessGroupNCCL(ProcessGroup):
         recv_buf = convert_data_to_cp_array(recv_buf)
         dtype = send_buf.dtype
         stream = (
-            kwargs.get("stream", None)
-            if kwargs.get("stream", None) is not None
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
             else cupy.cuda.Stream.null
         )
         if self._is_world:
@@ -636,14 +656,18 @@ class ProcessGroupNCCL(ProcessGroup):
             cupy.cuda.nccl.groupEnd()
 
     def broadcast(
-        self, send_buf: Any, recv_buf: Any, root: Optional[int] = 0, **kwargs
+        self,
+        send_buf: Any,
+        recv_buf: Any,
+        root: Optional[int] = 0,
+        stream: Optional[Any] = None,
     ):
         send_buf = convert_data_to_cp_array(send_buf)
         recv_buf = convert_data_to_cp_array(recv_buf)
         dtype = send_buf.dtype
         stream = (
-            kwargs.get("stream", None)
-            if kwargs.get("stream", None) is not None
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
             else cupy.cuda.Stream.null
         )
         if self._is_world:

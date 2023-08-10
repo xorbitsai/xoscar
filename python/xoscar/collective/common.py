@@ -66,9 +66,7 @@ TypeMappingGloo: Dict[Type[np.dtype], "xp.GlooDataType_t"] = {
     np.float64: xp.GlooDataType_t.glooFloat64,
 }
 cupy = lazy_import("cupy")
-if cupy is None:
-    pass
-else:
+if cupy is not None:
     from cupy.cuda import nccl
 
     TypeMappingNCCL: Dict[Type[np.dtype], int] = {
@@ -101,4 +99,4 @@ INVOKE_ERROR_MESSAGE = "Collective-related functions must be called in a process
 RANK_ADDRESS_ENV_KEY = "COLLECTIVE_RANK_ADDRESS"
 RENDEZVOUS_MASTER_IP_ENV_KEY = "COLLECTIVE_MASTER_IP"
 RENDEZVOUS_MASTER_PORT_ENV_KEY = "COLLECTIVE_MASTER_PORT"
-DEVICE_ID_ENV_KEY = "DEVICE ID FOR AN ACTOR"
+COLLECTIVE_DEVICE_ID_ENV_KEY = "COLLECTIVE_DEVICE_ID_FOR_AN_ACTOR"

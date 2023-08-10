@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# We need to extend cupy's inner class because an actor is a daemonic processes
+# which are not allowed to have children. However, the origin code in cupy
+# will create children processes.
+
 import queue
 import socket
 import threading
@@ -21,9 +25,7 @@ from ...tests.core import lazy_import
 
 cupy = lazy_import("cupy")
 
-if cupy is None:
-    pass
-else:
+if cupy is not None:
     import cupyx.distributed
     from cupy.cuda import nccl
     from cupyx.distributed import _klv_utils, _store, _store_actions
