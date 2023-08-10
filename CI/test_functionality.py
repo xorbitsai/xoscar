@@ -4,6 +4,9 @@ import pytest
 
 import xoscar as mo
 
+import platform
+import sys
+
 
 class MyActor(mo.Actor):
     def __init__(self):
@@ -40,5 +43,8 @@ async def test_basic_cases():
         assert await ref1.add_from(ref2) == 3
 
 def test_pygloo():
-    import xoscar.collective.xoscar_pygloo as xp
-    print(type(xp.ReduceOp.SUM))
+    is_windows = sys.platform.startswith('win')
+    bit_number = platform.architecture()[0]
+    if not (is_windows and bit_number=="32bit"):
+        import xoscar.collective.xoscar_pygloo as xp
+        print(type(xp.ReduceOp.SUM))
