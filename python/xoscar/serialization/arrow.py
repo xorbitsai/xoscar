@@ -25,32 +25,18 @@ except ImportError:  # pragma: no cover
     pa = None
     pa_types = Any  # type: ignore
 
-from .core import Serializer, buffered
+from .core import Serializer, buffered, pickle_buffers, unpickle_buffers
 
 
 class ArrowBatchSerializer(Serializer):
     @buffered
     def serial(self, obj: pa_types, context: dict):
-        sink = pa.BufferOutputStream()
-        writer = pa.RecordBatchStreamWriter(sink, obj.schema)
-        if isinstance(obj, pa.Table):
-            batch_type = "T"
-            writer.write_table(obj)
-        else:
-            batch_type = "B"
-            writer.write_batch(obj)
-        writer.close()
-
-        buf = sink.getvalue()
-        buffers = [buf]
-        return (batch_type,), buffers, True
+        header: dict = {}
+        buffers = pickle_buffers(obj)
+        return (header,), buffers, True
 
     def deserial(self, serialized: tuple, context: dict, subs: list):
-        reader = pa.RecordBatchStreamReader(pa.BufferReader(subs[0]))
-        if serialized[0] == "T":
-            return reader.read_all()
-        else:
-            return reader.read_next_batch()
+        return unpickle_buffers(subs)
 
 
 if pa is not None:  # pragma: no branch
