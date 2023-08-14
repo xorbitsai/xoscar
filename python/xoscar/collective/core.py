@@ -652,7 +652,7 @@ async def alltoall(
     Complex tensors are supported.
 
     Args:
-        send_data (List(Any)): Input data.
+        send_data (Any): Input data.
 
         recv_data (Any): Output data.
 
@@ -689,7 +689,7 @@ async def broadcast(
     participating in the collective.
 
     Args:
-        send_data (List(Any)): Input data.
+        send_data (Any): Input data.
 
         recv_data (Any): Output data.
 
