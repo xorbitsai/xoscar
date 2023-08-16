@@ -66,9 +66,6 @@ if cupy is not None:
             if not _store._exit_mode:
                 self.stop()
 
-        def _set_thread(self, process):
-            self._thread = process
-
         def _thread_request(self, c_socket):
             with c_socket:
                 # Receive in KLV format
