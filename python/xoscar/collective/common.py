@@ -16,6 +16,7 @@ from typing import Dict, Type
 
 import numpy as np
 
+from ..tests.core import lazy_import
 from . import xoscar_pygloo as xp
 
 ReduceOpMappingGloo: Dict["CollectiveReduceOp", "xp.ReduceOp"] = {}
@@ -64,9 +65,38 @@ TypeMappingGloo: Dict[Type[np.dtype], "xp.GlooDataType_t"] = {
     np.float32: xp.GlooDataType_t.glooFloat32,
     np.float64: xp.GlooDataType_t.glooFloat64,
 }
+cupy = lazy_import("cupy")
+if cupy is not None:
+    from cupy.cuda import nccl
 
+    TypeMappingNCCL: Dict[Type[np.dtype], int] = {
+        np.int8: nccl.NCCL_INT8,
+        np.uint8: nccl.NCCL_UINT8,
+        np.int32: nccl.NCCL_INT32,
+        np.uint32: nccl.NCCL_UINT32,
+        np.int64: nccl.NCCL_INT64,
+        np.uint64: nccl.NCCL_UINT64,
+        np.float16: nccl.NCCL_FLOAT16,
+        np.float32: nccl.NCCL_FLOAT32,
+        np.float64: nccl.NCCL_FLOAT64,
+    }
+
+    ReduceOpMappingNCCL: Dict[CollectiveReduceOp, int] = {
+        CollectiveReduceOp.SUM: nccl.NCCL_SUM,
+        CollectiveReduceOp.PRODUCT: nccl.NCCL_PROD,
+        CollectiveReduceOp.MAX: nccl.NCCL_MAX,
+        CollectiveReduceOp.MIN: nccl.NCCL_MIN,
+    }
+
+    ReduceOpMappingNCCLStr: Dict[CollectiveReduceOp, str] = {
+        CollectiveReduceOp.SUM: "sum",
+        CollectiveReduceOp.PRODUCT: "prod",
+        CollectiveReduceOp.MAX: "max",
+        CollectiveReduceOp.MIN: "min",
+    }
 # Some static variables
 INVOKE_ERROR_MESSAGE = "Collective-related functions must be called in a process that is involved in collection communication."
 RANK_ADDRESS_ENV_KEY = "COLLECTIVE_RANK_ADDRESS"
 RENDEZVOUS_MASTER_IP_ENV_KEY = "COLLECTIVE_MASTER_IP"
 RENDEZVOUS_MASTER_PORT_ENV_KEY = "COLLECTIVE_MASTER_PORT"
+COLLECTIVE_DEVICE_ID_ENV_KEY = "COLLECTIVE_DEVICE_ID_FOR_AN_ACTOR"

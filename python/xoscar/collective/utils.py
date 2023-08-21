@@ -15,12 +15,23 @@ import os
 
 import numpy as np
 
+from ..tests.core import lazy_import
+
+cupy = lazy_import("cupy")
+
 
 def convert_data_to_np_array(data):
     if isinstance(data, np.ndarray):
         return data
     else:
         return np.frombuffer(data, dtype="u1")
+
+
+def convert_data_to_cp_array(data):
+    if isinstance(data, cupy.ndarray):
+        return data
+    else:
+        return cupy.frombuffer(data, dtype="u1")
 
 
 def get_rank_address_via_env(env_key: str, err_message: str) -> str:
