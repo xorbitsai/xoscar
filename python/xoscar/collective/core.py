@@ -161,6 +161,10 @@ class RankActor(Actor):
         pg_name: str = "default",
         stream: Optional[Any] = None,
     ):
+        assert self.backend() == "nccl" or (
+            self.backend() == "gloo" and stream is None
+        ), "The parameter 'stream' can only be used when the backend of the group is 'nccl'"
+
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].reduce(
                 send_data, recv_data, op=op, root=root, tag=tag
@@ -202,6 +206,10 @@ class RankActor(Actor):
         pg_name: str = "default",
         stream: Optional[Any] = None,
     ):
+        assert self.backend() == "nccl" or (
+            self.backend() == "gloo" and stream is None
+        ), "The parameter 'stream' can only be used when the backend of the group is 'nccl'"
+
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].gather(
                 send_data, recv_data, root=root, tag=tag
@@ -237,6 +245,10 @@ class RankActor(Actor):
         pg_name: str = "default",
         stream: Optional[Any] = None,
     ):
+        assert self.backend() == "nccl" or (
+            self.backend() == "gloo" and stream is None
+        ), "The parameter 'stream' can only be used when the backend of the group is 'nccl'"
+
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].scatter(
                 send_data, recv_data, root=root, tag=tag
@@ -255,6 +267,10 @@ class RankActor(Actor):
         pg_name: str = "default",
         stream: Optional[Any] = None,
     ):
+        assert self.backend() == "nccl" or (
+            self.backend() == "gloo" and stream is None
+        ), "The parameter 'stream' can only be used when the backend of the group is 'nccl'"
+
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].reduce_scatter(
                 send_data, recv_data, recv_elems, op
@@ -272,6 +288,10 @@ class RankActor(Actor):
         pg_name: str = "default",
         stream: Optional[Any] = None,
     ):
+        assert self.backend() == "nccl" or (
+            self.backend() == "gloo" and stream is None
+        ), "The parameter 'stream' can only be used when the backend of the group is 'nccl'"
+
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].alltoall(
                 send_data, recv_data, tag=tag
@@ -290,6 +310,10 @@ class RankActor(Actor):
         pg_name: str = "default",
         stream: Optional[Any] = None,
     ):
+        assert self.backend() == "nccl" or (
+            self.backend() == "gloo" and stream is None
+        ), "The parameter 'stream' can only be used when the backend of the group is 'nccl'"
+
         if self._backend == "gloo":
             self.name_to_pg[self._backend][pg_name].broadcast(
                 send_data, recv_data, root, tag=tag
@@ -443,7 +467,6 @@ async def allreduce(
     send_data: Any,
     recv_data: Any,
     op: CollectiveReduceOp = CollectiveReduceOp.SUM,
-    algorithm: AllReduceAlgorithm = AllReduceAlgorithm.RING,
     tag: Optional[int] = 0,
     group_name: str = "default",
     stream: Optional[Any] = None,
@@ -482,7 +505,7 @@ async def allreduce(
         send_data,
         recv_data,
         op=op,
-        algorithm=algorithm,
+        algorithm=AllReduceAlgorithm.RING,
         tag=tag,
         pg_name=group_name,
         stream=stream,
