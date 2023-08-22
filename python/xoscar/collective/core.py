@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 
 from .. import Actor, actor_ref
 from ..context import get_context
-from ..tests.core import lazy_import
+from ..utils import lazy_import
 from .common import (
     COLLECTIVE_DEVICE_ID_ENV_KEY,
     INVOKE_ERROR_MESSAGE,

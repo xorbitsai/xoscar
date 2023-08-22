@@ -15,8 +15,7 @@ import os
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
-from ..tests.core import lazy_import
-from ..utils import is_linux
+from ..utils import is_linux, lazy_import
 from . import xoscar_pygloo as xp
 from .common import (
     RENDEZVOUS_MASTER_IP_ENV_KEY,
