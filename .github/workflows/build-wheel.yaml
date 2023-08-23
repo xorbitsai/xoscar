@@ -52,10 +52,6 @@ jobs:
         if: ${{ matrix.os == 'windows-latest'}}
         uses: microsoft/setup-msbuild@v1.1
 
-      - name: Install libuv
-        if: ${{ matrix.os == 'macos-latest'}}
-        uses: brew install libuv
-
       - name: Set up QEMU
         if: ${{ matrix.arch == 'aarch64' }}
         uses: docker/setup-qemu-action@v2
