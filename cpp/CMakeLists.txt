@@ -18,7 +18,20 @@ add_subdirectory(collective/rendezvous)
 add_subdirectory(collective/gloo)
 
 pybind11_add_module(xoscar_pygloo collective/gloo/main.cc)
-
-target_link_libraries(xoscar_pygloo PRIVATE GlooLib gloo StoreLib fmt::fmt)
+if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+  include(FindPkgConfig)
+  pkg_search_module(libuv REQUIRED libuv>=1.26)
+  target_include_directories(xoscar_pygloo PRIVATE ${libuv_INCLUDE_DIRS})
+  message(${libuv_INCLUDE_DIRS})
+  message(${libuv_LIBRARY})
+  find_file(
+    libuv_LIBRARY
+    NAMES libuv.a libuv_a.a
+    PATHS ${libuv_LIBDIR}
+    NO_DEFAULT_PATH)
+  target_link_libraries(xoscar_pygloo PRIVATE GlooLib gloo StoreLib fmt::fmt ${libuv_LIBRARY})
+else()
+  target_link_libraries(xoscar_pygloo PRIVATE GlooLib gloo StoreLib fmt::fmt)
+endif()
 set_target_properties(xoscar_pygloo PROPERTIES LIBRARY_OUTPUT_DIRECTORY
                                                ${LIBRARY_OUTPUT_DIRECTORY})
