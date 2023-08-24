@@ -21,7 +21,6 @@ pybind11_add_module(xoscar_pygloo collective/gloo/main.cc)
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
   include(FindPkgConfig)
   pkg_search_module(libuv REQUIRED libuv>=1.26)
-  target_include_directories(xoscar_pygloo PRIVATE ${libuv_INCLUDE_DIRS})
   find_file(
     libuv_LIBRARY
     NAMES libuv.a libuv_a.a
