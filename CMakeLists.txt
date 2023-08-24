@@ -41,12 +41,6 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
   add_definitions(-DNOMINMAX)
 endif()
 
-if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-  include(FindPkgConfig)
-  pkg_search_module(libuv REQUIRED libuv>=1.26)
-  message(STATUS "Found libuv version: ${libuv_VERSION}")
-endif()
-
 add_subdirectory(third_party/fmt)
 add_subdirectory(third_party/pybind11)
 add_subdirectory(third_party/gloo)
