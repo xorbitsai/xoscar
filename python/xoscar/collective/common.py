@@ -16,7 +16,7 @@ from typing import Dict, Type
 
 import numpy as np
 
-from ..tests.core import lazy_import
+from ..utils import lazy_import
 from . import xoscar_pygloo as xp
 
 ReduceOpMappingGloo: Dict["CollectiveReduceOp", "xp.ReduceOp"] = {}

@@ -18,7 +18,23 @@ add_subdirectory(collective/rendezvous)
 add_subdirectory(collective/gloo)
 
 pybind11_add_module(xoscar_pygloo collective/gloo/main.cc)
-
-target_link_libraries(xoscar_pygloo PRIVATE GlooLib gloo StoreLib fmt::fmt)
+if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+  include(FindPkgConfig)
+  pkg_search_module(libuv REQUIRED libuv>=1.26)
+  find_file(
+    libuv_LIBRARY
+    NAMES libuv.a libuv_a.a
+    PATHS ${libuv_LIBDIR}
+    NO_DEFAULT_PATH)
+  if(NOT EXISTS ${libuv_LIBRARY})
+    message(FATAL_ERROR "Unable to find static libuv library in " ${libuv_LIBDIR})
+  endif()
+  add_library(uv_s INTERFACE IMPORTED)
+  set_target_properties(uv_s PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${libuv_INCLUDE_DIRS}
+                                        INTERFACE_LINK_LIBRARIES ${libuv_LIBRARY})
+  target_link_libraries(xoscar_pygloo PRIVATE GlooLib gloo StoreLib fmt::fmt uv_s)
+else()
+  target_link_libraries(xoscar_pygloo PRIVATE GlooLib gloo StoreLib fmt::fmt)
+endif()
 set_target_properties(xoscar_pygloo PROPERTIES LIBRARY_OUTPUT_DIRECTORY
                                                ${LIBRARY_OUTPUT_DIRECTORY})
