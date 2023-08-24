@@ -29,7 +29,13 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     NAMES libuv.a libuv_a.a
     PATHS ${libuv_LIBDIR}
     NO_DEFAULT_PATH)
-  target_link_libraries(xoscar_pygloo PRIVATE GlooLib gloo StoreLib fmt::fmt ${libuv_LIBRARY})
+  if(NOT EXISTS ${libuv_LIBRARY})
+    message(FATAL_ERROR "Unable to find static libuv library in " ${libuv_LIBDIR})
+  endif()
+  add_library(uv_s INTERFACE IMPORTED)
+  set_target_properties(uv_s PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${libuv_INCLUDE_DIRS}
+                                        INTERFACE_LINK_LIBRARIES ${libuv_LIBRARY})
+  target_link_libraries(xoscar_pygloo PRIVATE GlooLib gloo StoreLib fmt::fmt uv_s)
 else()
   target_link_libraries(xoscar_pygloo PRIVATE GlooLib gloo StoreLib fmt::fmt)
 endif()
