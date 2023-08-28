@@ -9,7 +9,7 @@ group participate.
 
 xoscar supports collective communication among actors. It utilizes the Gloo backend on CPU and 
 the NCCL backend on GPU. You can determine which backend to use by setting the parameter ``backend``
-when establishing the process group.
+of function ``init_process_group`` when establishing the process group.
 
 .. seealso::
    :ref:`ref_collective_communication`
@@ -24,7 +24,7 @@ the process group, you can create smaller process groups within this overall pro
 collective communication. Here is an example of how to perform a broadcast operation:
 
 .. code-block:: python
-   
+
    from xoscar import Actor, ActorRefType, actor_ref, create_actor_pool, get_pool_config
    from xoscar.context import get_context
    from xoscar.collective.common import(
