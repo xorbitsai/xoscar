@@ -545,14 +545,6 @@ cdef class _BaseActor:
             raise ex
 
 
-# The @cython.binding(True) is for ray getting members.
-# The value is True by default after cython >= 3.0.0
-@cython.binding(True)
-cdef class _Actor(_BaseActor):
-    def _create_lock(self):
-        return asyncio.locks.Lock()
-
-
 cdef class _FakeLock:
     async def __aenter__(self):
         pass
@@ -564,9 +556,12 @@ cdef class _FakeLock:
 # The @cython.binding(True) is for ray getting members.
 # The value is True by default after cython >= 3.0.0
 @cython.binding(True)
-cdef class _StatelessActor(_BaseActor):
+cdef class _Actor(_BaseActor):
     def _create_lock(self):
-        return _FakeLock()
+        lock_type = self.__xoscar_lock_type__
+        if lock_type is None:
+            return _FakeLock()
+        return lock_type()
 
 
 cdef class BufferRef:
