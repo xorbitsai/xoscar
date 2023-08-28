@@ -157,7 +157,9 @@ class CreateDestroyActor(mo.Actor):
         return message
 
 
-class ResourceLockActor(mo.StatelessActor):
+class ResourceLockActor(mo.Actor):
+    __xoscar_lock_type__ = None
+
     def __init__(self, count=1):
         self._sem = asyncio.Semaphore(count)
         self._requests = deque()
