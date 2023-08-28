@@ -348,8 +348,8 @@ async def init_process_group(
                         will be created.
 
         device_id(int, optional): GPU ID the actor will bind, default ``None``
-        If it is None and backend is gloo, it will try to get it from the environment variable COLLECTIVE_DEVICE_ID_ENV_KEY.
-        If the environment variable is not set either, it will return an error.
+                        If it is None and backend is gloo, it will try to get it from the environment variable COLLECTIVE_DEVICE_ID_ENV_KEY.
+                        If the environment variable is not set either, it will return an error.
 
         address(str, optional): actor address. default ``None``
     """
