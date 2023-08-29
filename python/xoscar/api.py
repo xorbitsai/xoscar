@@ -310,7 +310,7 @@ class AsyncActorMixin:
 class Actor(AsyncActorMixin, _Actor):
     # Guard all the methods with an instance of __xoscar_lock_type__
     # Lock free if the __xoscar_lock_type__ is None.
-    __xoscar_lock_type__: Optional[type(asyncio.locks.Lock)] = asyncio.locks.Lock
+    __xoscar_lock_type__: Optional[type[asyncio.locks.Lock]] = asyncio.locks.Lock
 
 
 _actor_implementation: Dict[Type[Actor], Type[Actor]] = dict()
