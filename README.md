@@ -43,14 +43,35 @@ belong to. This allows Xoscar to optimize communication in heterogeneous environ
 units and accelerators.
 
 ## Where to get it
-The source code is currently hosted on GitHub at: https://github.com/xorbitsai/xoscar
 
+### PyPI
 Binary installers for the latest released version are available at the [Python
 Package Index (PyPI)](https://pypi.org/project/xoscar).
 
 ```shell
 # PyPI
 pip install xoscar
+```
+
+### Build from source
+The source code is currently hosted on GitHub at: https://github.com/xorbitsai/xoscar .
+
+Building from source requires that you have cmake and gcc installed on your system.
+
+- cmake >= 3.11
+- gcc >= 8
+
+```shell
+# If you have never cloned xoscar before
+git clone --recursive https://github.com/xorbitsai/xoscar.git
+cd xoscar/python
+pip install -e .
+
+# If you have already cloned xoscar before
+cd xoscar
+git submodule init
+git submodule update
+cd python && pip install -e .
 ```
 
 ## APIs

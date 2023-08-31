@@ -15,7 +15,7 @@ import os
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
-from ..utils import is_linux
+from ..utils import is_linux, lazy_import
 from . import xoscar_pygloo as xp
 from .common import (
     RENDEZVOUS_MASTER_IP_ENV_KEY,
@@ -26,13 +26,20 @@ from .common import (
     ReduceOpMappingGloo,
     TypeMappingGloo,
 )
-from .utils import convert_data_to_np_array
+from .utils import convert_data_to_cp_array, convert_data_to_np_array
+
+cupy = lazy_import("cupy")
+if cupy is not None:
+    from .backend.nccl_backend import TCPStore, XoscarNCCLBackend
+    from .common import ReduceOpMappingNCCL, ReduceOpMappingNCCLStr, TypeMappingNCCL
 
 
 class _World:
     def __init__(self):
         self._store = None
         self._device = None
+        self._backend = None
+        self._nccl_size = 0
 
     @property
     def store(self):
@@ -321,3 +328,360 @@ class ProcessGroupGloo(ProcessGroup):
             root,
             tag,
         )
+
+
+class ProcessGroupNCCL(ProcessGroup):
+    def __init__(
+        self,
+        ip: str,
+        rank: int,
+        device_id: int,
+        world_size: int,
+        group_name: Optional[str] = None,
+        pg_options: Optional[ProcessGroup.Options] = None,
+    ):
+        assert (
+            cupy != None
+        ), "cupy is required when creating a group using nccl as backend."
+        from cupy.cuda import nccl
+
+        super().__init__(rank, world_size, group_name, pg_options)
+        cupy.cuda.Device(device_id).use()
+        if _world._backend is None:
+            master_ip = (
+                pg_options.master_ip
+                if pg_options is not None
+                else os.environ.get(RENDEZVOUS_MASTER_IP_ENV_KEY, None)
+            )
+            master_port = (
+                pg_options.master_port
+                if pg_options is not None
+                else os.environ.get(RENDEZVOUS_MASTER_PORT_ENV_KEY, None)
+            )
+            if master_ip is None or master_port is None:
+                raise ValueError("Cannot find master ip or port for rendezvous")
+            store = TCPStore(world_size)
+            backend = XoscarNCCLBackend(
+                world_size, rank, store, master_ip, int(master_port)
+            )
+            _world._backend = backend
+            _world._nccl_size = world_size
+            self._is_world = True
+            self._backend = backend
+        else:
+            self._is_world = False
+            if rank == 0:
+                commId = nccl.get_unique_id()
+                ccid = cupy.array(commId)
+                for i in range(1, world_size):
+                    _world._backend.send(ccid, i, None)
+            else:
+                commId = (int(i) for i in range(128))
+                commId = tuple(commId)
+                ccid = cupy.array(commId, dtype="int64")
+                _world._backend.recv(ccid, 0, None)
+                commId = tuple(ccid.tolist())
+            self._backend = nccl.NcclCommunicator(world_size, commId, rank)
+
+    def reduce(
+        self,
+        send_buf: Any,
+        recv_buf: Any,
+        op: CollectiveReduceOp = CollectiveReduceOp.SUM,
+        root: Optional[int] = 0,
+        stream: Optional[Any] = None,
+    ):
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
+        dtype = send_buf.dtype
+        stream = (
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
+            else cupy.cuda.Stream.null
+        )
+        if self._is_world:
+            self._backend.reduce(
+                send_buf, recv_buf, root, ReduceOpMappingNCCLStr[op], stream
+            )
+        else:
+            self._backend.reduce(
+                send_buf.data.ptr,
+                recv_buf.data.ptr,
+                send_buf.size,
+                TypeMappingNCCL[dtype.type],
+                ReduceOpMappingNCCL[op],
+                root,
+                stream.ptr,
+            )
+
+    def allreduce(
+        self,
+        send_buf: Any,
+        recv_buf: Any,
+        op: CollectiveReduceOp = CollectiveReduceOp.SUM,
+        stream: Optional[Any] = None,
+    ):
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
+        dtype = send_buf.dtype
+        stream = (
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
+            else cupy.cuda.Stream.null
+        )
+        if self._is_world:
+            self._backend.all_reduce(
+                send_buf, recv_buf, ReduceOpMappingNCCLStr[op], stream
+            )
+        else:
+            self._backend.allReduce(
+                send_buf.data.ptr,
+                recv_buf.data.ptr,
+                send_buf.size,
+                TypeMappingNCCL[dtype.type],
+                ReduceOpMappingNCCL[op],
+                stream.ptr,
+            )
+
+    def gather(
+        self,
+        send_buf: Any,
+        recv_buf: Any,
+        root: Optional[int] = 0,
+        stream: Optional[Any] = None,
+    ):
+        assert (
+            send_buf.size * self.world_size == recv_buf.size
+        ), "Send_size * world_number must be equal to recv_size"
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
+        dtype = send_buf.dtype
+        stream = (
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
+            else cupy.cuda.Stream.null
+        )
+        if self._is_world:
+            self._backend.gather(send_buf, recv_buf, root, stream)
+        else:
+            if self.rank == root:
+                cupy.cuda.nccl.groupStart()
+                for peer in range(self.world_size):
+                    if peer == self.rank:
+                        recv_buf[peer : peer + 1] = send_buf.reshape(1, -1)
+                    else:
+                        self._backend.recv(
+                            recv_buf[peer : peer + 1].data.ptr,
+                            recv_buf[peer : peer + 1].size,
+                            TypeMappingNCCL[dtype.type],
+                            peer,
+                            stream.ptr,
+                        )
+                cupy.cuda.nccl.groupEnd()
+            else:
+                send_buf = send_buf.reshape(1, -1)
+                self._backend.send(
+                    send_buf.data.ptr,
+                    send_buf.size,
+                    TypeMappingNCCL[dtype.type],
+                    root,
+                    stream.ptr,
+                )
+
+    def allgather(
+        self,
+        send_buf: Any,
+        recv_buf: Any,
+        stream: Optional[Any] = None,
+    ):
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
+        stream = (
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
+            else cupy.cuda.Stream.null
+        )
+        dtype = send_buf.dtype
+        if self._is_world:
+            self._backend.all_gather(send_buf, recv_buf, send_buf.size, stream)
+        else:
+            self._backend.allGather(
+                send_buf.data.ptr,
+                recv_buf.data.ptr,
+                send_buf.size,
+                TypeMappingNCCL[dtype.type],
+                stream.ptr,
+            )
+
+    def scatter(
+        self,
+        send_buf: List[Any],
+        recv_buf: Any,
+        root: Optional[int] = 0,
+        stream: Optional[Any] = None,
+    ):
+        send_buf = [convert_data_to_cp_array(d) for d in send_buf]
+        recv_buf = convert_data_to_cp_array(recv_buf)
+        stream = (
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
+            else cupy.cuda.Stream.null
+        )
+        if self._is_world:
+            send_buf = cupy.concatenate(send_buf).reshape(self.world_size, -1)
+            self._backend.scatter(send_buf, recv_buf, root, stream)
+        else:
+            if self.rank == root:
+                assert (
+                    len(send_buf) == self.world_size
+                ), "Scatter size must be equal to the size of group"
+                cupy.cuda.nccl.groupStart()
+                for peer in range(self.world_size):
+                    send_data = send_buf[peer]
+                    if peer == root:
+                        recv_buf[:] = send_data
+                    else:
+                        dtype = send_data.dtype
+                        self._backend.send(
+                            send_data.data.ptr,
+                            send_data.size,
+                            TypeMappingNCCL[dtype.type],
+                            peer,
+                            stream.ptr,
+                        )
+                cupy.cuda.nccl.groupEnd()
+            else:
+                dtype = recv_buf.dtype
+                self._backend.recv(
+                    recv_buf.data.ptr,
+                    recv_buf.size,
+                    TypeMappingNCCL[dtype.type],
+                    root,
+                    stream.ptr,
+                )
+
+    def reduce_scatter(
+        self,
+        send_buf: Any,
+        recv_buf: Any,
+        recv_elems: List[int],
+        op: CollectiveReduceOp = CollectiveReduceOp.SUM,
+        stream: Optional[Any] = None,
+    ):
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
+        dtype = send_buf.dtype
+        stream = (
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
+            else cupy.cuda.Stream.null
+        )
+        if self._is_world:
+            self._backend.reduce_scatter(
+                send_buf,
+                recv_buf,
+                recv_elems[self.rank],
+                ReduceOpMappingNCCLStr[op],
+                stream,
+            )
+        else:
+            self._backend.reduceScatter(
+                send_buf.data.ptr,
+                recv_buf.data.ptr,
+                recv_elems[self.rank],
+                TypeMappingNCCL[dtype.type],
+                ReduceOpMappingNCCL[op],
+                stream.ptr,
+            )
+
+    def alltoall(
+        self,
+        send_buf: Any,
+        recv_buf: Any,
+        stream: Optional[Any] = None,
+    ):
+        assert (
+            self.world_size == send_buf.shape[0]
+        ), "The first dim of send data must be equal to world size."
+        assert (
+            recv_buf.size == send_buf.size
+        ), "The size of send data must be equal to the size of recv data."
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
+        dtype = send_buf.dtype
+        stream = (
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
+            else cupy.cuda.Stream.null
+        )
+        if self._is_world:
+            self._backend.all_to_all(send_buf, recv_buf, stream)
+        else:
+            cupy.cuda.nccl.groupStart()
+            for peer in range(self.world_size):
+                if peer == self.rank:
+                    recv_buf[peer : peer + 1] = send_buf[peer : peer + 1]
+                else:
+                    if self.rank > peer:
+                        self._backend.recv(
+                            recv_buf[peer : peer + 1].data.ptr,
+                            recv_buf[peer : peer + 1].size,
+                            TypeMappingNCCL[dtype.type],
+                            peer,
+                            stream.ptr,
+                        )
+                        self._backend.send(
+                            send_buf[peer : peer + 1].data.ptr,
+                            send_buf[peer : peer + 1].size,
+                            TypeMappingNCCL[dtype.type],
+                            peer,
+                            stream.ptr,
+                        )
+                    else:
+                        self._backend.send(
+                            send_buf[peer : peer + 1].data.ptr,
+                            send_buf[peer : peer + 1].size,
+                            TypeMappingNCCL[dtype.type],
+                            peer,
+                            stream.ptr,
+                        )
+                        self._backend.recv(
+                            recv_buf[peer : peer + 1].data.ptr,
+                            recv_buf[peer : peer + 1].size,
+                            TypeMappingNCCL[dtype.type],
+                            peer,
+                            stream.ptr,
+                        )
+            cupy.cuda.nccl.groupEnd()
+
+    def broadcast(
+        self,
+        send_buf: Any,
+        recv_buf: Any,
+        root: Optional[int] = 0,
+        stream: Optional[Any] = None,
+    ):
+        send_buf = convert_data_to_cp_array(send_buf)
+        recv_buf = convert_data_to_cp_array(recv_buf)
+        dtype = send_buf.dtype
+        stream = (
+            stream
+            if stream is not None and isinstance(stream, cupy.cuda.Stream)
+            else cupy.cuda.Stream.null
+        )
+        if self._is_world:
+            if self._rank == root:
+                self._backend.broadcast(send_buf, root, stream)
+                if recv_buf is not None and (recv_buf != send_buf).any():
+                    recv_buf[:] = send_buf
+            else:
+                self._backend.broadcast(recv_buf, root, stream)
+        else:
+            self._backend.broadcast(
+                send_buf.data.ptr,
+                recv_buf.data.ptr,
+                send_buf.size,
+                TypeMappingNCCL[dtype.type],
+                root,
+                stream.ptr,
+            )
