@@ -7,14 +7,13 @@ Collective communitcation
 .. autosummary::
    :toctree: generated/
 
-   xoscar.collective.core.init_process_group
-   xoscar.collective.core.new_group
-   xoscar.collective.core.reduce
-   xoscar.collective.core.allreduce
-   xoscar.collective.core.gather
-   xoscar.collective.core.allgather
-   xoscar.collective.core.scatter
-   xoscar.collective.core.alltoall
-   xoscar.collective.core.broadcast
-
-
+   xoscar.collective.init_process_group
+   xoscar.collective.new_group
+   xoscar.collective.reduce
+   xoscar.collective.allreduce
+   xoscar.collective.gather
+   xoscar.collective.allgather
+   xoscar.collective.scatter
+   xoscar.collective.reduce_scatter
+   xoscar.collective.alltoall
+   xoscar.collective.broadcast
