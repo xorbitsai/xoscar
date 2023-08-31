@@ -332,8 +332,7 @@ async def init_process_group(
     address: Optional[str] = None,
 ):
     """
-    Initializes the default distributed process group, and this will also
-    initialize the distributed package.
+    Initializes the default distributed process group.
 
     Args:
         rank (int): Rank of the current process (it should be a
@@ -347,8 +346,8 @@ async def init_process_group(
                         ``nccl``. If the backend is not provided, then  a ``gloo`` backend
                         will be created.
 
-        device_id(int, optional): GPU ID the actor will bind, default ``None``
-                        If it is None and backend is gloo, it will try to get it from the environment variable COLLECTIVE_DEVICE_ID_ENV_KEY.
+        device_id(int, optional): GPU id that the actor will bind, default ``None``.
+                        If it is ``None`` and backend is ``gloo``, it will try to get it from the environment variable ``COLLECTIVE_DEVICE_ID_ENV_KEY``.
                         If the environment variable is not set either, it will return an error.
 
         address(str, optional): actor address. default ``None``
@@ -394,12 +393,10 @@ async def new_group(
 
     This function requires that all processes in the main group (i.e. all
     processes that are part of the distributed job) enter this function, even
-    if they are not going to be members of the group. Additionally, groups
-    should be created in the same order in all processes.
+    if they are not going to be members of the group.
 
     Args:
-        ranks (list[int]): List of ranks of group members. If ``None``, will be
-            set to all ranks. Default is ``None``.
+        ranks (list[int]): List of ranks of group members.
 
         pg_options (ProcessGroupOptions, optional): process group options
             specifying what additional options need to be passed in during
@@ -476,11 +473,9 @@ async def allreduce(
     the final result.
 
     Args:
-        send_data (Any): Input of the collective. The function
-            operates in-place.
+        send_data (Any): Input of the collective.
 
-        recv_data (Any): Output of the collective. The function
-            operates in-place.
+        recv_data (Any): Output of the collective.
 
         op (xoscar.collective.common.CollectiveReduceOp): One of the values from
             ``xoscar.collective.common.CollectiveReduceOp``
@@ -632,6 +627,7 @@ async def reduce_scatter(
 ):
     """
     Reduces, then scatters a list of numpy or cupy data to all processes in a group.
+    It can be only used on linux.
 
     Args:
         send_data (Any): Input data.
@@ -706,7 +702,7 @@ async def broadcast(
     stream: Optional[Any] = None,
 ):
     """
-    Broadcasts the tensor to the whole group.
+    Broadcasts the numpy or cupy data to the whole group.
 
     data must have the same number of elements in all processes
     participating in the collective.
