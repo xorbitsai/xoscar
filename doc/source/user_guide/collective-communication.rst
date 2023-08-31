@@ -94,8 +94,8 @@ xoscar uses Gloo as backend on CPU, here is an example of how to perform a broad
    
 Collective communication on GPU
 -------------------------------
-xoscar uses NCCL as backend on GPU and it depends on cupy. Therefore, before using 
-collective communication with xOSCAR on GPU, you need to install the appropriate 
+xoscar uses NCCL as backend on GPU and it depends on ``cupy``. Therefore, before using 
+collective communication with xoscar on GPU, you need to install the appropriate 
 version of Cupy based on your NVIDIA driver version. You can refer to https://docs.cupy.dev/en/stable/install.html#installing-cupy 
 for the installation steps and compatibility information. Here is an example 
 of how to perform a broadcast operation on GPU(2 GPUs are needed for this example):
