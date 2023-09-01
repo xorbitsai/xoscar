@@ -512,25 +512,38 @@ cdef class _BaseActor:
             method, call_method, args, kwargs = message
             if call_method == CALL_METHOD_DEFAULT:
                 func = getattr(self, method)
-                async with self._lock:
-                    with debug_async_timeout('actor_lock_timeout',
-                                             "Method %s of actor %s hold lock timeout.",
-                                             method, self.uid):
-                        result = func(*args, **kwargs)
-                        if asyncio.iscoroutine(result):
-                            result = await result
+                if _has_no_lock_hint_for_method(func):
+                    result = func(*args, **kwargs)
+                    if asyncio.iscoroutine(result):
+                        result = await result
+                else:
+                    async with self._lock:
+                        with debug_async_timeout('actor_lock_timeout',
+                                                 "Method %s of actor %s hold lock timeout.",
+                                                 method, self.uid):
+                            result = func(*args, **kwargs)
+                            if asyncio.iscoroutine(result):
+                                result = await result
             elif call_method == CALL_METHOD_BATCH:
                 func = getattr(self, method)
-                async with self._lock:
-                    with debug_async_timeout('actor_lock_timeout',
-                                             "Batch method %s of actor %s hold lock timeout, batch size %s.",
-                                             method, self.uid, len(args)):
-                        args_list, kwargs_list = args
-                        if kwargs_list is None:
-                            kwargs_list = [{}] * len(args_list)
-                        result = func.call_with_lists(args_list, kwargs_list)
-                        if asyncio.iscoroutine(result):
-                            result = await result
+                if _has_no_lock_hint_for_method(func):
+                    args_list, kwargs_list = args
+                    if kwargs_list is None:
+                        kwargs_list = [{}] * len(args_list)
+                    result = func.call_with_lists(args_list, kwargs_list)
+                    if asyncio.iscoroutine(result):
+                        result = await result
+                else:
+                    async with self._lock:
+                        with debug_async_timeout('actor_lock_timeout',
+                                                 "Batch method %s of actor %s hold lock timeout, batch size %s.",
+                                                 method, self.uid, len(args)):
+                            args_list, kwargs_list = args
+                            if kwargs_list is None:
+                                kwargs_list = [{}] * len(args_list)
+                            result = func.call_with_lists(args_list, kwargs_list)
+                            if asyncio.iscoroutine(result):
+                                result = await result
             else:  # pragma: no cover
                 raise ValueError(f'call_method {call_method} not valid')
 
