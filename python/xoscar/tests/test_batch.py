@@ -232,6 +232,7 @@ async def test_no_lock():
             super().__init__()
             self.arg_list = []
             self.kwarg_list = []
+            self.test_seq = []
 
         @classmethod
         def default_uid(cls):
@@ -252,6 +253,15 @@ async def test_no_lock():
                 [{k: v * 2 + 1 for k, v in kwargs.items()} for kwargs in kwargs_list]
             )
             return [len(self.kwarg_list)] * len(args_list)
+
+        @no_lock
+        async def no_lock_test(self, i):
+            self.test_seq.append(i)
+            await asyncio.sleep(1)
+            self.test_seq.append(i + 1)
+
+        def get_lock_test_result(self):
+            return self.test_seq
 
         async def do(self):
             ref = await actor_ref(address=self.address, uid=WorkerActor.default_uid())
@@ -288,3 +298,12 @@ async def test_no_lock():
     await create_actor(WorkerActor, address=addr, uid=WorkerActor.default_uid())
     await ref.do()
     await ref.do_batch()
+
+    ref2 = await create_actor(
+        DummyActor,
+        address=next(iter(pool.sub_processes.keys())),
+        uid=DummyActor.default_uid(),
+    )
+    await asyncio.gather(ref2.no_lock_test(1), ref2.no_lock_test(3))
+    r = await ref2.get_lock_test_result()
+    assert r == [1, 3, 2, 4]
