@@ -54,6 +54,7 @@ from ...message import (
 )
 from ...pool import create_actor_pool
 from ...router import Router
+from ...test.pool import TestMainActorPool
 from ..pool import MainActorPool, SubActorPool
 
 
@@ -1024,3 +1025,27 @@ async def test_append_sub_pool():
         config.get_pool_config(process_index)
     with pytest.raises(Exception):
         await ref.test()
+
+
+@pytest.mark.asyncio
+async def test_test_pool_append_sub_pool():
+    pool = await create_actor_pool(  # type: ignore
+        f"test://127.0.0.1:{get_next_port()}", pool_cls=TestMainActorPool, n_process=1
+    )
+
+    async with pool:
+        # print('Here111')
+        sub_external_address = await pool.append_sub_pool(env={"foo": "bar"})
+        # print('Here1222')
+        print(sub_external_address)
+
+        class DummyActor(Actor):
+            @staticmethod
+            def test():
+                return "this is dummy!"
+
+        ref = await create_actor(DummyActor, address=sub_external_address)
+        assert ref is not None
+
+        assert ref.address == sub_external_address
+        assert await ref.test() == "this is dummy!"
