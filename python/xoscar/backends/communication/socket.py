@@ -96,7 +96,8 @@ class SocketChannel(Channel):
         self.writer.close()
         try:
             await self.writer.wait_closed()
-        except ConnectionResetError:  # pragma: no cover
+        # TODO: May raise Runtime error: attach to another event loop
+        except (ConnectionResetError, RuntimeError):  # pragma: no cover
             pass
 
     @property
