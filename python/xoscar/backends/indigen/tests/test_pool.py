@@ -991,40 +991,41 @@ async def test_append_sub_pool():
         subprocess_start_method=start_method,
     )
 
-    config = await get_pool_config(pool.external_address)
-    assert len(config.get_process_indexes()) == 3
+    async with pool:
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 3
 
-    # test add a new sub pool
-    sub_external_address = await pool.append_sub_pool(env={"foo": "bar"})
-    assert sub_external_address is not None
+        # test add a new sub pool
+        sub_external_address = await pool.append_sub_pool(env={"foo": "bar"})
+        assert sub_external_address is not None
 
-    config = await get_pool_config(pool.external_address)
-    assert len(config.get_process_indexes()) == 4
-    process_index = config.get_process_indexes()[-1]
-    sub_config = config.get_pool_config(process_index)
-    assert sub_config["external_address"][0] == sub_external_address
-    assert sub_config["env"] is not None
-    assert sub_config["env"].get("foo", None) == "bar"
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 4
+        process_index = config.get_process_indexes()[-1]
+        sub_config = config.get_pool_config(process_index)
+        assert sub_config["external_address"][0] == sub_external_address
+        assert sub_config["env"] is not None
+        assert sub_config["env"].get("foo", None) == "bar"
 
-    class DummyActor(Actor):
-        @staticmethod
-        def test():
-            return "this is dummy!"
+        class DummyActor(Actor):
+            @staticmethod
+            def test():
+                return "this is dummy!"
 
-    ref = await create_actor(DummyActor, address=sub_external_address)
-    assert ref is not None
-    assert ref.address == sub_external_address
-    assert await ref.test() == "this is dummy!"
+        ref = await create_actor(DummyActor, address=sub_external_address)
+        assert ref is not None
+        assert ref.address == sub_external_address
+        assert await ref.test() == "this is dummy!"
 
-    # test remove
-    await pool.remove_sub_pool(sub_external_address)
-    config = await get_pool_config(pool.external_address)
-    assert len(config.get_process_indexes()) == 3
-    assert process_index not in config.get_process_indexes()
-    with pytest.raises(KeyError):
-        config.get_pool_config(process_index)
-    with pytest.raises(Exception):
-        await ref.test()
+        # test remove
+        await pool.remove_sub_pool(sub_external_address)
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 3
+        assert process_index not in config.get_process_indexes()
+        with pytest.raises(KeyError):
+            config.get_pool_config(process_index)
+        with pytest.raises(Exception):
+            await ref.test()
 
 
 @pytest.mark.asyncio
@@ -1034,10 +1035,20 @@ async def test_test_pool_append_sub_pool():
     )
 
     async with pool:
-        # print('Here111')
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 2
+
+        # test add a new sub pool
         sub_external_address = await pool.append_sub_pool(env={"foo": "bar"})
-        # print('Here1222')
-        print(sub_external_address)
+        assert sub_external_address is not None
+
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 3
+        process_index = config.get_process_indexes()[-1]
+        sub_config = config.get_pool_config(process_index)
+        assert sub_config["external_address"][0] == sub_external_address
+        assert sub_config["env"] is not None
+        assert sub_config["env"].get("foo", None) == "bar"
 
         class DummyActor(Actor):
             @staticmethod
@@ -1049,3 +1060,11 @@ async def test_test_pool_append_sub_pool():
 
         assert ref.address == sub_external_address
         assert await ref.test() == "this is dummy!"
+
+        # test remove
+        await pool.remove_sub_pool(sub_external_address)
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 2
+        assert process_index not in config.get_process_indexes()
+        with pytest.raises(KeyError):
+            config.get_pool_config(process_index)

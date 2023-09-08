@@ -139,18 +139,10 @@ class TestMainActorPool(MainActorPool):
             _logging_conf,
             kwargs,
         )
-        # status_queue: multiprocessing.Queue = multiprocessing.Queue()
         pool_task = asyncio.create_task(
             TestMainActorPool.start_sub_pool(self._config, process_index)
         )
-        # await asyncio.sleep(0)
-        # await TestMainActorPool._create_sub_pool(self._config, process_index, status_queue)
-        # self._config.reset_pool_external_address(
-        #     process_index, process_status.external_addresses[0]
-        # )
-        # await task
         tasks, addresses = await TestMainActorPool.wait_sub_pools_ready([pool_task])
-        print(tasks, addresses)
 
         self.attach_sub_process(addresses[0][0], tasks[0])
 
