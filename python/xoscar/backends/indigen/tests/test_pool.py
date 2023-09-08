@@ -25,7 +25,7 @@ from unittest import mock
 
 import pytest
 
-from .... import Actor, create_actor_ref, kill_actor
+from .... import Actor, create_actor, create_actor_ref, get_pool_config, kill_actor
 from ....context import get_context
 from ....errors import ActorNotExist, NoIdleSlot, SendMessageFailed, ServerClosed
 from ....tests.core import require_ucx
@@ -54,6 +54,7 @@ from ...message import (
 )
 from ...pool import create_actor_pool
 from ...router import Router
+from ...test.pool import TestMainActorPool
 from ..pool import MainActorPool, SubActorPool
 
 
@@ -974,3 +975,96 @@ async def test_ucx(enable_internal_addr: bool):
             allocate_strategy=ProcessIndex(1),
         )
         assert await ref1.foo(ref2, 3) == 6
+
+
+@pytest.mark.asyncio
+async def test_append_sub_pool():
+    start_method = (
+        os.environ.get("POOL_START_METHOD", "forkserver")
+        if sys.platform != "win32"
+        else None
+    )
+    pool = await create_actor_pool(  # type: ignore
+        "127.0.0.1",
+        pool_cls=MainActorPool,
+        n_process=2,
+        subprocess_start_method=start_method,
+    )
+
+    async with pool:
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 3
+
+        # test add a new sub pool
+        sub_external_address = await pool.append_sub_pool(env={"foo": "bar"})
+        assert sub_external_address is not None
+
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 4
+        process_index = config.get_process_indexes()[-1]
+        sub_config = config.get_pool_config(process_index)
+        assert sub_config["external_address"][0] == sub_external_address
+        assert sub_config["env"] is not None
+        assert sub_config["env"].get("foo", None) == "bar"
+
+        class DummyActor(Actor):
+            @staticmethod
+            def test():
+                return "this is dummy!"
+
+        ref = await create_actor(DummyActor, address=sub_external_address)
+        assert ref is not None
+        assert ref.address == sub_external_address
+        assert await ref.test() == "this is dummy!"
+
+        # test remove
+        await pool.remove_sub_pool(sub_external_address)
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 3
+        assert process_index not in config.get_process_indexes()
+        with pytest.raises(KeyError):
+            config.get_pool_config(process_index)
+        with pytest.raises(Exception):
+            await ref.test()
+
+
+@pytest.mark.asyncio
+async def test_test_pool_append_sub_pool():
+    pool = await create_actor_pool(  # type: ignore
+        f"test://127.0.0.1:{get_next_port()}", pool_cls=TestMainActorPool, n_process=1
+    )
+
+    async with pool:
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 2
+
+        # test add a new sub pool
+        sub_external_address = await pool.append_sub_pool(env={"foo": "bar"})
+        assert sub_external_address is not None
+
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 3
+        process_index = config.get_process_indexes()[-1]
+        sub_config = config.get_pool_config(process_index)
+        assert sub_config["external_address"][0] == sub_external_address
+        assert sub_config["env"] is not None
+        assert sub_config["env"].get("foo", None) == "bar"
+
+        class DummyActor(Actor):
+            @staticmethod
+            def test():
+                return "this is dummy!"
+
+        ref = await create_actor(DummyActor, address=sub_external_address)
+        assert ref is not None
+
+        assert ref.address == sub_external_address
+        assert await ref.test() == "this is dummy!"
+
+        # test remove
+        await pool.remove_sub_pool(sub_external_address)
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 2
+        assert process_index not in config.get_process_indexes()
+        with pytest.raises(KeyError):
+            config.get_pool_config(process_index)
