@@ -70,6 +70,11 @@ class ActorPoolConfig:
         for addr in external_address:
             mapping[addr] = internal_address
 
+    def remove_pool_config(self, process_index: int):
+        addr = self.get_external_address(process_index)
+        del self._conf["pools"][process_index]
+        del self._conf["mapping"][addr]
+
     def get_pool_config(self, process_index: int):
         return self._conf["pools"][process_index]
 
