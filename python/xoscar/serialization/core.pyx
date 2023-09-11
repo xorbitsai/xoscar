@@ -51,11 +51,11 @@ except (ImportError, AttributeError):
 from .._utils import NamedType
 
 from .._utils cimport TypeDispatcher
+from .pyfury import get_fury
 
 BUFFER_PICKLE_PROTOCOL = max(pickle.DEFAULT_PROTOCOL, 5)
 cdef bint HAS_PICKLE_BUFFER = pickle.HIGHEST_PROTOCOL >= 5
 cdef bint _PANDAS_HAS_MGR = hasattr(pd.Series([0]), "_mgr")
-
 
 cdef TypeDispatcher _serial_dispatcher = TypeDispatcher()
 cdef dict _deserializers = dict()
@@ -218,27 +218,47 @@ def buffered(func):
 def pickle_buffers(obj):
     cdef list buffers = [None]
 
-    if HAS_PICKLE_BUFFER:
-
+    fury = get_fury()
+    if fury is not None:
         def buffer_cb(x):
-            x = x.raw()
-            if x.ndim > 1:
-                # ravel n-d memoryview
-                x = x.cast(x.format)
-            buffers.append(memoryview(x))
+            try:
+                buffers.append(memoryview(x))
+            except TypeError:
+                buffers.append(x.to_buffer())
 
-        buffers[0] = cloudpickle.dumps(
+        buffers[0] = b"__fury__"
+        buffers.append(None)
+        buffers[1] = fury.serialize(
             obj,
             buffer_callback=buffer_cb,
-            protocol=BUFFER_PICKLE_PROTOCOL,
         )
-    else:  # pragma: no cover
-        buffers[0] = cloudpickle.dumps(obj)
+    else:
+        if HAS_PICKLE_BUFFER:
+            def buffer_cb(x):
+                x = x.raw()
+                if x.ndim > 1:
+                    # ravel n-d memoryview
+                    x = x.cast(x.format)
+                buffers.append(memoryview(x))
+
+            buffers[0] = cloudpickle.dumps(
+                obj,
+                buffer_callback=buffer_cb,
+                protocol=BUFFER_PICKLE_PROTOCOL,
+            )
+        else:
+            buffers[0] = cloudpickle.dumps(obj)
     return buffers
 
 
 def unpickle_buffers(list buffers):
-    result = cloudpickle.loads(buffers[0], buffers=buffers[1:])
+    if buffers[0] == b"__fury__":
+        fury = get_fury()
+        if fury is None:
+            raise Exception("fury is not installed.")
+        result = fury.deserialize(buffers[1], buffers[2:])
+    else:
+        result = cloudpickle.loads(buffers[0], buffers=buffers[1:])
 
     # as pandas prior to 1.1.0 use _data instead of _mgr to hold BlockManager,
     # deserializing from high versions may produce mal-functioned pandas objects,
