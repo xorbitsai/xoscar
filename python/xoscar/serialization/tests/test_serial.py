@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 from collections import OrderedDict, defaultdict
 from typing import Any, Dict, List, Tuple
@@ -39,6 +40,7 @@ from ..core import ListSerializer, Placeholder  # type: ignore
 
 cupy = lazy_import("cupy")
 cudf = lazy_import("cudf")
+pyfury = lazy_import("pyfury")
 
 
 class CustomList(list):
@@ -177,6 +179,32 @@ def test_arrow():
         deserialized = deserialize(*serialize(val))
         assert type(val) is type(deserialized)
         np.testing.assert_equal(val, deserialized)
+
+
+@pytest.mark.skipif(pyfury is None, reason="need pyfury to run the cases")
+def test_arrow_fury():
+    os.environ["USE_FURY"] = "1"
+    from ..pyfury import register_classes
+
+    try:
+        test_df = pd.DataFrame(
+            {
+                "a": np.random.rand(1000),
+                "b": np.random.choice(list("abcd"), size=(1000,)),
+                "c": np.random.randint(0, 100, size=(1000,)),
+            }
+        )
+        register_classes(pa.RecordBatch, pa.Table)
+        test_vals = [
+            pa.RecordBatch.from_pandas(test_df),
+            pa.Table.from_pandas(test_df),
+        ]
+        for val in test_vals:
+            deserialized = deserialize(*serialize(val))
+            assert type(val) is type(deserialized)
+            np.testing.assert_equal(val, deserialized)
+    finally:
+        os.environ.pop("USE_FURY")
 
 
 @pytest.mark.parametrize(

@@ -2,6 +2,7 @@ import os
 import threading
 
 _fury = threading.local()
+_fury_not_installed = object()
 _register_class_list = set()
 
 
@@ -16,6 +17,8 @@ def register_classes(*args):
 def get_fury():
     if os.environ.get("USE_FURY") in ("1", "true", "True"):
         instance = getattr(_fury, "instance", None)
+        if instance is _fury_not_installed:
+            return None
         if instance is not None:
             return instance
         else:
@@ -30,4 +33,5 @@ def get_fury():
                 print("pyfury is enabled.")
             except ImportError:
                 print("pyfury is not installed.")
+                _fury.instance = _fury_not_installed
             return instance
