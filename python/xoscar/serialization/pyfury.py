@@ -2,6 +2,15 @@ import os
 import threading
 
 _fury = threading.local()
+_register_class_list = []
+
+
+def register_classes(*args):
+    instance = get_fury()
+    if instance is not None:
+        _register_class_list[:] = args
+        for c in _register_class_list:
+            instance.register_class(c)
 
 
 def get_fury():
@@ -16,6 +25,8 @@ def get_fury():
                 _fury.instance = instance = pyfury.Fury(
                     language=pyfury.Language.PYTHON, require_class_registration=False
                 )
+                for c in _register_class_list:
+                    instance.register_class(c)
                 print("pyfury is enabled.")
             except ImportError:
                 print("pyfury is not installed.")
