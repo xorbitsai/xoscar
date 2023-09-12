@@ -2,13 +2,13 @@ import os
 import threading
 
 _fury = threading.local()
-_register_class_list = []
+_register_class_list = set()
 
 
 def register_classes(*args):
     instance = get_fury()
     if instance is not None:
-        _register_class_list[:] = args
+        _register_class_list.update(args)
         for c in _register_class_list:
             instance.register_class(c)
 
