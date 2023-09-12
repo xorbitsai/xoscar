@@ -31,7 +31,7 @@ def get_fury():
                 for c in _register_class_list:  # pragma: no cover
                     instance.register_class(c)
                 print("pyfury is enabled.")
-            except ImportError:
+            except ImportError:  # pragma: no cover
                 print("pyfury is not installed.")
                 _fury.instance = _fury_not_installed
             return instance
