@@ -3,14 +3,14 @@ import threading
 
 _fury = threading.local()
 _fury_not_installed = object()
-_register_class_list = set()
+_register_classes = set()
 
 
-def register_classes(*args):
+def register_class_to_fury(obj_type):
     instance = get_fury()
     if instance is not None:
-        _register_class_list.update(args)
-        for c in _register_class_list:
+        _register_classes.add(obj_type)
+        for c in _register_classes:
             instance.register_class(c)
 
 
@@ -28,7 +28,7 @@ def get_fury():
                 _fury.instance = instance = pyfury.Fury(
                     language=pyfury.Language.PYTHON, require_class_registration=False
                 )
-                for c in _register_class_list:  # pragma: no cover
+                for c in _register_classes:  # pragma: no cover
                     instance.register_class(c)
                 print("pyfury is enabled.")
             except ImportError:  # pragma: no cover

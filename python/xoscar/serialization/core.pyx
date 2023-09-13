@@ -51,7 +51,7 @@ except (ImportError, AttributeError):
 from .._utils import NamedType
 
 from .._utils cimport TypeDispatcher
-from .pyfury import get_fury
+from .pyfury import get_fury, register_class_to_fury
 
 BUFFER_PICKLE_PROTOCOL = max(pickle.DEFAULT_PROTOCOL, 5)
 cdef bint HAS_PICKLE_BUFFER = pickle.HIGHEST_PROTOCOL >= 5
@@ -218,47 +218,64 @@ def buffered(func):
 def pickle_buffers(obj):
     cdef list buffers = [None]
 
-    fury = get_fury()
-    if fury is not None:
-        def buffer_cb(x):
-            try:
-                buffers.append(memoryview(x))
-            except TypeError:
-                buffers.append(x.to_buffer())
+    if HAS_PICKLE_BUFFER:
 
-        buffers[0] = b"__fury__"
-        buffers.append(None)
-        buffers[1] = fury.serialize(
+        def buffer_cb(x):
+            x = x.raw()
+            if x.ndim > 1:
+                # ravel n-d memoryview
+                x = x.cast(x.format)
+            buffers.append(memoryview(x))
+
+        buffers[0] = cloudpickle.dumps(
             obj,
             buffer_callback=buffer_cb,
+            protocol=BUFFER_PICKLE_PROTOCOL,
         )
-    else:
-        if HAS_PICKLE_BUFFER:
-            def buffer_cb(x):
-                x = x.raw()
-                if x.ndim > 1:
-                    # ravel n-d memoryview
-                    x = x.cast(x.format)
-                buffers.append(memoryview(x))
-
-            buffers[0] = cloudpickle.dumps(
-                obj,
-                buffer_callback=buffer_cb,
-                protocol=BUFFER_PICKLE_PROTOCOL,
-            )
-        else:
-            buffers[0] = cloudpickle.dumps(obj)
+    else:  # pragma: no cover
+        buffers[0] = cloudpickle.dumps(obj)
     return buffers
 
 
 def unpickle_buffers(list buffers):
-    if buffers[0] == b"__fury__":
-        fury = get_fury()
-        if fury is None:
-            raise Exception("fury is not installed.")
-        result = fury.deserialize(buffers[1], buffers[2:])
-    else:
-        result = cloudpickle.loads(buffers[0], buffers=buffers[1:])
+    result = cloudpickle.loads(buffers[0], buffers=buffers[1:])
+
+    # as pandas prior to 1.1.0 use _data instead of _mgr to hold BlockManager,
+    # deserializing from high versions may produce mal-functioned pandas objects,
+    # thus the patch is needed
+    if _PANDAS_HAS_MGR:
+        return result
+    else:  # pragma: no cover
+        if hasattr(result, "_mgr") and isinstance(result, (pd.DataFrame, pd.Series)):
+            result._data = getattr(result, "_mgr")
+            delattr(result, "_mgr")
+        return result
+
+
+def fury_serialize_buffers(obj):
+    cdef list buffers = [None]
+
+    fury = get_fury()
+    if fury is None:
+        raise Exception(f"fury is not installed.")
+    def buffer_cb(x):
+        try:
+            buffers.append(memoryview(x))
+        except TypeError:
+            buffers.append(x.to_buffer())
+
+    buffers[0] = fury.serialize(
+        obj,
+        buffer_callback=buffer_cb,
+    )
+    return buffers
+
+
+def fury_deserialize_buffers(list buffers):
+    fury = get_fury()
+    if fury is None:
+        raise Exception("fury is not installed.")
+    result = fury.deserialize(buffers[0], buffers[1:])
 
     # as pandas prior to 1.1.0 use _data instead of _mgr to hold BlockManager,
     # deserializing from high versions may produce mal-functioned pandas objects,
@@ -286,6 +303,27 @@ cdef class PickleSerializer(Serializer):
 
     cpdef deserial(self, tuple serialized, dict context, list subs):
         return unpickle_buffers(subs)
+
+
+cdef class FurySerializer(Serializer):
+    serializer_id = 100
+
+    cpdef serial(self, obj: Any, dict context):
+        cdef uint64_t obj_id
+        obj_id = _fast_id(obj)
+        if obj_id in context:
+            return Placeholder(obj_id)
+        context[obj_id] = obj
+
+        return (), fury_serialize_buffers(obj), True
+
+    cpdef deserial(self, tuple serialized, dict context, list subs):
+        return fury_deserialize_buffers(subs)
+
+    @classmethod
+    def register(cls, obj_type, name=None):
+        register_class_to_fury(obj_type)
+        return super().register(obj_type, name)
 
 
 cdef set _primitive_types = {
