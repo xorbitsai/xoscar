@@ -12,6 +12,8 @@ def register_class_to_fury(obj_type):
         _register_classes.add(obj_type)
         for c in _register_classes:
             instance.register_class(c)
+        return True
+    return False
 
 
 def get_fury():

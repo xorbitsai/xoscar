@@ -322,8 +322,9 @@ cdef class FurySerializer(Serializer):
 
     @classmethod
     def register(cls, obj_type, name=None):
-        register_class_to_fury(obj_type)
-        return super().register(obj_type, name)
+        if register_class_to_fury(obj_type):
+            # Only register type to FurySerializer if fury is enabled.
+            super().register(obj_type, name)
 
 
 cdef set _primitive_types = {
