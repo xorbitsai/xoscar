@@ -28,7 +28,7 @@ def get_fury():
                 import pyfury
 
                 _fury.instance = instance = pyfury.Fury(
-                    language=pyfury.Language.PYTHON, require_class_registration=False
+                    language=pyfury.Language.PYTHON, ref_tracking=True
                 )
                 for c in _register_classes:  # pragma: no cover
                     instance.register_class(c)
