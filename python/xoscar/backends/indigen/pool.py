@@ -241,6 +241,8 @@ class MainActorPool(MainActorPoolBase):
         logging_conf = conf["logging_conf"] or {}
         if isinstance(logging_conf, configparser.RawConfigParser):
             logging.config.fileConfig(logging_conf)
+        elif logging_conf.get("dict"):
+            logging.config.dictConfig(logging_conf["dict"])
         elif logging_conf.get("file"):
             logging.config.fileConfig(logging_conf["file"])
         elif logging_conf.get("level"):
