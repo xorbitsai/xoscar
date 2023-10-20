@@ -241,6 +241,8 @@ class MainActorPool(MainActorPoolBase):
         logging_conf = conf["logging_conf"] or {}
         if isinstance(logging_conf, configparser.RawConfigParser):
             logging.config.fileConfig(logging_conf)
+        elif logging_conf.get("dict"):
+            logging.config.dictConfig(logging_conf["dict"])
         elif logging_conf.get("file"):
             logging.config.fileConfig(logging_conf["file"])
         elif logging_conf.get("level"):
@@ -288,16 +290,6 @@ class MainActorPool(MainActorPoolBase):
         finally:
             status_queue.put(process_status)
         await pool.join()
-
-    @classmethod
-    def _append_sub_pool(
-        cls,
-        config: ActorPoolConfig,
-        _process_index: int,
-        _status_queue: multiprocessing.Queue,
-    ):
-        coro = cls._create_sub_pool(config, _process_index, _status_queue)
-        asyncio.run(coro)
 
     async def append_sub_pool(
         self,
@@ -353,7 +345,7 @@ class MainActorPool(MainActorPoolBase):
 
             with _suspend_init_main():
                 process = ctx.Process(
-                    target=MainActorPool._append_sub_pool,
+                    target=self._start_sub_pool,
                     args=(self._config, process_index, status_queue),
                     name=f"IndigenActorPool{process_index}",
                 )
