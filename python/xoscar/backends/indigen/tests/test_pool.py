@@ -844,6 +844,36 @@ async def test_parallel_allocate_idle_label():
         assert len({await ref.get_pid() for ref in refs}) == 2
 
 
+# equivalent to test-logging.conf
+DICT_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "formatter": {
+            "format": "%(asctime)s %(name)-12s %(process)d %(levelname)-8s %(message)s",
+        },
+    },
+    "handlers": {
+        "stream_handler": {
+            "class": "logging.StreamHandler",
+            "formatter": "formatter",
+            "stream": "ext://sys.stderr",
+        },
+    },
+    "loggers": {
+        "": {
+            "level": "WARN",
+            "handlers": ["stream_handler"],
+        },
+        "xoscar.backends.indigen.tests": {
+            "level": "DEBUG",
+            "handlers": ["stream_handler"],
+            "propagate": False,
+        },
+    },
+}
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "logging_conf",
@@ -855,6 +885,7 @@ async def test_parallel_allocate_idle_label():
         },
         {"level": logging.DEBUG},
         {"level": logging.DEBUG, "format": "%(asctime)s %(message)s"},
+        {"dict": DICT_CONFIG},
     ],
 )
 async def test_logging_config(logging_conf):
