@@ -911,6 +911,7 @@ class SubActorPoolBase(ActorPoolBase):
 
 class MainActorPoolBase(ActorPoolBase):
     __slots__ = (
+        "_subprocess_start_method",
         "_allocated_actors",
         "sub_actor_pool_manager",
         "_auto_recover",
@@ -918,6 +919,8 @@ class MainActorPoolBase(ActorPoolBase):
         "_on_process_down",
         "_on_process_recover",
         "_recover_events",
+        "_allocation_lock",
+        "sub_processes",
     )
 
     def __init__(
