@@ -911,6 +911,7 @@ class SubActorPoolBase(ActorPoolBase):
 
 class MainActorPoolBase(ActorPoolBase):
     __slots__ = (
+        "_subprocess_start_method",
         "_allocated_actors",
         "sub_actor_pool_manager",
         "_auto_recover",
@@ -918,6 +919,8 @@ class MainActorPoolBase(ActorPoolBase):
         "_on_process_down",
         "_on_process_recover",
         "_recover_events",
+        "_allocation_lock",
+        "sub_processes",
     )
 
     def __init__(
@@ -1389,7 +1392,8 @@ class MainActorPoolBase(ActorPoolBase):
     async def monitor_sub_pools(self):
         try:
             while not self._stopped.is_set():
-                for address, process in self.sub_processes.items():
+                # Copy sub_processes to avoid changes during recover.
+                for address, process in list(self.sub_processes.items()):
                     try:
                         recover_events_discovered = address in self._recover_events
                         if not await self.is_sub_pool_alive(
