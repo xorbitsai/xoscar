@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from numbers import Number
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union
@@ -23,7 +24,7 @@ from urllib.parse import urlparse
 from .aio import AioFileObject
 from .backend import get_backend
 from .context import get_context
-from .core import ActorRef, BufferRef, FileObjectRef, _Actor, _StatelessActor
+from .core import ActorRef, BufferRef, FileObjectRef, _Actor
 
 if TYPE_CHECKING:
     from .backends.config import ActorPoolConfig
@@ -307,11 +308,9 @@ class AsyncActorMixin:
 
 
 class Actor(AsyncActorMixin, _Actor):
-    pass
-
-
-class StatelessActor(AsyncActorMixin, _StatelessActor):
-    pass
+    # Guard all the methods with an instance of __xoscar_lock_type__
+    # Lock free if the __xoscar_lock_type__ is None.
+    __xoscar_lock_type__: Optional[type[asyncio.locks.Lock]] = asyncio.locks.Lock
 
 
 _actor_implementation: Dict[Type[Actor], Type[Actor]] = dict()
