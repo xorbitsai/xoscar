@@ -15,10 +15,13 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
+import inspect
 from numbers import Number
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, TypeVar, Generic
 from urllib.parse import urlparse
+import uuid
 
 from .aio import AioFileObject
 from .backend import get_backend
@@ -271,6 +274,40 @@ def setup_cluster(address_to_resources: Dict[str, Dict[str, Number]]):
         get_backend(scheme).get_driver_cls().setup_cluster(address_resources)
 
 
+T = TypeVar("T")
+
+class IteratorWrapper(Generic[T]):
+    def __init__(self, uid: str, actor_addr: str, actor_uid: str):
+        self._uid = uid
+        self._actor_addr = actor_addr
+        self._actor_uid = actor_uid
+        self._actor_ref = None
+
+    async def destroy(self):
+        if self._actor_ref is None:
+            self._actor_ref = await actor_ref(
+                address=self._actor_addr, uid=self._actor_uid
+            )
+        assert self._actor_ref is not None
+        return await self._actor_ref.destroy_generator(self._uid)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self) -> T:
+        if self._actor_ref is None:
+            self._actor_ref = await actor_ref(
+                address=self._actor_addr, uid=self._actor_uid
+            )
+        try:
+            assert self._actor_ref is not None
+            return await self._actor_ref.next(self._uid)
+        except Exception as e:
+            if "StopIteration" in str(e):
+                raise StopAsyncIteration
+            else:
+                raise
+
 class AsyncActorMixin:
     @classmethod
     def default_uid(cls):
@@ -281,6 +318,9 @@ class AsyncActorMixin:
             return _actor_implementation[cls](*args, **kwargs)
         except KeyError:
             return super().__new__(cls, *args, **kwargs)
+
+    def __init__(self) -> None:
+        self._generators: Dict[str, IteratorWrapper] = {}
 
     async def __post_create__(self):
         """
@@ -304,6 +344,55 @@ class AsyncActorMixin:
             Message shall be (method_name,) + args + (kwargs,)
         """
         return await super().__on_receive__(message)  # type: ignore
+
+    async def next(
+        self, generator_uid: str
+    ) -> Any:
+        def _wrapper():
+            try:
+                return next(gen)
+            except StopIteration:
+                return stop
+
+        async def _async_wrapper():
+            try:
+                # anext is only available for Python >= 3.10
+                return await gen.__anext__()  # noqa: F821
+            except StopAsyncIteration:
+                return stop
+
+        if gen := self._generators.get(generator_uid):
+            stop = object()
+            if inspect.isgenerator(gen):
+                # to_thread is only available for Python >= 3.9
+                if hasattr(asyncio, "to_thread"):
+                    r = await asyncio.to_thread(_wrapper)
+                else:
+                    r = await asyncio.get_event_loop().run_in_executor(None, _wrapper)
+            elif inspect.isasyncgen(gen):
+                r = await asyncio.create_task(_async_wrapper())
+            if r is stop:
+                await self.destroy_generator(generator_uid)
+                raise Exception("StopIteration")
+            else:
+                return r
+        else:
+            raise RuntimeError(f"no iterator with id: {generator_uid}")
+
+    async def destroy_generator(self, generator_uid: str):
+        return self._generators.pop(generator_uid, None)
+
+
+def generator(func):
+    async def wapper(obj, *args, **kwargs):
+        gen_uid = uuid.uuid1().hex
+        obj._generators[gen_uid] = func(obj, *args, **kwargs)
+        return IteratorWrapper(gen_uid, obj.address, obj.uid)
+
+    if inspect.isgeneratorfunction(func) or inspect.isasyncgenfunction(func):
+        return wapper
+    else:
+        return func
 
 
 class Actor(AsyncActorMixin, _Actor):
