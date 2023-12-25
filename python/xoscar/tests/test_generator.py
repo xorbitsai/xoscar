@@ -55,7 +55,7 @@ class SupervisorActor(xo.StatelessActor):
 
 
 async def test_generator():
-    pool = await xo.create_actor_pool(address, 2)
+    await xo.create_actor_pool(address, 2)
     await xo.create_actor(WorkerActor, address=address, uid=WorkerActor.uid())
     superivsor_actor = await xo.create_actor(
         SupervisorActor, address=address, uid=SupervisorActor.uid()
