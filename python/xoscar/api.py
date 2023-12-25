@@ -342,7 +342,8 @@ class AsyncActorMixin:
         except KeyError:
             return super().__new__(cls, *args, **kwargs)
 
-    def __init__(self) -> None:
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__()
         self._generators: Dict[str, IteratorWrapper] = {}
 
     async def __post_create__(self):
