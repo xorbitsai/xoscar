@@ -16,12 +16,24 @@
 from __future__ import annotations
 
 import asyncio
-from collections import defaultdict
 import inspect
-from numbers import Number
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, TypeVar, Generic
-from urllib.parse import urlparse
+import threading
 import uuid
+from collections import defaultdict
+from numbers import Number
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
+from urllib.parse import urlparse
 
 from .aio import AioFileObject
 from .backend import get_backend
@@ -276,6 +288,7 @@ def setup_cluster(address_to_resources: Dict[str, Dict[str, Number]]):
 
 T = TypeVar("T")
 
+
 class IteratorWrapper(Generic[T]):
     def __init__(self, uid: str, actor_addr: str, actor_uid: str):
         self._uid = uid
@@ -289,7 +302,16 @@ class IteratorWrapper(Generic[T]):
                 address=self._actor_addr, uid=self._actor_uid
             )
         assert self._actor_ref is not None
-        return await self._actor_ref.destroy_generator(self._uid)
+        return await self._actor_ref.__xoscar_destroy_generator__(self._uid)
+
+    def __del__(self):
+        # It's not a good idea to spawn a new thread and join in __del__,
+        # but currently it's the only way to GC the generator.
+        thread = threading.Thread(
+            target=asyncio.run, args=(self.destroy(),), daemon=True
+        )
+        thread.start()
+        thread.join()
 
     def __aiter__(self):
         return self
@@ -301,12 +323,13 @@ class IteratorWrapper(Generic[T]):
             )
         try:
             assert self._actor_ref is not None
-            return await self._actor_ref.next(self._uid)
+            return await self._actor_ref.__xoscar_next__(self._uid)
         except Exception as e:
             if "StopIteration" in str(e):
                 raise StopAsyncIteration
             else:
                 raise
+
 
 class AsyncActorMixin:
     @classmethod
@@ -345,41 +368,71 @@ class AsyncActorMixin:
         """
         return await super().__on_receive__(message)  # type: ignore
 
-    async def next(
-        self, generator_uid: str
-    ) -> Any:
-        def _wrapper():
+    async def __xoscar_next__(self, generator_uid: str) -> Any:
+        """
+        Iter the next of generator.
+
+        Parameters
+        ----------
+        generator_uid: str
+            The uid of generator
+
+        Returns
+        -------
+            The next value of generator
+        """
+
+        def _wrapper(_gen):
             try:
-                return next(gen)
+                return next(_gen)
             except StopIteration:
                 return stop
 
-        async def _async_wrapper():
+        async def _async_wrapper(_gen):
             try:
                 # anext is only available for Python >= 3.10
-                return await gen.__anext__()  # noqa: F821
+                return await _gen.__anext__()  # noqa: F821
             except StopAsyncIteration:
                 return stop
 
         if gen := self._generators.get(generator_uid):
             stop = object()
-            if inspect.isgenerator(gen):
-                # to_thread is only available for Python >= 3.9
-                if hasattr(asyncio, "to_thread"):
-                    r = await asyncio.to_thread(_wrapper)
+            try:
+                if inspect.isgenerator(gen):
+                    # to_thread is only available for Python >= 3.9
+                    if hasattr(asyncio, "to_thread"):
+                        r = await asyncio.to_thread(_wrapper, gen)
+                    else:
+                        r = await asyncio.get_event_loop().run_in_executor(
+                            None, _wrapper, gen
+                        )
+                elif inspect.isasyncgen(gen):
+                    r = await asyncio.create_task(_async_wrapper(gen))
                 else:
-                    r = await asyncio.get_event_loop().run_in_executor(None, _wrapper)
-            elif inspect.isasyncgen(gen):
-                r = await asyncio.create_task(_async_wrapper())
+                    raise Exception(
+                        f"The generator {generator_uid} should be a generator or an async generator, "
+                        f"but a {type(gen)} is got."
+                    )
+            except Exception as e:
+                await self.__xoscar_destroy_generator__(generator_uid)
+                raise e
             if r is stop:
-                await self.destroy_generator(generator_uid)
+                await self.__xoscar_destroy_generator__(generator_uid)
                 raise Exception("StopIteration")
             else:
                 return r
         else:
             raise RuntimeError(f"no iterator with id: {generator_uid}")
 
-    async def destroy_generator(self, generator_uid: str):
+    async def __xoscar_destroy_generator__(self, generator_uid: str):
+        """
+        Destroy the generator.
+
+        Parameters
+        ----------
+        generator_uid: str
+            The uid of generator
+        """
         return self._generators.pop(generator_uid, None)
 
 
