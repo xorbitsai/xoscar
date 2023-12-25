@@ -437,13 +437,13 @@ class AsyncActorMixin:
 
 
 def generator(func):
-    async def wapper(obj, *args, **kwargs):
+    async def wrapper(obj, *args, **kwargs):
         gen_uid = uuid.uuid1().hex
         obj._generators[gen_uid] = func(obj, *args, **kwargs)
         return IteratorWrapper(gen_uid, obj.address, obj.uid)
 
     if inspect.isgeneratorfunction(func) or inspect.isasyncgenfunction(func):
-        return wapper
+        return wrapper
     else:
         return func
 
