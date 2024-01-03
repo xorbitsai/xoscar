@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import threading
+import functools
 import uuid
 from collections import defaultdict
 from numbers import Number
@@ -400,13 +401,7 @@ class AsyncActorMixin:
             stop = object()
             try:
                 if inspect.isgenerator(gen):
-                    # to_thread is only available for Python >= 3.9
-                    if hasattr(asyncio, "to_thread"):
-                        r = await asyncio.to_thread(_wrapper, gen)
-                    else:
-                        r = await asyncio.get_event_loop().run_in_executor(
-                            None, _wrapper, gen
-                        )
+                    r = await asyncio.to_thread(_wrapper, gen)
                 elif inspect.isasyncgen(gen):
                     r = await asyncio.create_task(_async_wrapper(gen))
                 else:
@@ -438,15 +433,21 @@ class AsyncActorMixin:
 
 
 def generator(func):
-    async def wrapper(obj, *args, **kwargs):
-        gen_uid = uuid.uuid1().hex
-        obj._generators[gen_uid] = func(obj, *args, **kwargs)
-        return IteratorWrapper(gen_uid, obj.address, obj.uid)
+    need_to_thread = not asyncio.iscoroutinefunction(func)
 
-    if inspect.isgeneratorfunction(func) or inspect.isasyncgenfunction(func):
-        return wrapper
-    else:
-        return func
+    async def _wrapper(self, *args, **kwargs):
+        if need_to_thread:
+            r = await asyncio.to_thread(func, self, *args, **kwargs)
+        else:
+            r = await func(self, *args, **kwargs)
+        if inspect.isgenerator(r) or inspect.isasyncgen(r):
+            gen_uid = uuid.uuid1().hex
+            self._generators[gen_uid] = r
+            return IteratorWrapper(gen_uid, self.address, self.uid)
+        else:
+            return r
+
+    return _wrapper
 
 
 class Actor(AsyncActorMixin, _Actor):
