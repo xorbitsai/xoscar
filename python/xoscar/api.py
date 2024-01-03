@@ -435,6 +435,7 @@ class AsyncActorMixin:
 def generator(func):
     need_to_thread = not asyncio.iscoroutinefunction(func)
 
+    @functools.wraps(func)
     async def _wrapper(self, *args, **kwargs):
         if need_to_thread:
             r = await asyncio.to_thread(func, self, *args, **kwargs)
