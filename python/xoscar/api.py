@@ -16,9 +16,9 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import inspect
 import threading
-import functools
 import uuid
 from collections import defaultdict
 from numbers import Number
