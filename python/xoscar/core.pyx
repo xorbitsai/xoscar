@@ -127,7 +127,7 @@ cdef class ActorRef:
         return create_actor_ref, (self.address, self.uid)
 
     def __getattr__(self, item):
-        if item.startswith('_'):
+        if item.startswith('_') and item not in ["__xoscar_next__", "__xoscar_destroy_generator__"]:
             return object.__getattribute__(self, item)
 
         try:
