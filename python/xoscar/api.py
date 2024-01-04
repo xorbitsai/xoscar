@@ -424,7 +424,7 @@ class AsyncActorMixin:
                     )
             except Exception as e:
                 logger.exception(
-                    f"Destory generator {generator_uid} due to an error encountered."
+                    f"Destroy generator {generator_uid} due to an error encountered."
                 )
                 await self.__xoscar_destroy_generator__(generator_uid)
                 del gen  # Avoid exception hold generator reference.
