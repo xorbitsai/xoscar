@@ -19,8 +19,6 @@ import asyncio
 import functools
 import inspect
 import logging
-import os
-import sys
 import threading
 import uuid
 from collections import defaultdict
