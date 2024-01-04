@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+import os
 import time
 
 import pytest
@@ -160,7 +161,8 @@ async def test_generator():
     all_gen = await superivsor_actor.get_all_generators()
     assert len(all_gen) == 0
 
-    await asyncio.create_task(superivsor_actor.with_exception())
+    r = await superivsor_actor.with_exception()
+    del r
     await asyncio.sleep(0)
     all_gen = await superivsor_actor.get_all_generators()
     assert len(all_gen) == 0
