@@ -16,7 +16,9 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import inspect
+import logging
 import threading
 import uuid
 from collections import defaultdict
@@ -43,6 +45,8 @@ from .core import ActorRef, BufferRef, FileObjectRef, _Actor, _StatelessActor
 if TYPE_CHECKING:
     from .backends.config import ActorPoolConfig
     from .backends.pool import MainActorPoolType
+
+logger = logging.getLogger(__name__)
 
 
 async def create_actor(
@@ -295,6 +299,7 @@ class IteratorWrapper(Generic[T]):
         self._actor_addr = actor_addr
         self._actor_uid = actor_uid
         self._actor_ref = None
+        self._gc_destroy = True
 
     async def destroy(self):
         if self._actor_ref is None:
@@ -307,14 +312,23 @@ class IteratorWrapper(Generic[T]):
     def __del__(self):
         # It's not a good idea to spawn a new thread and join in __del__,
         # but currently it's the only way to GC the generator.
-        thread = threading.Thread(
-            target=asyncio.run, args=(self.destroy(),), daemon=True
-        )
-        thread.start()
-        thread.join()
+        # TODO(codingl2k1): This __del__ may hangs if the program is exiting.
+        if self._gc_destroy:
+            thread = threading.Thread(
+                target=asyncio.run, args=(self.destroy(),), daemon=True
+            )
+            thread.start()
+            thread.join()
 
     def __aiter__(self):
         return self
+
+    def __getstate__(self):
+        # Transfer gc destroy during serialization.
+        state = dict(**super().__getstate__())
+        state["_gc_destroy"] = True
+        self._gc_destroy = False
+        return state
 
     async def __anext__(self) -> T:
         if self._actor_ref is None:
@@ -400,13 +414,7 @@ class AsyncActorMixin:
             stop = object()
             try:
                 if inspect.isgenerator(gen):
-                    # to_thread is only available for Python >= 3.9
-                    if hasattr(asyncio, "to_thread"):
-                        r = await asyncio.to_thread(_wrapper, gen)
-                    else:
-                        r = await asyncio.get_event_loop().run_in_executor(
-                            None, _wrapper, gen
-                        )
+                    r = await asyncio.to_thread(_wrapper, gen)
                 elif inspect.isasyncgen(gen):
                     r = await asyncio.create_task(_async_wrapper(gen))
                 else:
@@ -415,15 +423,20 @@ class AsyncActorMixin:
                         f"but a {type(gen)} is got."
                     )
             except Exception as e:
+                logger.exception(
+                    f"Destroy generator {generator_uid} due to an error encountered."
+                )
                 await self.__xoscar_destroy_generator__(generator_uid)
+                del gen  # Avoid exception hold generator reference.
                 raise e
             if r is stop:
                 await self.__xoscar_destroy_generator__(generator_uid)
+                del gen  # Avoid exception hold generator reference.
                 raise Exception("StopIteration")
             else:
                 return r
         else:
-            raise RuntimeError(f"no iterator with id: {generator_uid}")
+            raise RuntimeError(f"No iterator with id: {generator_uid}")
 
     async def __xoscar_destroy_generator__(self, generator_uid: str):
         """
@@ -434,19 +447,28 @@ class AsyncActorMixin:
         generator_uid: str
             The uid of generator
         """
-        return self._generators.pop(generator_uid, None)
+        logger.debug("Destroy generator: %s", generator_uid)
+        self._generators.pop(generator_uid, None)
 
 
 def generator(func):
-    async def wrapper(obj, *args, **kwargs):
-        gen_uid = uuid.uuid1().hex
-        obj._generators[gen_uid] = func(obj, *args, **kwargs)
-        return IteratorWrapper(gen_uid, obj.address, obj.uid)
+    need_to_thread = not asyncio.iscoroutinefunction(func)
 
-    if inspect.isgeneratorfunction(func) or inspect.isasyncgenfunction(func):
-        return wrapper
-    else:
-        return func
+    @functools.wraps(func)
+    async def _wrapper(self, *args, **kwargs):
+        if need_to_thread:
+            r = await asyncio.to_thread(func, self, *args, **kwargs)
+        else:
+            r = await func(self, *args, **kwargs)
+        if inspect.isgenerator(r) or inspect.isasyncgen(r):
+            gen_uid = uuid.uuid1().hex
+            logger.debug("Create generator: %s", gen_uid)
+            self._generators[gen_uid] = r
+            return IteratorWrapper(gen_uid, self.address, self.uid)
+        else:
+            return r
+
+    return _wrapper
 
 
 class Actor(AsyncActorMixin, _Actor):

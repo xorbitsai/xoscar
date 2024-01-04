@@ -63,6 +63,32 @@ class SupervisorActor(xo.StatelessActor):
         raise Exception("intent raise")
         yield 2
 
+    @xo.generator
+    async def mix_gen(self, v):
+        if v == 1:
+            return self._gen()
+        elif v == 2:
+            return self._gen2()
+        else:
+            return 0
+
+    @xo.generator
+    def mix_gen2(self, v):
+        if v == 1:
+            return self._gen()
+        elif v == 2:
+            return self._gen2()
+        else:
+            return 0
+
+    def _gen(self):
+        for x in range(3):
+            yield x
+
+    async def _gen2(self):
+        for x in range(3):
+            yield x
+
     @classmethod
     def uid(cls):
         return "supervisor"
@@ -134,7 +160,19 @@ async def test_generator():
     all_gen = await superivsor_actor.get_all_generators()
     assert len(all_gen) == 0
 
-    await asyncio.create_task(superivsor_actor.with_exception())
+    r = await superivsor_actor.with_exception()
+    del r
     await asyncio.sleep(0)
     all_gen = await superivsor_actor.get_all_generators()
     assert len(all_gen) == 0
+
+    for f in [superivsor_actor.mix_gen, superivsor_actor.mix_gen2]:
+        out = []
+        async for x in await f(1):
+            out.append(x)
+        assert out == [0, 1, 2]
+        out = []
+        async for x in await f(2):
+            out.append(x)
+        assert out == [0, 1, 2]
+        assert 0 == await f(0)
