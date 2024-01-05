@@ -325,7 +325,7 @@ class IteratorWrapper(Generic[T]):
 
     def __getstate__(self):
         # Transfer gc destroy during serialization.
-        state = dict(**super().__getstate__())
+        state = self.__dict__.copy()
         state["_gc_destroy"] = True
         self._gc_destroy = False
         return state
