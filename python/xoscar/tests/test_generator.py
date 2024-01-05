@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+import pickle
 import time
 
 import pytest
@@ -161,6 +162,7 @@ async def test_generator():
     assert len(all_gen) == 0
 
     r = await superivsor_actor.with_exception()
+    pickle.loads(pickle.dumps(r))
     del r
     await asyncio.sleep(0)
     all_gen = await superivsor_actor.get_all_generators()
