@@ -217,12 +217,15 @@ class MainActorPool(MainActorPoolBase):
 
     @classmethod
     async def wait_sub_pools_ready(cls, create_pool_tasks: List[asyncio.Task]):
-        processes = []
+        processes: list[multiprocessing.Process] = []
         ext_addresses = []
         for task in create_pool_tasks:
             process, status = await task
             if status.status == 1:
                 # start sub pool failed
+                # kill previous processes first
+                for p in processes:
+                    p.terminate()
                 raise status.error.with_traceback(status.traceback)
             processes.append(process)
             ext_addresses.append(status.external_addresses)
@@ -294,8 +297,6 @@ class MainActorPool(MainActorPoolBase):
         status_queue: multiprocessing.Queue,
         main_pool_pid: int,
     ):
-        watch_main_pool = asyncio.to_thread(cls._watch_main_pool, main_pool_pid)
-
         process_status = None
         try:
             cur_pool_config = actor_config.get_pool_config(process_index)
@@ -316,6 +317,7 @@ class MainActorPool(MainActorPoolBase):
             raise
         finally:
             status_queue.put(process_status)
+        watch_main_pool = asyncio.to_thread(cls._watch_main_pool, main_pool_pid)
         await asyncio.gather(pool.join(), watch_main_pool)
 
     async def append_sub_pool(
