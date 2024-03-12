@@ -824,6 +824,7 @@ SubProcessHandle = multiprocessing.Process
 
 class SubActorPoolBase(ActorPoolBase):
     __slots__ = ("_main_address", "_watch_main_pool_task")
+    _watch_main_pool_task: Optional[asyncio.Task]
 
     def __init__(
         self,
@@ -836,7 +837,7 @@ class SubActorPoolBase(ActorPoolBase):
         config: ActorPoolConfig,
         servers: list[Server],
         main_address: str,
-        main_pool_pid: int,
+        main_pool_pid: Optional[int],
     ):
         super().__init__(
             process_index,
@@ -849,9 +850,12 @@ class SubActorPoolBase(ActorPoolBase):
             servers,
         )
         self._main_address = main_address
-        self._watch_main_pool_task = asyncio.create_task(
-            self._watch_main_pool(main_pool_pid)
-        )
+        if main_pool_pid:
+            self._watch_main_pool_task = asyncio.create_task(
+                self._watch_main_pool(main_pool_pid)
+            )
+        else:
+            self._watch_main_pool_task = None
 
     async def _watch_main_pool(self, main_pool_pid: int):
         main_process = psutil.Process(main_pool_pid)
@@ -920,7 +924,7 @@ class SubActorPoolBase(ActorPoolBase):
 
     @staticmethod
     def _parse_config(config: dict, kw: dict) -> dict:
-        main_pool_pid = config.pop("main_pool_pid")
+        main_pool_pid = config.pop("main_pool_pid", None)
         kw = AbstractActorPool._parse_config(config, kw)
         pool_config: ActorPoolConfig = kw["config"]
         main_process_index = pool_config.get_process_indexes()[0]
@@ -932,8 +936,9 @@ class SubActorPoolBase(ActorPoolBase):
 
     async def stop(self):
         await super().stop()
-        self._watch_main_pool_task.cancel()
-        await self._watch_main_pool_task
+        if self._watch_main_pool_task:
+            self._watch_main_pool_task.cancel()
+            await self._watch_main_pool_task
 
 
 class MainActorPoolBase(ActorPoolBase):

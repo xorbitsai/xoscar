@@ -80,7 +80,11 @@ class TestMainActorPool(MainActorPool):
         main_pool_pid: int,
     ):
         pool: TestSubActorPool = await TestSubActorPool.create(
-            {"actor_pool_config": actor_config, "process_index": process_index}
+            {
+                "actor_pool_config": actor_config,
+                "process_index": process_index,
+                "main_pool_pid": main_pool_pid,
+            }
         )
         await pool.start()
         status_queue.put(
