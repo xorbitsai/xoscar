@@ -219,16 +219,20 @@ class MainActorPool(MainActorPoolBase):
     async def wait_sub_pools_ready(cls, create_pool_tasks: List[asyncio.Task]):
         processes: list[multiprocessing.Process] = []
         ext_addresses = []
+        error = None
         for task in create_pool_tasks:
             process, status = await task
+            processes.append(process)
             if status.status == 1:
                 # start sub pool failed
-                # kill previous processes first
-                for p in processes:
-                    p.terminate()
-                raise status.error.with_traceback(status.traceback)
-            processes.append(process)
-            ext_addresses.append(status.external_addresses)
+                error = status.error.with_traceback(status.traceback)
+            else:
+                ext_addresses.append(status.external_addresses)
+        if error:
+            for p in processes:
+                # error happens, kill all subprocesses
+                p.kill()
+            raise error
         return processes, ext_addresses
 
     @classmethod
