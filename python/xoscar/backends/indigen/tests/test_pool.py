@@ -1143,3 +1143,38 @@ async def test_sub_pool_quit_with_main_pool():
 
     # subprocess should have died
     assert not psutil.pid_exists(processes[0].pid)
+
+
+def _add(x: int) -> int:
+    return x + 1
+
+
+class _ProcessActor(Actor):
+    def run(self, x: int):
+        p = multiprocessing.Process(target=_add, args=(x,))
+        p.start()
+        p.join()
+        return x + 1
+
+
+@pytest.mark.asyncio
+async def test_process_in_actor():
+    start_method = (
+        os.environ.get("POOL_START_METHOD", "forkserver")
+        if sys.platform != "win32"
+        else None
+    )
+    pool = await create_actor_pool(  # type: ignore
+        "127.0.0.1",
+        pool_cls=MainActorPool,
+        n_process=1,
+        subprocess_start_method=start_method,
+    )
+
+    async with pool:
+        ref = await create_actor(
+            _ProcessActor,
+            address=pool.external_address,
+            allocate_strategy=RandomSubPool(),
+        )
+        assert 2 == await ref.run(1)
