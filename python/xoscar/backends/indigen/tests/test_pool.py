@@ -1127,7 +1127,7 @@ def _run_in_process(started: multiprocessing.Event):  # type: ignore
 
 
 @pytest.mark.asyncio
-async def test_sub_pool_daemon():
+async def test_sub_pool_quit_with_main_pool():
     s = multiprocessing.Event()
     p = multiprocessing.Process(target=_run_in_process, args=(s,))
     p.start()

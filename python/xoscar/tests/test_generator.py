@@ -47,7 +47,7 @@ class SupervisorActor(xo.StatelessActor):
 
     @xo.generator
     async def chat(self):
-        worker_actor: xo.ActorRef["WorkerActor"] = await xo.actor_ref(
+        worker_actor: xo.ActorRef["WorkerActor"] = await xo.actor_ref(  # type: ignore
             address=address, uid=WorkerActor.uid()
         )
         yield "sync"

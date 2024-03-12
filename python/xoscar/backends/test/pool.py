@@ -55,7 +55,7 @@ class TestMainActorPool(MainActorPool):
         status_queue: multiprocessing.Queue = multiprocessing.Queue()
         return (
             asyncio.create_task(
-                cls._create_sub_pool(actor_pool_config, process_index, status_queue)
+                cls._create_sub_pool(actor_pool_config, process_index, status_queue, 0)
             ),
             status_queue,
         )
@@ -77,6 +77,7 @@ class TestMainActorPool(MainActorPool):
         actor_config: ActorPoolConfig,
         process_index: int,
         status_queue: multiprocessing.Queue,
+        main_pool_pid: int,
     ):
         pool: TestSubActorPool = await TestSubActorPool.create(
             {"actor_pool_config": actor_config, "process_index": process_index}
