@@ -32,8 +32,6 @@ from dataclasses import dataclass
 from types import TracebackType
 from typing import List, Optional
 
-import psutil
-
 from ..._utils import reset_id_random_seed
 from ...utils import dataslots, ensure_coverage
 from ..config import ActorPoolConfig
@@ -280,21 +278,6 @@ class MainActorPool(MainActorPoolBase):
         asyncio.run(coro)
 
     @classmethod
-    async def _watch_main_pool(cls, subpool: SubActorPool, main_pool_pid: int):
-        main_process = psutil.Process(main_pool_pid)
-        while not subpool.stopped:
-            try:
-                await asyncio.to_thread(main_process.status)
-                await asyncio.sleep(0.1)
-                continue
-            except (psutil.NoSuchProcess, ProcessLookupError, asyncio.CancelledError):
-                # main pool died
-                break
-
-        if not subpool.stopped:
-            await subpool.stop()
-
-    @classmethod
     async def _create_sub_pool(
         cls,
         actor_config: ActorPoolConfig,
@@ -309,7 +292,11 @@ class MainActorPool(MainActorPoolBase):
             if env:
                 os.environ.update(env)
             pool = await SubActorPool.create(
-                {"actor_pool_config": actor_config, "process_index": process_index}
+                {
+                    "actor_pool_config": actor_config,
+                    "process_index": process_index,
+                    "main_pool_pid": main_pool_pid,
+                }
             )
             external_addresses = cur_pool_config["external_address"]
             process_status = SubpoolStatus(
@@ -322,10 +309,7 @@ class MainActorPool(MainActorPoolBase):
             raise
         finally:
             status_queue.put(process_status)
-        watch_main_pool = asyncio.create_task(cls._watch_main_pool(pool, main_pool_pid))
-        task = asyncio.create_task(pool.join())
-        task.add_done_callback(lambda *_: watch_main_pool.cancel())
-        await task
+        await pool.join()
 
     async def append_sub_pool(
         self,

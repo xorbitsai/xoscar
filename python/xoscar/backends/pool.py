@@ -27,6 +27,8 @@ import traceback
 from abc import ABC, ABCMeta, abstractmethod
 from typing import Any, Callable, Coroutine, Optional, Type, TypeVar
 
+import psutil
+
 from .._utils import TypeDispatcher, create_actor_ref, to_binary
 from ..api import Actor
 from ..core import ActorRef, BufferRef, FileObjectRef, register_local_pool
@@ -821,7 +823,7 @@ SubProcessHandle = multiprocessing.Process
 
 
 class SubActorPoolBase(ActorPoolBase):
-    __slots__ = ("_main_address",)
+    __slots__ = ("_main_address", "_watch_main_pool_task")
 
     def __init__(
         self,
@@ -834,6 +836,7 @@ class SubActorPoolBase(ActorPoolBase):
         config: ActorPoolConfig,
         servers: list[Server],
         main_address: str,
+        main_pool_pid: int,
     ):
         super().__init__(
             process_index,
@@ -846,6 +849,23 @@ class SubActorPoolBase(ActorPoolBase):
             servers,
         )
         self._main_address = main_address
+        self._watch_main_pool_task = asyncio.create_task(
+            self._watch_main_pool(main_pool_pid)
+        )
+
+    async def _watch_main_pool(self, main_pool_pid: int):
+        main_process = psutil.Process(main_pool_pid)
+        while not self.stopped:
+            try:
+                await asyncio.to_thread(main_process.status)
+                await asyncio.sleep(0.1)
+                continue
+            except (psutil.NoSuchProcess, ProcessLookupError, asyncio.CancelledError):
+                # main pool died
+                break
+
+        if not self.stopped:
+            await self.stop()
 
     async def notify_main_pool_to_destroy(
         self, message: DestroyActorMessage
@@ -900,13 +920,20 @@ class SubActorPoolBase(ActorPoolBase):
 
     @staticmethod
     def _parse_config(config: dict, kw: dict) -> dict:
+        main_pool_pid = config.pop("main_pool_pid")
         kw = AbstractActorPool._parse_config(config, kw)
         pool_config: ActorPoolConfig = kw["config"]
         main_process_index = pool_config.get_process_indexes()[0]
         kw["main_address"] = pool_config.get_pool_config(main_process_index)[
             "external_address"
         ][0]
+        kw["main_pool_pid"] = main_pool_pid
         return kw
+
+    async def stop(self):
+        await super().stop()
+        self._watch_main_pool_task.cancel()
+        await self._watch_main_pool_task
 
 
 class MainActorPoolBase(ActorPoolBase):
