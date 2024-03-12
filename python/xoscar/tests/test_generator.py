@@ -100,85 +100,86 @@ class SupervisorActor(xo.StatelessActor):
 
 
 async def test_generator():
-    await xo.create_actor_pool(address, 2)
-    await xo.create_actor(WorkerActor, address=address, uid=WorkerActor.uid())
-    superivsor_actor = await xo.create_actor(
-        SupervisorActor, address=address, uid=SupervisorActor.uid()
-    )
+    pool = await xo.create_actor_pool(address, 2)
+    async with pool:
+        await xo.create_actor(WorkerActor, address=address, uid=WorkerActor.uid())
+        superivsor_actor = await xo.create_actor(
+            SupervisorActor, address=address, uid=SupervisorActor.uid()
+        )
 
-    all_gen = await superivsor_actor.get_all_generators()
-    assert len(all_gen) == 0
-    output = []
-    async for x in await superivsor_actor.chat():
         all_gen = await superivsor_actor.get_all_generators()
-        assert len(all_gen) == 1
-        output.append(x)
-    all_gen = await superivsor_actor.get_all_generators()
-    assert len(all_gen) == 0
-    assert output == [
-        "sync",
-        "h",
-        "e",
-        "l",
-        "l",
-        "o",
-        " ",
-        "o",
-        "s",
-        "c",
-        "a",
-        "r",
-        " ",
-        "b",
-        "y",
-        " ",
-        "s",
-        "y",
-        "n",
-        "c",
-        "async",
-        "h",
-        "e",
-        "l",
-        "l",
-        "o",
-        " ",
-        "o",
-        "s",
-        "c",
-        "a",
-        "r",
-        " ",
-        "b",
-        "y",
-        " ",
-        "a",
-        "s",
-        "y",
-        "n",
-        "c",
-    ]
+        assert len(all_gen) == 0
+        output = []
+        async for x in await superivsor_actor.chat():
+            all_gen = await superivsor_actor.get_all_generators()
+            assert len(all_gen) == 1
+            output.append(x)
+        all_gen = await superivsor_actor.get_all_generators()
+        assert len(all_gen) == 0
+        assert output == [
+            "sync",
+            "h",
+            "e",
+            "l",
+            "l",
+            "o",
+            " ",
+            "o",
+            "s",
+            "c",
+            "a",
+            "r",
+            " ",
+            "b",
+            "y",
+            " ",
+            "s",
+            "y",
+            "n",
+            "c",
+            "async",
+            "h",
+            "e",
+            "l",
+            "l",
+            "o",
+            " ",
+            "o",
+            "s",
+            "c",
+            "a",
+            "r",
+            " ",
+            "b",
+            "y",
+            " ",
+            "a",
+            "s",
+            "y",
+            "n",
+            "c",
+        ]
 
-    with pytest.raises(Exception, match="intent"):
-        async for _ in await superivsor_actor.with_exception():
-            pass
-    all_gen = await superivsor_actor.get_all_generators()
-    assert len(all_gen) == 0
+        with pytest.raises(Exception, match="intent"):
+            async for _ in await superivsor_actor.with_exception():
+                pass
+        all_gen = await superivsor_actor.get_all_generators()
+        assert len(all_gen) == 0
 
-    r = await superivsor_actor.with_exception()
-    pickle.loads(pickle.dumps(r))
-    del r
-    await asyncio.sleep(0)
-    all_gen = await superivsor_actor.get_all_generators()
-    assert len(all_gen) == 0
+        r = await superivsor_actor.with_exception()
+        pickle.loads(pickle.dumps(r))
+        del r
+        await asyncio.sleep(0)
+        all_gen = await superivsor_actor.get_all_generators()
+        assert len(all_gen) == 0
 
-    for f in [superivsor_actor.mix_gen, superivsor_actor.mix_gen2]:
-        out = []
-        async for x in await f(1):
-            out.append(x)
-        assert out == [0, 1, 2]
-        out = []
-        async for x in await f(2):
-            out.append(x)
-        assert out == [0, 1, 2]
-        assert 0 == await f(0)
+        for f in [superivsor_actor.mix_gen, superivsor_actor.mix_gen2]:
+            out = []
+            async for x in await f(1):
+                out.append(x)
+            assert out == [0, 1, 2]
+            out = []
+            async for x in await f(2):
+                out.append(x)
+            assert out == [0, 1, 2]
+            assert 0 == await f(0)

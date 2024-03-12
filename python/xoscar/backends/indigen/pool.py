@@ -27,7 +27,6 @@ import random
 import signal
 import sys
 import threading
-import time
 import uuid
 from dataclasses import dataclass
 from types import TracebackType
@@ -281,17 +280,19 @@ class MainActorPool(MainActorPoolBase):
         asyncio.run(coro)
 
     @classmethod
-    def _watch_main_pool(cls, main_pool_pid: int):
-        while True:
+    async def _watch_main_pool(cls, subpool: SubActorPool, main_pool_pid: int):
+        main_process = psutil.Process(main_pool_pid)
+        while not subpool.stopped:
             try:
-                psutil.Process(main_pool_pid).status()
-                time.sleep(0.1)
+                await asyncio.to_thread(main_process.status)
+                await asyncio.sleep(0.1)
                 continue
-            except (psutil.NoSuchProcess, ProcessLookupError):
+            except (psutil.NoSuchProcess, ProcessLookupError, asyncio.CancelledError):
                 # main pool died
                 break
 
-        sys.exit(0)
+        if not subpool.stopped:
+            await subpool.stop()
 
     @classmethod
     async def _create_sub_pool(
@@ -321,8 +322,10 @@ class MainActorPool(MainActorPoolBase):
             raise
         finally:
             status_queue.put(process_status)
-        watch_main_pool = asyncio.to_thread(cls._watch_main_pool, main_pool_pid)
-        await asyncio.gather(pool.join(), watch_main_pool)
+        watch_main_pool = asyncio.create_task(cls._watch_main_pool(pool, main_pool_pid))
+        task = asyncio.create_task(pool.join())
+        task.add_done_callback(lambda *_: watch_main_pool.cancel())
+        await task
 
     async def append_sub_pool(
         self,
