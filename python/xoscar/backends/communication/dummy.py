@@ -97,9 +97,9 @@ class DummyServer(Server):
         else tuple()
     )
 
-    _address_to_instances: weakref.WeakValueDictionary[
-        str, "DummyServer"
-    ] = weakref.WeakValueDictionary()
+    _address_to_instances: weakref.WeakValueDictionary[str, "DummyServer"] = (
+        weakref.WeakValueDictionary()
+    )
     _channels: list[ChannelType]
     _tasks: list[asyncio.Task]
     scheme: str | None = "dummy"

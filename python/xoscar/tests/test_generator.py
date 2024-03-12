@@ -51,7 +51,11 @@ class SupervisorActor(xo.StatelessActor):
             address=address, uid=WorkerActor.uid()
         )
         yield "sync"
-        async for x in await worker_actor.chat():  # this is much confused. I will suggest use async generators only.
+        async for (
+            x
+        ) in (
+            await worker_actor.chat()
+        ):  # this is much confused. I will suggest use async generators only.
             yield x
 
         yield "async"
