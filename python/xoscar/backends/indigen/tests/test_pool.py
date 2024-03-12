@@ -17,12 +17,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import multiprocessing
 import os
 import re
 import sys
 import time
 from unittest import mock
 
+import psutil
 import pytest
 
 from .... import Actor, create_actor, create_actor_ref, get_pool_config, kill_actor
@@ -1099,3 +1101,45 @@ async def test_test_pool_append_sub_pool():
         assert process_index not in config.get_process_indexes()
         with pytest.raises(KeyError):
             config.get_pool_config(process_index)
+
+
+async def _run(started: multiprocessing.Event):  # type: ignore
+    pool = await create_actor_pool(  # type: ignore
+        "127.0.0.1", pool_cls=MainActorPool, n_process=1
+    )
+
+    class DummyActor(Actor):
+        @staticmethod
+        def test():
+            return "this is dummy!"
+
+    ref = await create_actor(
+        DummyActor, address=pool.external_address, allocate_strategy=RandomSubPool()
+    )
+    assert ref is not None
+
+    started.set()  # type: ignore
+    await pool.join()
+
+
+def _run_in_process(started: multiprocessing.Event):  # type: ignore
+    asyncio.run(_run(started))
+
+
+@pytest.mark.asyncio
+async def test_sub_pool_daemon():
+    s = multiprocessing.Event()
+    p = multiprocessing.Process(target=_run_in_process, args=(s,))
+    p.start()
+    s.wait()
+
+    processes = psutil.Process(p.pid).children()
+    assert len(processes) == 1
+
+    # kill main process
+    p.kill()
+    p.join()
+    await asyncio.sleep(1)
+
+    # subprocess should have died
+    assert not psutil.pid_exists(processes[0].pid)

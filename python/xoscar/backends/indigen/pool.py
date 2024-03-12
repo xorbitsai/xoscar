@@ -27,10 +27,13 @@ import random
 import signal
 import sys
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from types import TracebackType
 from typing import List, Optional
+
+import psutil
 
 from ..._utils import reset_id_random_seed
 from ...utils import dataslots, ensure_coverage
@@ -187,14 +190,19 @@ class MainActorPool(MainActorPoolBase):
         def start_pool_in_process():
             ctx = multiprocessing.get_context(method=start_method)
             status_queue = ctx.Queue()
+            main_pool_pid = os.getpid()
 
             with _suspend_init_main():
                 process = ctx.Process(
                     target=cls._start_sub_pool,
-                    args=(actor_pool_config, process_index, status_queue),
+                    args=(
+                        actor_pool_config,
+                        process_index,
+                        status_queue,
+                        main_pool_pid,
+                    ),
                     name=f"IndigenActorPool{process_index}",
                 )
-                process.daemon = True
                 process.start()
 
             # wait for sub actor pool to finish starting
@@ -226,6 +234,7 @@ class MainActorPool(MainActorPoolBase):
         actor_config: ActorPoolConfig,
         process_index: int,
         status_queue: multiprocessing.Queue,
+        main_pool_pid: int,
     ):
         ensure_coverage()
 
@@ -259,8 +268,23 @@ class MainActorPool(MainActorPoolBase):
         else:
             asyncio.set_event_loop(asyncio.new_event_loop())
 
-        coro = cls._create_sub_pool(actor_config, process_index, status_queue)
+        coro = cls._create_sub_pool(
+            actor_config, process_index, status_queue, main_pool_pid
+        )
         asyncio.run(coro)
+
+    @classmethod
+    def _watch_main_pool(cls, main_pool_pid: int):
+        while True:
+            try:
+                psutil.Process(main_pool_pid).status()
+                time.sleep(0.1)
+                continue
+            except (psutil.NoSuchProcess, ProcessLookupError):
+                # main pool died
+                break
+
+        sys.exit(0)
 
     @classmethod
     async def _create_sub_pool(
@@ -268,7 +292,10 @@ class MainActorPool(MainActorPoolBase):
         actor_config: ActorPoolConfig,
         process_index: int,
         status_queue: multiprocessing.Queue,
+        main_pool_pid: int,
     ):
+        watch_main_pool = asyncio.to_thread(cls._watch_main_pool, main_pool_pid)
+
         process_status = None
         try:
             cur_pool_config = actor_config.get_pool_config(process_index)
@@ -289,7 +316,7 @@ class MainActorPool(MainActorPoolBase):
             raise
         finally:
             status_queue.put(process_status)
-        await pool.join()
+        await asyncio.gather(pool.join(), watch_main_pool)
 
     async def append_sub_pool(
         self,
@@ -342,14 +369,14 @@ class MainActorPool(MainActorPoolBase):
         def start_pool_in_process():
             ctx = multiprocessing.get_context(method=start_method)
             status_queue = ctx.Queue()
+            main_pool_pid = os.getpid()
 
             with _suspend_init_main():
                 process = ctx.Process(
                     target=self._start_sub_pool,
-                    args=(self._config, process_index, status_queue),
+                    args=(self._config, process_index, status_queue, main_pool_pid),
                     name=f"IndigenActorPool{process_index}",
                 )
-                process.daemon = True
                 process.start()
 
             # wait for sub actor pool to finish starting
