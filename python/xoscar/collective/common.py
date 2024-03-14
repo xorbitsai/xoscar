@@ -55,30 +55,30 @@ class AllReduceAlgorithm(IntEnum):
 
 
 TypeMappingGloo: Dict[Type[np.dtype], "xp.GlooDataType_t"] = {
-    np.int8: xp.GlooDataType_t.glooInt8,
-    np.uint8: xp.GlooDataType_t.glooUint8,
-    np.int32: xp.GlooDataType_t.glooInt32,
-    np.uint32: xp.GlooDataType_t.glooUint32,
-    np.int64: xp.GlooDataType_t.glooInt64,
-    np.uint64: xp.GlooDataType_t.glooUint64,
-    np.float16: xp.GlooDataType_t.glooFloat16,
-    np.float32: xp.GlooDataType_t.glooFloat32,
-    np.float64: xp.GlooDataType_t.glooFloat64,
+    np.int8: xp.GlooDataType_t.glooInt8,  # type: ignore
+    np.uint8: xp.GlooDataType_t.glooUint8,  # type: ignore
+    np.int32: xp.GlooDataType_t.glooInt32,  # type: ignore
+    np.uint32: xp.GlooDataType_t.glooUint32,  # type: ignore
+    np.int64: xp.GlooDataType_t.glooInt64,  # type: ignore
+    np.uint64: xp.GlooDataType_t.glooUint64,  # type: ignore
+    np.float16: xp.GlooDataType_t.glooFloat16,  # type: ignore
+    np.float32: xp.GlooDataType_t.glooFloat32,  # type: ignore
+    np.float64: xp.GlooDataType_t.glooFloat64,  # type: ignore
 }
 cupy = lazy_import("cupy")
 if cupy is not None:
     from cupy.cuda import nccl
 
     TypeMappingNCCL: Dict[Type[np.dtype], int] = {
-        np.int8: nccl.NCCL_INT8,
-        np.uint8: nccl.NCCL_UINT8,
-        np.int32: nccl.NCCL_INT32,
-        np.uint32: nccl.NCCL_UINT32,
-        np.int64: nccl.NCCL_INT64,
-        np.uint64: nccl.NCCL_UINT64,
-        np.float16: nccl.NCCL_FLOAT16,
-        np.float32: nccl.NCCL_FLOAT32,
-        np.float64: nccl.NCCL_FLOAT64,
+        np.int8: nccl.NCCL_INT8,  # type: ignore
+        np.uint8: nccl.NCCL_UINT8,  # type: ignore
+        np.int32: nccl.NCCL_INT32,  # type: ignore
+        np.uint32: nccl.NCCL_UINT32,  # type: ignore
+        np.int64: nccl.NCCL_INT64,  # type: ignore
+        np.uint64: nccl.NCCL_UINT64,  # type: ignore
+        np.float16: nccl.NCCL_FLOAT16,  # type: ignore
+        np.float32: nccl.NCCL_FLOAT32,  # type: ignore
+        np.float64: nccl.NCCL_FLOAT64,  # type: ignore
     }
 
     ReduceOpMappingNCCL: Dict[CollectiveReduceOp, int] = {

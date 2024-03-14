@@ -120,7 +120,7 @@ async def _copy_test(scheme1: Optional[str], scheme2: Optional[str], cpu: bool):
         external_address_schemes=[None, scheme1, scheme2],
     )
 
-    async with pool:
+    async with pool, pool2:
         ctx = get_context()
 
         # actor on main pool

@@ -187,14 +187,19 @@ class MainActorPool(MainActorPoolBase):
         def start_pool_in_process():
             ctx = multiprocessing.get_context(method=start_method)
             status_queue = ctx.Queue()
+            main_pool_pid = os.getpid()
 
             with _suspend_init_main():
                 process = ctx.Process(
                     target=cls._start_sub_pool,
-                    args=(actor_pool_config, process_index, status_queue),
+                    args=(
+                        actor_pool_config,
+                        process_index,
+                        status_queue,
+                        main_pool_pid,
+                    ),
                     name=f"IndigenActorPool{process_index}",
                 )
-                process.daemon = True
                 process.start()
 
             # wait for sub actor pool to finish starting
@@ -209,15 +214,22 @@ class MainActorPool(MainActorPoolBase):
 
     @classmethod
     async def wait_sub_pools_ready(cls, create_pool_tasks: List[asyncio.Task]):
-        processes = []
+        processes: list[multiprocessing.Process] = []
         ext_addresses = []
+        error = None
         for task in create_pool_tasks:
             process, status = await task
+            processes.append(process)
             if status.status == 1:
                 # start sub pool failed
-                raise status.error.with_traceback(status.traceback)
-            processes.append(process)
-            ext_addresses.append(status.external_addresses)
+                error = status.error.with_traceback(status.traceback)
+            else:
+                ext_addresses.append(status.external_addresses)
+        if error:
+            for p in processes:
+                # error happens, kill all subprocesses
+                p.kill()
+            raise error
         return processes, ext_addresses
 
     @classmethod
@@ -226,6 +238,7 @@ class MainActorPool(MainActorPoolBase):
         actor_config: ActorPoolConfig,
         process_index: int,
         status_queue: multiprocessing.Queue,
+        main_pool_pid: int,
     ):
         ensure_coverage()
 
@@ -259,7 +272,9 @@ class MainActorPool(MainActorPoolBase):
         else:
             asyncio.set_event_loop(asyncio.new_event_loop())
 
-        coro = cls._create_sub_pool(actor_config, process_index, status_queue)
+        coro = cls._create_sub_pool(
+            actor_config, process_index, status_queue, main_pool_pid
+        )
         asyncio.run(coro)
 
     @classmethod
@@ -268,6 +283,7 @@ class MainActorPool(MainActorPoolBase):
         actor_config: ActorPoolConfig,
         process_index: int,
         status_queue: multiprocessing.Queue,
+        main_pool_pid: int,
     ):
         process_status = None
         try:
@@ -276,7 +292,11 @@ class MainActorPool(MainActorPoolBase):
             if env:
                 os.environ.update(env)
             pool = await SubActorPool.create(
-                {"actor_pool_config": actor_config, "process_index": process_index}
+                {
+                    "actor_pool_config": actor_config,
+                    "process_index": process_index,
+                    "main_pool_pid": main_pool_pid,
+                }
             )
             external_addresses = cur_pool_config["external_address"]
             process_status = SubpoolStatus(
@@ -342,14 +362,14 @@ class MainActorPool(MainActorPoolBase):
         def start_pool_in_process():
             ctx = multiprocessing.get_context(method=start_method)
             status_queue = ctx.Queue()
+            main_pool_pid = os.getpid()
 
             with _suspend_init_main():
                 process = ctx.Process(
                     target=self._start_sub_pool,
-                    args=(self._config, process_index, status_queue),
+                    args=(self._config, process_index, status_queue, main_pool_pid),
                     name=f"IndigenActorPool{process_index}",
                 )
-                process.daemon = True
                 process.start()
 
             # wait for sub actor pool to finish starting

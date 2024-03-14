@@ -222,88 +222,98 @@ async def test_extensible_single_with_batch(use_async):
 @pytest.mark.asyncio
 async def test_no_lock():
     pool = await create_actor_pool("127.0.0.1", n_process=1)
-    addr = pool.external_address
+    async with pool:
+        addr = pool.external_address
 
-    # DummyActor calls ``test_method`` of WorkActor in ``do`` method,
-    # while WorkerActor depends on DummyActor ref to complete ``test_method``.
-    # If there is no ``no_lock`` decorator, dead lock happens.
-    class DummyActor(Actor):
-        def __init__(self):
-            super().__init__()
-            self.arg_list = []
-            self.kwarg_list = []
-            self.test_seq = []
+        # DummyActor calls ``test_method`` of WorkActor in ``do`` method,
+        # while WorkerActor depends on DummyActor ref to complete ``test_method``.
+        # If there is no ``no_lock`` decorator, dead lock happens.
+        class DummyActor(Actor):
+            def __init__(self):
+                super().__init__()
+                self.arg_list = []
+                self.kwarg_list = []
+                self.test_seq = []
 
-        @classmethod
-        def default_uid(cls):
-            return "DummyActor"
+            @classmethod
+            def default_uid(cls):
+                return "DummyActor"
 
-        @extensible
-        @no_lock
-        def method(self, *args, **kwargs):
-            self.arg_list.append(tuple(a * 2 for a in args))
-            self.kwarg_list.append({k: v * 2 for k, v in kwargs.items()})
-            return len(self.kwarg_list)
+            @extensible
+            @no_lock
+            def method(self, *args, **kwargs):
+                self.arg_list.append(tuple(a * 2 for a in args))
+                self.kwarg_list.append({k: v * 2 for k, v in kwargs.items()})
+                return len(self.kwarg_list)
 
-        @method.batch
-        @no_lock
-        def b_method(self, args_list, kwargs_list):
-            self.arg_list.extend([tuple(a * 2 + 1 for a in args) for args in args_list])
-            self.kwarg_list.extend(
-                [{k: v * 2 + 1 for k, v in kwargs.items()} for kwargs in kwargs_list]
-            )
-            return [len(self.kwarg_list)] * len(args_list)
+            @method.batch
+            @no_lock
+            def b_method(self, args_list, kwargs_list):
+                self.arg_list.extend(
+                    [tuple(a * 2 + 1 for a in args) for args in args_list]
+                )
+                self.kwarg_list.extend(
+                    [
+                        {k: v * 2 + 1 for k, v in kwargs.items()}
+                        for kwargs in kwargs_list
+                    ]
+                )
+                return [len(self.kwarg_list)] * len(args_list)
 
-        @no_lock
-        async def no_lock_test(self, i):
-            self.test_seq.append(i)
-            await asyncio.sleep(1)
-            self.test_seq.append(i + 1)
+            @no_lock
+            async def no_lock_test(self, i):
+                self.test_seq.append(i)
+                await asyncio.sleep(1)
+                self.test_seq.append(i + 1)
 
-        def get_lock_test_result(self):
-            return self.test_seq
+            def get_lock_test_result(self):
+                return self.test_seq
 
-        async def do(self):
-            ref = await actor_ref(address=self.address, uid=WorkerActor.default_uid())
-            await ref.test_method()
+            async def do(self):
+                ref = await actor_ref(
+                    address=self.address, uid=WorkerActor.default_uid()
+                )
+                await ref.test_method()
 
-        async def do_batch(self):
-            ref = await actor_ref(address=self.address, uid=WorkerActor.default_uid())
-            await ref.test_method_batch()
+            async def do_batch(self):
+                ref = await actor_ref(
+                    address=self.address, uid=WorkerActor.default_uid()
+                )
+                await ref.test_method_batch()
 
-    class WorkerActor(Actor):
-        def __init__(self):
-            super().__init__()
+        class WorkerActor(Actor):
+            def __init__(self):
+                super().__init__()
 
-        @classmethod
-        def default_uid(cls):
-            return "WorkerActor"
+            @classmethod
+            def default_uid(cls):
+                return "WorkerActor"
 
-        async def __post_create__(self):
-            self._dummy_ref = await actor_ref(
-                address=self.address, uid=DummyActor.default_uid()
-            )
+            async def __post_create__(self):
+                self._dummy_ref = await actor_ref(
+                    address=self.address, uid=DummyActor.default_uid()
+                )
 
-        async def test_method(self):
-            assert await self._dummy_ref.method(1, kwarg=2) == 1
-            assert getattr(DummyActor.method, NO_LOCK_ATTRIBUTE_HINT, False) is True
+            async def test_method(self):
+                assert await self._dummy_ref.method(1, kwarg=2) == 1
+                assert getattr(DummyActor.method, NO_LOCK_ATTRIBUTE_HINT, False) is True
 
-        async def test_method_batch(self):
-            assert await self._dummy_ref.method.batch(
-                self._dummy_ref.method.delay(1, kwarg=2),
-                self._dummy_ref.method.delay(3, kwarg=4),
-            ) == [3, 3]
+            async def test_method_batch(self):
+                assert await self._dummy_ref.method.batch(
+                    self._dummy_ref.method.delay(1, kwarg=2),
+                    self._dummy_ref.method.delay(3, kwarg=4),
+                ) == [3, 3]
 
-    ref = await create_actor(DummyActor, address=addr, uid=DummyActor.default_uid())
-    await create_actor(WorkerActor, address=addr, uid=WorkerActor.default_uid())
-    await ref.do()
-    await ref.do_batch()
+        ref = await create_actor(DummyActor, address=addr, uid=DummyActor.default_uid())
+        await create_actor(WorkerActor, address=addr, uid=WorkerActor.default_uid())
+        await ref.do()
+        await ref.do_batch()
 
-    ref2 = await create_actor(
-        DummyActor,
-        address=next(iter(pool.sub_processes.keys())),
-        uid=DummyActor.default_uid(),
-    )
-    await asyncio.gather(ref2.no_lock_test(1), ref2.no_lock_test(3))
-    r = await ref2.get_lock_test_result()
-    assert r == [1, 3, 2, 4]
+        ref2 = await create_actor(
+            DummyActor,
+            address=next(iter(pool.sub_processes.keys())),
+            uid=DummyActor.default_uid(),
+        )
+        await asyncio.gather(ref2.no_lock_test(1), ref2.no_lock_test(3))
+        r = await ref2.get_lock_test_result()
+        assert r == [1, 3, 2, 4]
