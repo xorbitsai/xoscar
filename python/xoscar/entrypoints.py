@@ -28,7 +28,7 @@ def init_extension_entrypoints():
     """
     from importlib.metadata import entry_points
 
-    xoscar_entry_points = entry_point()["xoscar_extensions"]
+    xoscar_entry_points = entry_points()["xoscar_extensions"]
     for entry_point in xoscar_entry_points:
         if entry_point.name == "init":
             logger.info("Loading extension: %s", entry_point)
