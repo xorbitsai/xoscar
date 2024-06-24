@@ -26,9 +26,9 @@ def init_extension_entrypoints():
     """Execute all `xoscar_extensions` entry points with the name `init`
     If extensions have already been initialized, this function does nothing.
     """
-    from pkg_resources import iter_entry_points  # type: ignore
+    from importlib.metadata import entry_points
 
-    for entry_point in iter_entry_points("xoscar_extensions", "init"):
+    for entry_point in entry_points(group="xoscar_extensions", name="init"):
         logger.info("Loading extension: %s", entry_point)
         try:
             func = entry_point.load()

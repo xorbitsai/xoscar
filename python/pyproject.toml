@@ -2,6 +2,7 @@
 requires = [
     "setuptools<64",
     "wheel",
+    "packaging",
     "oldest-supported-numpy",
     "pandas>=1.0.4",
     "scipy==1.4.1; python_version<'3.9' and platform_machine!='aarch64'",
