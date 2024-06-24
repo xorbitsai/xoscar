@@ -28,15 +28,17 @@ def init_extension_entrypoints():
     """
     from importlib.metadata import entry_points
 
-    for entry_point in entry_points(group="xoscar_extensions", name="init"):
-        logger.info("Loading extension: %s", entry_point)
-        try:
-            func = entry_point.load()
-            func()
-        except Exception as e:
-            msg = "Xoscar extension module '{}' failed to load due to '{}({})'."
-            warnings.warn(
-                msg.format(entry_point.module_name, type(e).__name__, str(e)),
-                stacklevel=2,
-            )
-            logger.info("Extension loading failed for: %s", entry_point)
+    xoscar_entry_points = entry_point()["xoscar_extensions"]
+    for entry_point in xoscar_entry_points:
+        if entry_point.name == "init":
+            logger.info("Loading extension: %s", entry_point)
+            try:
+                func = entry_point.load()
+                func()
+            except Exception as e:
+                msg = "Xoscar extension module '{}' failed to load due to '{}({})'."
+                warnings.warn(
+                    msg.format(entry_point.module_name, type(e).__name__, str(e)),
+                    stacklevel=2,
+                )
+                logger.info("Extension loading failed for: %s", entry_point)

@@ -13,7 +13,7 @@ Xoscar can be installed via pip from `PyPI <https://pypi.org/project/xoscar>`__.
 Python version support
 ----------------------
 
-Officially Python 3.9, 3.10, and 3.11.
+Officially Python 3.8, 3.9, 3.10, and 3.11.
 
 
 Dependencies
