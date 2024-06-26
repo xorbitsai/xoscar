@@ -4,7 +4,7 @@ requires = [
     "packaging",
     "wheel",
     "oldest-supported-numpy",
-    "scipy"
+    "scipy",
     "pandas>=1.0.4",
     "cython>=0.29.33",
     "requests>=2.4.0",
