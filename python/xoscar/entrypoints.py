@@ -26,19 +26,17 @@ def init_extension_entrypoints():
     """Execute all `xoscar_extensions` entry points with the name `init`
     If extensions have already been initialized, this function does nothing.
     """
-    from importlib.metadata import entry_points
+    from pkg_resources import iter_entry_points  # type: ignore
 
-    xoscar_entry_points = entry_points()["xoscar_extensions"]
-    for entry_point in xoscar_entry_points:
-        if entry_point.name == "init":
-            logger.info("Loading extension: %s", entry_point)
-            try:
-                func = entry_point.load()
-                func()
-            except Exception as e:
-                msg = "Xoscar extension module '{}' failed to load due to '{}({})'."
-                warnings.warn(
-                    msg.format(entry_point.module_name, type(e).__name__, str(e)),
-                    stacklevel=2,
-                )
-                logger.info("Extension loading failed for: %s", entry_point)
+    for entry_point in iter_entry_points("xoscar_extensions", "init"):
+        logger.info("Loading extension: %s", entry_point)
+        try:
+            func = entry_point.load()
+            func()
+        except Exception as e:
+            msg = "Xoscar extension module '{}' failed to load due to '{}({})'."
+            warnings.warn(
+                msg.format(entry_point.module_name, type(e).__name__, str(e)),
+                stacklevel=2,
+            )
+            logger.info("Extension loading failed for: %s", entry_point)
