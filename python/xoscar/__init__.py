@@ -58,6 +58,3 @@ _T = TypeVar("_T")
 ActorRefType = Union[ActorRef, _T]
 
 __version__ = _version.get_versions()["version"]
-
-init_extension_entrypoints()
-del init_extension_entrypoints
