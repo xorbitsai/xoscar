@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "setuptools",
+    "setuptools<64",
     "packaging",
     "wheel",
     "oldest-supported-numpy",
