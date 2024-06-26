@@ -33,7 +33,6 @@ from .._utils import TypeDispatcher, create_actor_ref, to_binary
 from ..api import Actor
 from ..core import ActorRef, BufferRef, FileObjectRef, register_local_pool
 from ..debug import debug_async_timeout, record_message_trace
-from ..entrypoints import init_extension_entrypoints
 from ..errors import (
     ActorAlreadyExist,
     ActorNotExist,
@@ -188,8 +187,6 @@ class AbstractActorPool(ABC):
         self._asyncio_task_timeout_detector_task = (
             register_asyncio_task_timeout_detector()
         )
-        # load third party extensions.
-        init_extension_entrypoints()
         # init metrics
         metric_configs = self._config.get_metric_configs()
         metric_backend = metric_configs.get("backend")

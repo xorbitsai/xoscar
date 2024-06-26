@@ -50,7 +50,6 @@ from ._utils import create_actor_ref
 
 # make sure methods are registered
 from .backends import indigen, test
-from .entrypoints import init_extension_entrypoints
 from . import _version
 
 del indigen, test
