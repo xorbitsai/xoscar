@@ -37,7 +37,13 @@ jobs:
             requires-python: ">=3.11,<3.12"
           - os: macos-latest
             arch: arm64
-            requires-python: ">=3.9,<3.12"
+            requires-python: ">=3.9,<3.10"
+          - os: macos-latest
+            arch: arm64
+            requires-python: ">=3.10,<3.11"
+          - os: macos-latest
+            arch: arm64
+            requires-python: ">=3.11,<3.12"
 
     steps:
       - uses: actions/checkout@v3
