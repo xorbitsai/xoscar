@@ -26,7 +26,7 @@ from ..context import BaseActorContext
 from ..core import ActorRef, BufferRef, FileObjectRef, create_local_actor_ref
 from ..debug import debug_async_timeout, detect_cycle_send
 from ..errors import CannotCancelTask
-from ..utils import dataslots
+from ..utils import dataslots, fix_all_zero_ip
 from .allocate_strategy import AddressSpecified, AllocateStrategy
 from .communication import Client, DummyClient, UCXClient
 from .core import ActorCaller
@@ -187,6 +187,7 @@ class IndigenActorContext(BaseActorContext):
 
     async def actor_ref(self, *args, **kwargs):
         actor_ref = create_actor_ref(*args, **kwargs)
+        connect_addr = actor_ref.address
         local_actor_ref = create_local_actor_ref(actor_ref.address, actor_ref.uid)
         if local_actor_ref is not None:
             return local_actor_ref
@@ -195,7 +196,10 @@ class IndigenActorContext(BaseActorContext):
         )
         future = await self._call(actor_ref.address, message, wait=False)
         result = await self._wait(future, actor_ref.address, message)
-        return self._process_result_message(result)
+        res = self._process_result_message(result)
+        if res.address != connect_addr:
+            res.address = fix_all_zero_ip(res.address, connect_addr)
+        return res
 
     async def send(
         self,
