@@ -85,7 +85,8 @@ class ActorCaller:
                         f"Remote server {client.dest_address} closed"
                     ) from None
                 future = self._client_to_message_futures[client].pop(message.message_id)
-                future.set_result(message)
+                if not future.done():
+                    future.set_result(message)
             except DeserializeMessageFailed as e:
                 message_id = e.message_id
                 future = self._client_to_message_futures[client].pop(message_id)
