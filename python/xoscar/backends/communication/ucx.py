@@ -28,7 +28,7 @@ import numpy as np
 from ...nvutils import get_cuda_context, get_index_and_uuid
 from ...serialization import deserialize
 from ...serialization.aio import BUFFER_SIZES_NAME, AioSerializer, get_header_length
-from ...utils import classproperty, implements, is_cuda_buffer, lazy_import
+from ...utils import classproperty, implements, is_cuda_buffer, is_v6_ip, lazy_import
 from ..message import _MessageBase
 from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server
@@ -406,6 +406,16 @@ class UCXServer(Server):
         else:
             host = config.pop("host")
             port = int(config.pop("port"))
+        _host = host
+        if config.pop("listen_elastic_ip", False):
+            # The Actor.address will be announce to client, and is not on our host,
+            # cannot actually listen on it,
+            # so we have to keep SocketServer.host untouched to make sure Actor.address not changed
+            if is_v6_ip(host):
+                _host = "::"
+            else:
+                _host = "0.0.0.0"
+
         handle_channel = config.pop("handle_channel")
 
         # init
@@ -414,7 +424,7 @@ class UCXServer(Server):
         async def serve_forever(client_ucp_endpoint: "ucp.Endpoint"):  # type: ignore
             try:
                 await server.on_connected(
-                    client_ucp_endpoint, local_address=server.address
+                    client_ucp_endpoint, local_address="%s:%d" % (_host, port)
                 )
             except ChannelClosed:  # pragma: no cover
                 logger.exception("Connection closed before handshake completed")

@@ -324,6 +324,7 @@ class MainActorPool(MainActorPoolBase):
         start_method: str | None = None,
         kwargs: dict | None = None,
     ):
+        # external_address has port 0, subprocess will bind random port.
         external_address = (
             external_address
             or MainActorPool.get_external_addresses(self.external_address, n_process=1)[
@@ -393,7 +394,7 @@ class MainActorPool(MainActorPoolBase):
             content=self._config,
         )
         await self.handle_control_command(control_message)
-
+        # The actual port will return in process_status.
         return process_status.external_addresses[0]
 
     async def remove_sub_pool(

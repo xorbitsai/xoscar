@@ -480,6 +480,11 @@ def is_v6_zero_ip(ip_port_addr: str) -> bool:
     return True
 
 
+def is_v6_ip(ip_port_addr: str) -> bool:
+    arr = ip_port_addr.split("://", 1)[-1].split(":")
+    return len(arr) > 1
+
+
 def fix_all_zero_ip(remote_addr: str, connect_addr: str) -> str:
     """
     Use connect_addr to fix ActorRef.address return by remote server.

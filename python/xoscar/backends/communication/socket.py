@@ -30,7 +30,7 @@ from urllib.parse import urlparse
 from ..._utils import to_binary
 from ...constants import XOSCAR_UNIX_SOCKET_DIR
 from ...serialization import AioDeserializer, AioSerializer, deserialize
-from ...utils import classproperty, implements
+from ...utils import classproperty, implements, is_v6_ip
 from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server
 from .utils import read_buffers, write_buffers
@@ -201,6 +201,10 @@ class SocketServer(_BaseSocketServer):
     def channel_type(self) -> int:
         return ChannelType.remote
 
+    @classmethod
+    def parse_config(cls, config: dict) -> dict:
+        return config
+
     @staticmethod
     @implements(Server.create)
     async def create(config: Dict) -> "Server":
@@ -212,6 +216,16 @@ class SocketServer(_BaseSocketServer):
         else:
             host = config.pop("host")
             port = int(config.pop("port"))
+        _host = host
+        if config.pop("listen_elastic_ip", False):
+            # The Actor.address will be announce to client, and is not on our host,
+            # cannot actually listen on it,
+            # so we have to keep SocketServer.host untouched to make sure Actor.address not changed
+            if is_v6_ip(host):
+                _host = "::"
+            else:
+                _host = "0.0.0.0"
+
         handle_channel = config.pop("handle_channel")
         if "start_serving" not in config:
             config["start_serving"] = False
@@ -224,7 +238,7 @@ class SocketServer(_BaseSocketServer):
 
         port = port if port != 0 else None
         aio_server = await asyncio.start_server(
-            handle_connection, host=host, port=port, **config
+            handle_connection, host=_host, port=port, **config
         )
 
         # get port of the socket if not specified
