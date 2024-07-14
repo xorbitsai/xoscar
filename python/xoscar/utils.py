@@ -465,12 +465,12 @@ def is_linux():
 
 
 def is_v4_zero_ip(ip_port_addr: str) -> bool:
-    return ip_port_addr.startswith("0.0.0.0:")
+    return ip_port_addr.split("://")[-1].startswith("0.0.0.0:")
 
 
 def is_v6_zero_ip(ip_port_addr: str) -> bool:
     # tcp6 addr ":::123", ":: means all zero"
-    arr = ip_port_addr.split(":")
+    arr = ip_port_addr.split("://")[-1].split(":")
     if len(arr) <= 2:  # Not tcp6 or udp6
         return False
     for part in arr[0:-1]:
