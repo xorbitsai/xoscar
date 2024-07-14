@@ -132,7 +132,7 @@ class MainActorPool(MainActorPoolBase):
         """Get external address for every process"""
         assert n_process is not None
         if ":" in address:
-            host, port_str = address.split(":", 1)
+            host, port_str = address.rsplit(":", 1)
             port = int(port_str)
             if ports:
                 if len(ports) != n_process:

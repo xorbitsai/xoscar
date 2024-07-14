@@ -207,7 +207,7 @@ class SocketServer(_BaseSocketServer):
         config = config.copy()
         if "address" in config:
             address = config.pop("address")
-            host, port = address.split(":", 1)
+            host, port = address.rsplit(":", 1)
             port = int(port)
         else:
             host = config.pop("host")
@@ -250,7 +250,7 @@ class SocketClient(Client):
     async def connect(
         dest_address: str, local_address: str | None = None, **kwargs
     ) -> "Client":
-        host, port_str = dest_address.split(":", 1)
+        host, port_str = dest_address.rsplit(":", 1)
         port = int(port_str)
         (reader, writer) = await asyncio.open_connection(host=host, port=port, **kwargs)
         channel = SocketChannel(

@@ -401,7 +401,7 @@ class UCXServer(Server):
             prefix = f"{UCXServer.scheme}://"
             if address.startswith(prefix):
                 address = address[len(prefix) :]
-            host, port = address.split(":", 1)
+            host, port = address.rsplit(":", 1)
             port = int(port)
         else:
             host = config.pop("host")
@@ -498,7 +498,7 @@ class UCXClient(Client):
         prefix = f"{UCXClient.scheme}://"
         if dest_address.startswith(prefix):
             dest_address = dest_address[len(prefix) :]
-        host, port_str = dest_address.split(":", 1)
+        host, port_str = dest_address.rsplit(":", 1)
         port = int(port_str)
         kwargs = kwargs.copy()
         ucx_config = kwargs.pop("config", dict()).get("ucx", dict())
