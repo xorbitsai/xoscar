@@ -65,7 +65,7 @@ class IndigenActorContext(BaseActorContext):
 
     def __init__(self, address: str | None = None):
         BaseActorContext.__init__(self, address)
-        self._caller = ActorCaller()
+        self._caller = ActorCallerThreaded()
 
     def __del__(self):
         self._caller.stop_nonblock()

@@ -52,7 +52,7 @@ from .communication import (
 )
 from .communication.errors import ChannelClosed
 from .config import ActorPoolConfig
-from .core import ActorCaller, ResultMessageType
+from .core import ActorCallerThreaded, ResultMessageType
 from .message import (
     DEFAULT_PROTOCOL,
     ActorRefMessage,
@@ -186,7 +186,7 @@ class AbstractActorPool(ABC):
         self._process_messages = dict()
 
         # manage async actor callers
-        self._caller = ActorCaller()
+        self._caller = ActorCallerThreaded()
         self._asyncio_task_timeout_detector_task = (
             register_asyncio_task_timeout_detector()
         )
