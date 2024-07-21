@@ -19,8 +19,9 @@ import asyncio
 import copy
 import logging
 import os
+import threading
 import time
-from typing import Dict, Optional, Tuple, Type, Union
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 from .._utils import Timer
 from ..constants import XOSCAR_IDLE_TIMEOUT
@@ -32,6 +33,88 @@ from .router import Router
 
 ResultMessageType = Union[ResultMessage, ErrorMessage]
 logger = logging.getLogger(__name__)
+
+
+class ActorCallerThreaded:
+    """
+    Just a proxy class to ActorCaller.
+    Each thread as its own ActorCaller in case in multi threaded env.
+    NOTE that it does not cleanup when thread exit
+    """
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.local = threading.local()
+        self.all_callers = []
+
+    def _get_local(self) -> ActorCaller:
+        try:
+            return self.local.caller
+        except AttributeError:
+            caller = ActorCaller()
+            self.local.caller = caller
+            with self.lock:
+                self.all_callers.append(caller)
+            return caller
+
+    async def get_copy_to_client(self, address: str) -> CallerClient:
+        caller = self._get_local()
+        return await caller.get_copy_to_client(address)
+
+    async def call_with_client(
+        self, client: CallerClient, message: _MessageBase, wait: bool = True
+    ) -> ResultMessage | ErrorMessage | asyncio.Future:
+        """
+        Althoght we've already wrapped CallerClient in get_client(),
+        might directly call from api (not recommended), Compatible with old usage.
+        """
+        caller = self._get_local()
+        return await caller.call_with_client(client, message, wait)
+
+    async def call_send_buffers(
+        self,
+        client: CallerClient,
+        local_buffers: List,
+        meta_message: _MessageBase,
+        wait: bool = True,
+    ) -> ResultMessage | ErrorMessage | asyncio.Future:
+        """
+        Althoght we've already wrapped CallerClient in get_client(),
+        might directly call from api (not recommended), Compatible with old usage.
+        """
+        caller = self._get_local()
+        return await caller.call_send_buffers(client, local_buffers, meta_message, wait)
+
+    async def call(
+        self,
+        router: Router,
+        dest_address: str,
+        message: _MessageBase,
+        wait: bool = True,
+    ) -> ResultMessage | ErrorMessage | asyncio.Future:
+        caller = self._get_local()
+        return await caller.call(router, dest_address, message, wait)
+
+    async def stop(self):
+        with self.lock:
+            all_callers = self.all_callers
+        local_caller = self._get_local()
+        for caller in all_callers:
+            if caller == local_caller:
+                await caller.stop()
+            else:
+                future = asyncio.run_coroutine_threadsafe(caller.stop(), caller._loop)
+                await future.result()
+
+    def stop_nonblock(self):
+        with self.lock:
+            all_callers = self.all_callers
+        local_caller = self._get_local()
+        for caller in all_callers:
+            if caller == local_caller:
+                caller.stop_nonblock()
+            else:
+                caller._loop.call_soon_threadsafe(caller.stop_nonblock)
 
 
 class CallerClient:
@@ -197,6 +280,7 @@ class ActorCaller:
         self._default_idle_timeout = int(
             os.environ.get("XOSCAR_IDLE_TIMEOUT", XOSCAR_IDLE_TIMEOUT)
         )
+        self._loop = asyncio.get_running_loop()
 
     async def periodic_check(self):
         try:
