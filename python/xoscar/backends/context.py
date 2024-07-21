@@ -28,8 +28,8 @@ from ..debug import debug_async_timeout, detect_cycle_send
 from ..errors import CannotCancelTask
 from ..utils import dataslots, fix_all_zero_ip
 from .allocate_strategy import AddressSpecified, AllocateStrategy
-from .communication import Client, DummyClient, UCXClient
-from .core import ActorCaller
+from .communication import UCXClient
+from .core import ActorCallerThreaded, CallerClient
 from .message import (
     DEFAULT_PROTOCOL,
     ActorRefMessage,
@@ -59,39 +59,22 @@ class ProfilingContext:
 
 
 class IndigenActorContext(BaseActorContext):
-    __slots__ = ("_caller", "_lock")
+    __slots__ = "_caller"
 
     support_allocate_strategy = True
 
     def __init__(self, address: str | None = None):
         BaseActorContext.__init__(self, address)
         self._caller = ActorCaller()
-        self._lock = asyncio.Lock()
 
     def __del__(self):
-        self._caller.cancel_tasks()
+        self._caller.stop_nonblock()
 
     async def _call(
         self, address: str, message: _MessageBase, wait: bool = True
     ) -> Union[ResultMessage, ErrorMessage, asyncio.Future]:
         return await self._caller.call(
             Router.get_instance_or_empty(), address, message, wait=wait
-        )
-
-    async def _call_with_client(
-        self, client: Client, message: _MessageBase, wait: bool = True
-    ) -> Union[ResultMessage, ErrorMessage, asyncio.Future]:
-        return await self._caller.call_with_client(client, message, wait)
-
-    async def _call_send_buffers(
-        self,
-        client: UCXClient,
-        local_buffers: list,
-        meta_message: _MessageBase,
-        wait: bool = True,
-    ) -> Union[ResultMessage, ErrorMessage, asyncio.Future]:
-        return await self._caller.call_send_buffers(
-            client, local_buffers, meta_message, wait
         )
 
     @staticmethod
@@ -294,29 +277,6 @@ class IndigenActorContext(BaseActorContext):
     def _gen_copy_to_fileobjs_message(content: Any):
         return CopyToFileObjectsMessage(message_id=new_message_id(), content=content)  # type: ignore
 
-    async def _get_copy_to_client(self, router, address) -> Client:
-        client = await self._caller.get_client(router, address)
-        if isinstance(client, DummyClient) or hasattr(client, "send_buffers"):
-            return client
-        client_types = router.get_all_client_types(address)
-        # For inter-process communication, the ``self._caller.get_client`` interface would not look for UCX Client,
-        # we still try to find UCXClient for this case.
-        try:
-            client_type = next(
-                client_type
-                for client_type in client_types
-                if hasattr(client_type, "send_buffers")
-            )
-        except StopIteration:
-            return client
-        else:
-            return await self._caller.get_client_via_type(router, address, client_type)
-
-    async def _get_client(self, address: str) -> Client:
-        router = Router.get_instance()
-        assert router is not None, "`copy_to` can only be used inside pools"
-        return await self._get_copy_to_client(router, address)
-
     async def copy_to_buffers(
         self,
         local_buffers: list,
@@ -324,52 +284,65 @@ class IndigenActorContext(BaseActorContext):
         block_size: Optional[int] = None,
     ):
         address = remote_buffer_refs[0].address
-        client = await self._get_client(address)
-        if isinstance(client, UCXClient):
-            message = [(buf.address, buf.uid) for buf in remote_buffer_refs]
-            await self._call_send_buffers(
-                client,
-                local_buffers,
-                self._gen_switch_to_copy_to_control_message(message),
-            )
-        else:
-            # ``local_buffers`` will be divided into buffers of the specified block size for transmission.
-            # Smaller buffers will be accumulated and sent together,
-            # while larger buffers will be divided and sent.
-            current_buf_size = 0
-            one_block_data = []
-            block_size = block_size or DEFAULT_TRANSFER_BLOCK_SIZE
-            for i, (l_buf, r_buf) in enumerate(zip(local_buffers, remote_buffer_refs)):
-                if current_buf_size + len(l_buf) < block_size:
-                    one_block_data.append(
-                        (r_buf.address, r_buf.uid, 0, len(l_buf), l_buf)
-                    )
-                    current_buf_size += len(l_buf)
-                    continue
-                last_start = 0
-                while current_buf_size + len(l_buf) > block_size:
-                    remain = block_size - current_buf_size
-                    one_block_data.append(
-                        (r_buf.address, r_buf.uid, last_start, remain, l_buf[:remain])
-                    )
-                    await self._call_with_client(
+        client = await self._caller.get_copy_to_client(address)
+        client.add_ref()  # Prevent close due to idle
+        try:
+            assert isinstance(client, CallerClient)
+            if isinstance(client._inner, UCXClient):
+                message = [(buf.address, buf.uid) for buf in remote_buffer_refs]
+                await self._caller.call_send_buffers(
+                    client,
+                    local_buffers,
+                    self._gen_switch_to_copy_to_control_message(message),
+                )
+            else:
+                # ``local_buffers`` will be divided into buffers of the specified block size for transmission.
+                # Smaller buffers will be accumulated and sent together,
+                # while larger buffers will be divided and sent.
+                current_buf_size = 0
+                one_block_data = []
+                block_size = block_size or DEFAULT_TRANSFER_BLOCK_SIZE
+                for i, (l_buf, r_buf) in enumerate(
+                    zip(local_buffers, remote_buffer_refs)
+                ):
+                    if current_buf_size + len(l_buf) < block_size:
+                        one_block_data.append(
+                            (r_buf.address, r_buf.uid, 0, len(l_buf), l_buf)
+                        )
+                        current_buf_size += len(l_buf)
+                        continue
+                    last_start = 0
+                    while current_buf_size + len(l_buf) > block_size:
+                        remain = block_size - current_buf_size
+                        one_block_data.append(
+                            (
+                                r_buf.address,
+                                r_buf.uid,
+                                last_start,
+                                remain,
+                                l_buf[:remain],
+                            )
+                        )
+                        await self._caller.call_with_client(
+                            client, self._gen_copy_to_buffers_message(one_block_data)
+                        )
+                        one_block_data = []
+                        current_buf_size = 0
+                        last_start += remain
+                        l_buf = l_buf[remain:]
+
+                    if len(l_buf) > 0:
+                        one_block_data.append(
+                            (r_buf.address, r_buf.uid, last_start, len(l_buf), l_buf)
+                        )
+                        current_buf_size = len(l_buf)
+
+                if one_block_data:
+                    await self._caller.call_with_client(
                         client, self._gen_copy_to_buffers_message(one_block_data)
                     )
-                    one_block_data = []
-                    current_buf_size = 0
-                    last_start += remain
-                    l_buf = l_buf[remain:]
-
-                if len(l_buf) > 0:
-                    one_block_data.append(
-                        (r_buf.address, r_buf.uid, last_start, len(l_buf), l_buf)
-                    )
-                    current_buf_size = len(l_buf)
-
-            if one_block_data:
-                await self._call_with_client(
-                    client, self._gen_copy_to_buffers_message(one_block_data)
-                )
+        finally:
+            client.de_ref()
 
     async def copy_to_fileobjs(
         self,
@@ -378,27 +351,32 @@ class IndigenActorContext(BaseActorContext):
         block_size: Optional[int] = None,
     ):
         address = remote_fileobj_refs[0].address
-        client = await self._get_client(address)
-        block_size = block_size or DEFAULT_TRANSFER_BLOCK_SIZE
-        one_block_data = []
-        current_file_size = 0
-        for file_obj, remote_ref in zip(local_fileobjs, remote_fileobj_refs):
-            while True:
-                file_data = await file_obj.read(block_size)  # type: ignore
-                if file_data:
-                    one_block_data.append(
-                        (remote_ref.address, remote_ref.uid, file_data)
-                    )
-                    current_file_size += len(file_data)
-                    if current_file_size >= block_size:
-                        message = self._gen_copy_to_fileobjs_message(one_block_data)
-                        await self._call_with_client(client, message)
-                        one_block_data.clear()
-                        current_file_size = 0
-                else:
-                    break
+        client = await self._caller.get_copy_to_client(address)
+        client.add_ref()  # Prevent close due to idle
+        try:
+            assert isinstance(client, CallerClient)
+            block_size = block_size or DEFAULT_TRANSFER_BLOCK_SIZE
+            one_block_data = []
+            current_file_size = 0
+            for file_obj, remote_ref in zip(local_fileobjs, remote_fileobj_refs):
+                while True:
+                    file_data = await file_obj.read(block_size)  # type: ignore
+                    if file_data:
+                        one_block_data.append(
+                            (remote_ref.address, remote_ref.uid, file_data)
+                        )
+                        current_file_size += len(file_data)
+                        if current_file_size >= block_size:
+                            message = self._gen_copy_to_fileobjs_message(one_block_data)
+                            await self._caller.call_with_client(client, message)
+                            one_block_data.clear()
+                            current_file_size = 0
+                    else:
+                        break
 
-        if current_file_size > 0:
-            message = self._gen_copy_to_fileobjs_message(one_block_data)
-            await self._call_with_client(client, message)
-            one_block_data.clear()
+            if current_file_size > 0:
+                message = self._gen_copy_to_fileobjs_message(one_block_data)
+                await self._caller.call_with_client(client, message)
+                one_block_data.clear()
+        finally:
+            client.de_ref()

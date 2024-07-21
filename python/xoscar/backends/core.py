@@ -18,12 +18,15 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
-from typing import Type, Union
+import os
+import time
+from typing import Dict, Optional, Tuple, Type, Union
 
 from .._utils import Timer
+from ..constants import XOSCAR_IDLE_TIMEOUT
 from ..errors import ServerClosed
 from ..profiling import get_profiling_data
-from .communication import Client, UCXClient
+from .communication import Client, DummyClient, UCXClient
 from .message import DeserializeMessageFailed, ErrorMessage, ResultMessage, _MessageBase
 from .router import Router
 
@@ -31,119 +34,285 @@ ResultMessageType = Union[ResultMessage, ErrorMessage]
 logger = logging.getLogger(__name__)
 
 
-class ActorCaller:
-    __slots__ = "_client_to_message_futures", "_clients", "_profiling_data"
+class CallerClient:
+    """
+    A proxy class for under layer client, keep track for its ref_count.
+    """
 
-    _client_to_message_futures: dict[Client, dict[bytes, asyncio.Future]]
-    _clients: dict[Client, asyncio.Task]
+    _inner: Client
+    _client_to_message_futures: dict[bytes, asyncio.Future]
+    _ref_count: int
+    _last_used: float
+    _listen_task: Optional[asyncio.Task]
+    _dest_address: str
+
+    def __init__(self, client: Client, dest_address: str):
+        self._inner = client
+        self._ref_count = 0
+        self._last_used = 0
+        self._dest_address = dest_address
+        self._listen_task = None
+        self._client_to_message_futures = dict()
+
+    def start_receiver(self):
+        self._listen_task = asyncio.create_task(self._listen())
+
+    def __repr__(self) -> str:
+        return self._inner.__repr__()
+
+    def abort(self):
+        if self._listen_task is None:
+            return
+        try:
+            self._listen_task.cancel()
+        except:
+            pass
+        self._listen_task = None
+        # Since listen task is aborted, need someone to cleanup
+        self._cleanup(ServerClosed("Connection abort"))
+
+    async def send(
+        self,
+        message: _MessageBase,
+        wait_response: asyncio.Future,
+        local_buffers: Optional[list] = None,
+    ):
+        self.add_ref()
+        self._client_to_message_futures[message.message_id] = wait_response
+        try:
+            if local_buffers is None:
+                await self._inner.send(message)
+            else:
+                assert isinstance(self._inner, UCXClient)
+                await self._inner.send_buffers(local_buffers, message)
+            self._last_used = time.time()
+        except ConnectionError:
+            try:
+                # listen task will be notify by connection to exit and cleanup
+                await self._inner.close()
+            except ConnectionError:
+                # close failed, ignore it
+                pass
+            raise ServerClosed(f"{self} closed")
+        except:
+            try:
+                # listen task will be notify by connection to exit and cleanup
+                await self._inner.close()
+            except ConnectionError:
+                # close failed, ignore it
+                pass
+            raise
+
+    async def close(self):
+        """
+        Close connection.
+        """
+        self.abort()
+        if not self.closed:
+            await self._inner.close()
+
+    @property
+    def closed(self) -> bool:
+        return self._inner.closed
+
+    def _cleanup(self, e):
+        message_futures = self._client_to_message_futures
+        self._client_to_message_futures = dict()
+        if e is None:
+            e = ServerClosed(f"Remote server {self._inner.dest_address} closed")
+        for future in message_futures.values():
+            future.set_exception(copy.copy(e))
+
+    async def _listen(self):
+        client = self._inner
+        while not client.closed:
+            try:
+                try:
+                    message: _MessageBase = await client.recv()
+                    self._last_used = time.time()
+                except (EOFError, ConnectionError, BrokenPipeError) as e:
+                    logger.debug(f"{client.dest_address} close due to {e}")
+                    # remote server closed, close client and raise ServerClosed
+                    try:
+                        await client.close()
+                    except (ConnectionError, BrokenPipeError):
+                        # close failed, ignore it
+                        pass
+                    raise ServerClosed(
+                        f"Remote server {client.dest_address} closed: {e}"
+                    ) from None
+                future = self._client_to_message_futures.pop(message.message_id)
+                if not future.done():
+                    future.set_result(message)
+            except DeserializeMessageFailed as e:
+                message_id = e.message_id
+                future = self._client_to_message_futures.pop(message_id)
+                future.set_exception(e.__cause__)  # type: ignore
+            except Exception as e:  # noqa: E722  # pylint: disable=bare-except
+                self._cleanup(e)
+                logger.debug(f"{e}", exc_info=True)
+            finally:
+                # Counter part of self.add_ref() in send()
+                self.de_ref()
+                # message may have Ray ObjectRef, delete it early in case next loop doesn't run
+                # as soon as expected.
+                try:
+                    del message
+                except NameError:
+                    pass
+                try:
+                    del future
+                except NameError:
+                    pass
+                await asyncio.sleep(0)
+        self._cleanup(None)
+
+    def add_ref(self):
+        self._ref_count += 1
+
+    def de_ref(self):
+        self._ref_count -= 1
+        self._last_used = time.time()
+
+    def get_ref(self) -> int:
+        return self._ref_count
+
+    def is_idle(self, idle_timeout: int) -> bool:
+        return self.get_ref() == 0 and time.time() > idle_timeout + self._last_used
+
+
+class ActorCaller:
+
+    _clients: Dict[Client, CallerClient]
+    # _addr_to_clients: A cache from dest_address to Caller, (regardless what mapping router did),
+    #   if multiple ClientType only keep one
+    _addr_to_clients: Dict[Tuple[str, Optional[Type[Client]]], CallerClient]
+    _check_task: asyncio.Task
 
     def __init__(self):
-        self._client_to_message_futures = dict()
         self._clients = dict()
+        self._addr_to_clients = dict()
         self._profiling_data = get_profiling_data()
+        self._check_task = None  #  Due to cython env If start task here will not get the shared copy of self.
+        self._default_idle_timeout = int(
+            os.environ.get("XOSCAR_IDLE_TIMEOUT", XOSCAR_IDLE_TIMEOUT)
+        )
 
-    def _listen_client(self, client: Client):
-        if client not in self._clients:
-            self._clients[client] = asyncio.create_task(self._listen(client))
-            self._client_to_message_futures[client] = dict()
-            client_count = len(self._clients)
-            if client_count >= 100:  # pragma: no cover
-                if (client_count - 100) % 10 == 0:  # pragma: no cover
-                    logger.warning(
-                        "Actor caller has created too many clients (%s >= 100), "
-                        "the global router may not be set.",
-                        client_count,
-                    )
+    async def periodic_check(self):
+        try:
+            while True:
+                router = Router.get_instance_or_empty()
+                config = router.get_config()
+                idle_timeout = config.get(
+                    "idle_timeout",
+                    self._default_idle_timeout,
+                )
+                await asyncio.sleep(idle_timeout)
+                try_remove = []
+                to_remove = []
+                for client in self._clients.values():
+                    if client.closed:
+                        to_remove.append(client)
+                    elif client.is_idle(idle_timeout):
+                        try_remove.append(client)
+                for client in to_remove:
+                    self._force_remove_client(client)
+                for client in try_remove:
+                    await self._try_remove_client(client, idle_timeout)
+                logger.debug("periodic_check: %d clients left", len(self._clients))
+
+                addr_to_remove = []
+                for key, client in self._addr_to_clients.items():
+                    if client.closed:
+                        addr_to_remove.append(key)
+                for key in addr_to_remove:
+                    self._addr_to_clients.pop(key, None)
+        except Exception as e:
+            logger.error(e, exc_info=True)
+
+    async def _try_remove_client(self, client: CallerClient, idle_timeout):
+        if client.closed:
+            self._force_remove_client(client)
+            logger.debug(f"Removed closed client {client}")
+        elif client.is_idle(idle_timeout):
+            self._force_remove_client(client)
+            logger.debug(f"Removed idle client {client}")
+            await client.close()
+
+    def _force_remove_client(self, client: CallerClient):
+        """
+        Force removal client because is close
+        """
+        self._clients.pop(client._inner, None)
+        client.abort()
+        # althoght not necessarily dest_address is in _addr_to_clients, it's double ensurrence
+        self._addr_to_clients.pop((client._dest_address, None), None)
+        self._addr_to_clients.pop((client._dest_address, client._inner.__class__), None)
+
+    def _add_client(
+        self, dest_address: str, client_type: Optional[Type[Client]], client: Client
+    ) -> CallerClient:
+        caller_client = CallerClient(client, dest_address)
+        caller_client.start_receiver()
+        self._addr_to_clients[(dest_address, client_type)] = caller_client
+        self._clients[caller_client._inner] = caller_client
+        if self._check_task is None:
+            # Delay the start of background task so that it get a ref of self
+            self._check_task = asyncio.create_task(self.periodic_check())
+        return caller_client
+
+    async def get_copy_to_client(self, address: str) -> CallerClient:
+        router = Router.get_instance()
+        assert router is not None, "`copy_to` can only be used inside pools"
+        client = await self.get_client(router, address)
+        if isinstance(client._inner, DummyClient) or hasattr(
+            client._inner, "send_buffers"
+        ):
+            return client
+        client_types = router.get_all_client_types(address)
+        # For inter-process communication, the ``self._caller.get_client`` interface would not look for UCX Client,
+        # we still try to find UCXClient for this case.
+        try:
+            client_type = next(
+                client_type
+                for client_type in client_types
+                if hasattr(client_type, "send_buffers")
+            )
+        except StopIteration:
+            return client
+        else:
+            return await self.get_client_via_type(router, address, client_type)
 
     async def get_client_via_type(
         self, router: Router, dest_address: str, client_type: Type[Client]
-    ) -> Client:
-        client = await router.get_client_via_type(
-            dest_address, client_type, from_who=self
-        )
-        self._listen_client(client)
+    ) -> CallerClient:
+        client = self._addr_to_clients.get((dest_address, client_type), None)
+        if client is None or client.closed:
+            _client = await router.get_client_via_type(dest_address, client_type)
+            client = self._add_client(dest_address, client_type, _client)
         return client
 
-    async def get_client(self, router: Router, dest_address: str) -> Client:
-        client = await router.get_client(dest_address, from_who=self)
-        self._listen_client(client)
+    async def get_client(self, router: Router, dest_address: str) -> CallerClient:
+        client = self._addr_to_clients.get((dest_address, None), None)
+        if client is None or client.closed:
+            _client = await router.get_client(dest_address)
+            client = self._add_client(dest_address, None, _client)
         return client
-
-    async def _listen(self, client: Client):
-        try:
-            while not client.closed:
-                try:
-                    try:
-                        message: _MessageBase = await client.recv()
-                    except (EOFError, ConnectionError, BrokenPipeError) as e:
-                        # AssertionError is from get_header
-                        # remote server closed, close client and raise ServerClosed
-                        logger.debug(f"{client.dest_address} close due to {e}")
-                        try:
-                            await client.close()
-                        except (ConnectionError, BrokenPipeError):
-                            # close failed, ignore it
-                            pass
-                        raise ServerClosed(
-                            f"Remote server {client.dest_address} closed: {e}"
-                        ) from None
-                    future = self._client_to_message_futures[client].pop(
-                        message.message_id
-                    )
-                    if not future.done():
-                        future.set_result(message)
-                except DeserializeMessageFailed as e:
-                    message_id = e.message_id
-                    future = self._client_to_message_futures[client].pop(message_id)
-                    future.set_exception(e.__cause__)  # type: ignore
-                except Exception as e:  # noqa: E722  # pylint: disable=bare-except
-                    message_futures = self._client_to_message_futures[client]
-                    self._client_to_message_futures[client] = dict()
-                    for future in message_futures.values():
-                        future.set_exception(copy.copy(e))
-                finally:
-                    # message may have Ray ObjectRef, delete it early in case next loop doesn't run
-                    # as soon as expected.
-                    try:
-                        del message
-                    except NameError:
-                        pass
-                    try:
-                        del future
-                    except NameError:
-                        pass
-                    await asyncio.sleep(0)
-
-            message_futures = self._client_to_message_futures[client]
-            self._client_to_message_futures[client] = dict()
-            error = ServerClosed(f"Remote server {client.dest_address} closed")
-            for future in message_futures.values():
-                future.set_exception(copy.copy(error))
-        finally:
-            try:
-                await client.close()
-            except:  # noqa: E722  # nosec  # pylint: disable=bare-except
-                # ignore all error if fail to close at last
-                pass
 
     async def call_with_client(
-        self, client: Client, message: _MessageBase, wait: bool = True
+        self, client: CallerClient, message: _MessageBase, wait: bool = True
     ) -> ResultMessage | ErrorMessage | asyncio.Future:
+        """
+        Althoght we've already wrapped CallerClient in get_client(),
+        might directly call from api (not recommended), Compatible with old usage.
+        """
         loop = asyncio.get_running_loop()
         wait_response = loop.create_future()
-        self._client_to_message_futures[client][message.message_id] = wait_response
-
         with Timer() as timer:
-            try:
-                await client.send(message)
-            except ConnectionError:
-                try:
-                    await client.close()
-                except ConnectionError:
-                    # close failed, ignore it
-                    pass
-                raise ServerClosed(f"Remote server {client.dest_address} closed")
-
+            await client.send(message, wait_response)
+            # NOTE: When send raise exception, we should not _force_remove_client,
+            # let _listen_task exit normally on client close,
+            # and set all futures in client to exception
             if not wait:
                 r = wait_response
             else:
@@ -154,26 +323,23 @@ class ActorCaller:
 
     async def call_send_buffers(
         self,
-        client: UCXClient,
+        client: CallerClient,
         local_buffers: list,
         meta_message: _MessageBase,
         wait: bool = True,
     ) -> ResultMessage | ErrorMessage | asyncio.Future:
+        """
+        Althoght we've already wrapped CallerClient in get_client(),
+        might directly call from api (not recommended), Compatible with old usage.
+        """
+
         loop = asyncio.get_running_loop()
         wait_response = loop.create_future()
-        self._client_to_message_futures[client][meta_message.message_id] = wait_response
-
         with Timer() as timer:
-            try:
-                await client.send_buffers(local_buffers, meta_message)
-            except ConnectionError:  # pragma: no cover
-                try:
-                    await client.close()
-                except ConnectionError:
-                    # close failed, ignore it
-                    pass
-                raise ServerClosed(f"Remote server {client.dest_address} closed")
-
+            await client.send(meta_message, wait_response, local_buffers=local_buffers)
+            # NOTE: When send raise exception, we should not _force_remove_client,
+            # let _listen_task exit normally on client close,
+            # and set all futures in client to exception
             if not wait:  # pragma: no cover
                 r = wait_response
             else:
@@ -193,12 +359,23 @@ class ActorCaller:
         return await self.call_with_client(client, message, wait)
 
     async def stop(self):
+        """Gracefully stop all client connections and background task"""
         try:
             await asyncio.gather(*[client.close() for client in self._clients])
         except (ConnectionError, ServerClosed):
             pass
-        self.cancel_tasks()
+        self.stop_nonblock()
 
-    def cancel_tasks(self):
-        # cancel listening for all clients
-        _ = [task.cancel() for task in self._clients.values()]
+    def stop_nonblock(self):
+        """Clear all client without async closing, abort background task
+        Use in non-async context"""
+        if self._check_task is not None:
+            try:
+                self._check_task.cancel()
+            except:
+                pass
+            self._check_task = None
+        for client in self._clients.values():
+            client.abort()
+        self._clients = {}
+        self._addr_to_clients = {}
