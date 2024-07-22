@@ -20,6 +20,8 @@ import sys
 import time
 import traceback
 from collections import deque
+from typing import Any, Dict
+from unittest import mock
 
 import pandas as pd
 import pytest
@@ -27,6 +29,7 @@ import pytest
 import xoscar as mo
 
 from ....backends.allocate_strategy import RandomSubPool
+from ....backends.communication.dummy import DummyChannel
 from ....core import ActorRef, LocalActorRef
 from ....debug import DebugOptions, get_debug_options, set_debug_options
 from ...router import Router
@@ -409,41 +412,59 @@ async def test_indigen_batch_method(actor_pool):
         await ref1.add_ret.batch(ref1.add_ret.delay(1), ref1.add.delay(2))
 
 
+class FakeChannel(DummyChannel):
+
+    mock_recv: Dict[str, Any] = {}
+
+    def __init__(self, origin_channel):
+        self.origin_channel = origin_channel
+
+    @classmethod
+    def set_exception(cls, e):
+        cls.mock_recv["exception"] = e
+
+    def __getattr__(self, item):
+        return getattr(self.origin_channel, item)
+
+    async def recv(self):
+        exception = self.mock_recv.get("exception")
+        if exception is not None:
+            raise exception
+        else:
+            return await self.origin_channel.recv()
+
+
+origin_get_client = Router.get_client
+
+
+async def fake_get_client(external_address: str, **kw):
+    # XXX patched method cannot get self?
+    self = Router.get_instance()
+    assert self is not None
+    client = await origin_get_client(self, external_address, **kw)
+    client.channel = FakeChannel(client.channel)
+    return client
+
+
 @pytest.mark.asyncio
-async def test_gather_exception(actor_pool):
-    try:
-        Router.get_instance_or_empty()._cache.clear()
-        ref1 = await mo.create_actor(DummyActor, 1, address=actor_pool.external_address)
-        router = Router.get_instance_or_empty()
-        client = next(iter(router._cache.values()))
+@mock.patch.object(Router, "get_client", side_effect=fake_get_client)
+async def test_gather_exception(fake_get_client, actor_pool):
+    dest_address = actor_pool.external_address
+    ref1 = await mo.create_actor(DummyActor, 1, address=dest_address)
 
-        future = asyncio.Future()
-        client_channel = client.channel
+    class MyException(Exception):
+        pass
 
-        class FakeChannel(type(client_channel)):
-            def __init__(self):
-                pass
+    await ref1.add(1)
+    tasks = [ref1.add(i) for i in range(200)]
 
-            def __getattr__(self, item):
-                return getattr(client_channel, item)
-
-            async def recv(self):
-                return await future
-
-        client.channel = FakeChannel()
-
-        class MyException(Exception):
-            pass
-
-        await ref1.add(1)
-        tasks = [ref1.add(i) for i in range(200)]
-        future.set_exception(MyException("Test recv exception!!"))
-        with pytest.raises(MyException) as ex:
-            await asyncio.gather(*tasks)
-        s = traceback.format_tb(ex.tb)
-        assert 10 > "\n".join(s).count("send") > 0
-    finally:
-        Router.get_instance_or_empty()._cache.clear()
+    FakeChannel.set_exception(MyException("Test recv exception!!"))
+    with pytest.raises(MyException) as ex:
+        await asyncio.gather(*tasks)
+    s = traceback.format_tb(ex.tb)
+    assert 10 > "\n".join(s).count("send") > 0
+    # clear
+    FakeChannel.set_exception(None)
 
 
 @pytest.mark.asyncio
