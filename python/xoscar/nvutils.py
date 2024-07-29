@@ -347,6 +347,10 @@ def get_device_count() -> int | None:
     return _gpu_count
 
 
+def cuda_count() -> int:
+    return get_device_count() or 0
+
+
 def _get_all_device_count() -> int | None:
     _init_nvml()
     if _nvml_lib is None:
