@@ -30,7 +30,7 @@ import pytest
 from .... import Actor, create_actor, create_actor_ref, get_pool_config, kill_actor
 from ....context import get_context
 from ....errors import ActorNotExist, NoIdleSlot, SendMessageFailed, ServerClosed
-from ....tests.core import require_ucx
+from ....tests.core import require_ucx, require_unix
 from ....utils import get_next_port
 from ...allocate_strategy import (
     AddressSpecified,
@@ -543,6 +543,7 @@ async def test_create_actor_pool():
 
 
 @pytest.mark.asyncio
+@require_unix
 async def test_create_actor_pool_elastic_ip():
     start_method = (
         os.environ.get("POOL_START_METHOD", "forkserver")
@@ -672,6 +673,7 @@ async def test_create_actor_pool_ipv6():
 
 
 @pytest.mark.asyncio
+@require_unix
 async def test_create_actor_pool_ipv6_elastic_ip():
     start_method = (
         os.environ.get("POOL_START_METHOD", "forkserver")
@@ -1272,6 +1274,7 @@ async def test_append_sub_pool_multiprocess():
 
 
 @pytest.mark.asyncio
+@require_unix
 async def test_append_sub_pool_multi_process_elastic_ip():
     start_method = (
         os.environ.get("POOL_START_METHOD", "forkserver")
@@ -1325,6 +1328,7 @@ async def test_append_sub_pool_multi_process_elastic_ip():
 
 
 @pytest.mark.asyncio
+@require_unix
 async def test_append_sub_pool_single_process_elastic_ip():
     start_method = (
         os.environ.get("POOL_START_METHOD", "forkserver")
