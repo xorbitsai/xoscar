@@ -164,20 +164,59 @@ def test_timer():
 
 def test_fix_all_zero_ip():
     assert utils.is_v4_zero_ip("0.0.0.0:1234") == True
+    assert utils.is_v4_zero_ip("ucx://0.0.0.0:1234") == True
     assert utils.is_v4_zero_ip("127.0.0.1:1234") == False
+    assert utils.is_v4_zero_ip("ucx://127.0.0.1:1234") == False
     assert utils.is_v6_zero_ip(":::1234") == True
+    assert utils.is_v6_zero_ip("ucx://:::1234") == True
     assert utils.is_v6_zero_ip("::FFFF:1234") == False
+    assert utils.is_v6_zero_ip("ucx://::FFFF:1234") == False
     return utils.is_v6_zero_ip("0000:0000:0000:0000:0000:0000:0000:0000:1234") == True
+    return (
+        utils.is_v6_zero_ip("ucx://0000:0000:0000:0000:0000:0000:0000:0000:1234")
+        == True
+    )
     return utils.is_v6_zero_ip("0:0:0:0:0:0:0:0:1234") == True
+    return utils.is_v6_zero_ip("ucx://0:0:0:0:0:0:0:0:1234") == True
     return utils.is_v6_zero_ip("0:0:0:0:0:1234") == True
+    return utils.is_v6_zero_ip("ucx://0:0:0:0:0:1234") == True
     assert utils.is_v6_zero_ip("2001:db8:3333:4444:5555:6666:7777:8888:1234") == False
+    assert (
+        utils.is_v6_zero_ip("ucx://2001:db8:3333:4444:5555:6666:7777:8888:1234")
+        == False
+    )
     assert utils.is_v6_zero_ip("127.0.0.1:1234") == False
+    assert utils.is_v6_zero_ip("ucx://127.0.0.1:1234") == False
+    # untouched
     assert utils.fix_all_zero_ip("127.0.0.1:1234", "127.0.0.1:5678") == "127.0.0.1:1234"
+    # untouched
+    assert (
+        utils.fix_all_zero_ip("ucx://127.0.0.1:1234", "ucx://127.0.0.1:5678")
+        == "ucx://127.0.0.1:1234"
+    )
+    # untouched
     assert utils.fix_all_zero_ip("0.0.0.0:1234", "0.0.0.0:5678") == "0.0.0.0:1234"
+    # untouched
+    assert (
+        utils.fix_all_zero_ip("ucx://0.0.0.0:1234", "ucx://0.0.0.0:5678")
+        == "ucx://0.0.0.0:1234"
+    )
+    # fixd with port change
     assert (
         utils.fix_all_zero_ip("0.0.0.0:1234", "192.168.0.1:5678") == "192.168.0.1:1234"
     )
+    # fixd with port change
+    assert (
+        utils.fix_all_zero_ip("ucx://0.0.0.0:1234", "ucx://192.168.0.1:5678")
+        == "ucx://192.168.0.1:1234"
+    )
+    # untouched
     assert utils.fix_all_zero_ip("127.0.0.1:1234", "0.0.0.0:5678") == "127.0.0.1:1234"
+    assert (
+        utils.fix_all_zero_ip("ucx://127.0.0.1:1234", "ucx://0.0.0.0:5678")
+        == "ucx://127.0.0.1:1234"
+    )
+    # fixed ipv6
     assert (
         utils.fix_all_zero_ip(":::1234", "2001:0db8:0001:0000:0000:0ab9:C0A8:0102:5678")
         == "2001:0db8:0001:0000:0000:0ab9:C0A8:0102:1234"

@@ -148,7 +148,7 @@ jobs:
       working-directory: ./python
 
     - name: Report coverage data
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         working-directory: ./python
         flags: unittests

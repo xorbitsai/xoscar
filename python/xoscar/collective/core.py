@@ -95,7 +95,7 @@ class RankActor(Actor):
         return self._backend
 
     def _get_ip(self) -> str:
-        return self.address.split(":")[0]
+        return self.address.rsplit(":", 1)[0]
 
     def _process_group_name(self, ranks: List[int]) -> str:
         return hashlib.sha1(
