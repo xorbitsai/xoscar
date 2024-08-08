@@ -416,22 +416,21 @@ class MainActorPool(MainActorPoolBase):
     async def kill_sub_pool(
         self, process: multiprocessing.Process, force: bool = False
     ):
-        if (
-            "COV_CORE_SOURCE" in os.environ and not force and not _is_windows
-        ):  # pragma: no cover
-            # must shutdown gracefully, or coverage info lost
-            try:
-                os.kill(process.pid, signal.SIGINT)  # type: ignore
-            except OSError:  # pragma: no cover
-                pass
-            process.terminate()
+        if not force:  # pragma: no cover
+            # must shutdown gracefully, or subprocess created by model will not exit
+            if not _is_windows:
+                try:
+                    os.kill(process.pid, signal.SIGINT)  # type: ignore
+                except OSError:  # pragma: no cover
+                    pass
+            process.terminate()  # SIGTERM
             wait_pool = futures.ThreadPoolExecutor(1)
             try:
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(wait_pool, process.join, 3)
             finally:
                 wait_pool.shutdown(False)
-        process.kill()
+        process.kill()  # SIGKILL
         await asyncio.to_thread(process.join, 5)
 
     async def is_sub_pool_alive(self, process: multiprocessing.Process):
