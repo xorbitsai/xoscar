@@ -201,6 +201,10 @@ class SocketServer(_BaseSocketServer):
     def channel_type(self) -> int:
         return ChannelType.remote
 
+    @classmethod
+    def parse_config(cls, config: dict) -> dict:
+        return config
+
     @staticmethod
     @implements(Server.create)
     async def create(config: Dict) -> "Server":
