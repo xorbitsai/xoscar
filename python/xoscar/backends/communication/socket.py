@@ -209,6 +209,8 @@ class SocketServer(_BaseSocketServer):
     @implements(Server.create)
     async def create(config: Dict) -> "Server":
         config = config.copy()
+        if "ucx" in config:
+            config.pop("ucx")
         if "address" in config:
             address = config.pop("address")
             host, port = address.rsplit(":", 1)
