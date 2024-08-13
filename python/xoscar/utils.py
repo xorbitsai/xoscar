@@ -238,6 +238,8 @@ def lazy_import(
     rename: str | None = None,
     placeholder: bool = False,
 ):
+    from .nvutils import cuda_count
+
     rename = rename or name
     prefix_name = name.split(".", 1)[0]
     globals = globals or inspect.currentframe().f_back.f_globals  # type: ignore
@@ -267,6 +269,12 @@ def lazy_import(
             return func
 
     if pkgutil.find_loader(prefix_name) is not None:
+        # There are cuda-related files in python env (commonly happen in a shared env),
+        # but that is a cpu only machine without GPU cards, just return None
+        if (
+            "cupy" in name or "cudf" in name or "cuda" in name or "rmm" in name
+        ) and cuda_count() == 0:  # pragma: no cover
+            return None
         return LazyModule()
     elif placeholder:
         return ModulePlaceholder(prefix_name)
