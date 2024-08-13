@@ -4,8 +4,8 @@ on:
   push:
     branches:
       - '*'
-  # pull_request:
-  #   types: ['opened', 'reopened', 'synchronize']
+  pull_request:
+    types: ['opened', 'reopened', 'synchronize']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -65,7 +65,7 @@ jobs:
           find . -name "CMakeLists.txt" -not -path "*third_party/*" | xargs cmake-format -c .cmake-format.yaml --check
 
   build_test_job:
-    # if: github.repository == 'xorbitsai/xoscar'
+    if: github.repository == 'xorbitsai/xoscar'
     runs-on: ${{ matrix.os }}
     needs: lint
     env:
