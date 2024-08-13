@@ -203,14 +203,16 @@ class SocketServer(_BaseSocketServer):
 
     @classmethod
     def parse_config(cls, config: dict) -> dict:
-        return config
+        # we only need the following config
+        keys_of_interest = ['listen_elastic_ip', 'address', 'host', 'port']
+        parsed_config = {key: config[key] for key in keys_of_interest if key in config}
+    
+        return parsed_config
 
     @staticmethod
     @implements(Server.create)
     async def create(config: Dict) -> "Server":
         config = config.copy()
-        if "ucx" in config:
-            config.pop("ucx")
         if "address" in config:
             address = config.pop("address")
             host, port = address.rsplit(":", 1)
