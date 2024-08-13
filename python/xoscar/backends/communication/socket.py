@@ -203,7 +203,13 @@ class SocketServer(_BaseSocketServer):
 
     @classmethod
     def parse_config(cls, config: dict) -> dict:
-        return config
+        if config is None or not config:
+            return dict()
+        # we only need the following config
+        keys = ["listen_elastic_ip"]
+        parsed_config = {key: config[key] for key in keys if key in config}
+
+        return parsed_config
 
     @staticmethod
     @implements(Server.create)
