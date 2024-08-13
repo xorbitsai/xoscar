@@ -203,9 +203,11 @@ class SocketServer(_BaseSocketServer):
 
     @classmethod
     def parse_config(cls, config: dict) -> dict:
+        if config is None or not config:
+            return dict()
         # we only need the following config
-        keys_of_interest = ["listen_elastic_ip", "address", "host", "port"]
-        parsed_config = {key: config[key] for key in keys_of_interest if key in config}
+        keys = ["listen_elastic_ip"]
+        parsed_config = {key: config[key] for key in keys if key in config}
 
         return parsed_config
 
