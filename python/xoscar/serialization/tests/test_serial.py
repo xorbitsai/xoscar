@@ -184,7 +184,7 @@ def test_arrow():
 @pytest.mark.skipif(pyfury is None, reason="need pyfury to run the cases")
 def test_arrow_fury():
     os.environ["USE_FURY"] = "1"
-    from ..pyfury import register_classes
+    from ..core import FurySerializer
 
     try:
         test_df = pd.DataFrame(
@@ -194,7 +194,8 @@ def test_arrow_fury():
                 "c": np.random.randint(0, 100, size=(1000,)),
             }
         )
-        register_classes(pa.RecordBatch, pa.Table)
+        FurySerializer.register(pa.RecordBatch)
+        FurySerializer.register(pa.Table)
         test_vals = [
             pa.RecordBatch.from_pandas(test_df),
             pa.Table.from_pandas(test_df),
