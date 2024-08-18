@@ -480,6 +480,10 @@ def is_v6_zero_ip(ip_port_addr: str) -> bool:
     return True
 
 
+def is_zero_ip(ip_port_addr: str) -> bool:
+    return is_v4_zero_ip(ip_port_addr) or is_v6_zero_ip(ip_port_addr)
+
+
 def is_v6_ip(ip_port_addr: str) -> bool:
     arr = ip_port_addr.split("://", 1)[-1].split(":")
     return len(arr) > 1

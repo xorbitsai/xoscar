@@ -41,7 +41,7 @@ from ..errors import (
     ServerClosed,
 )
 from ..metrics import init_metrics
-from ..utils import implements, register_asyncio_task_timeout_detector
+from ..utils import implements, is_zero_ip, register_asyncio_task_timeout_detector
 from .allocate_strategy import AddressSpecified, allocated_type
 from .communication import (
     Channel,
@@ -164,7 +164,10 @@ class AbstractActorPool(ABC):
     ):
         # register local pool for local actor lookup.
         # The pool is weakrefed, so we don't need to unregister it.
-        register_local_pool(external_address, self)
+        if not is_zero_ip(external_address):
+            # Only register_local_pool when we listen on non-zero ip (because all-zero ip is wildcard address),
+            # avoid mistaken with another remote service listen on non-zero ip with the same port.
+            register_local_pool(external_address, self)
         self.process_index = process_index
         self.label = label
         self.external_address = external_address
