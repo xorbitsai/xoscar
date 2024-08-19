@@ -70,6 +70,8 @@ jobs:
     needs: lint
     env:
       CONDA_ENV: xoscar-test
+      SELF_HOST_PYTHON: /root/miniconda3/envs/xoscar-test/bin/python
+      SELF_HOST_CONDA: /root/miniconda3/condabin/conda
     defaults:
       run:
         shell: bash -l {0}
@@ -131,6 +133,9 @@ jobs:
     - name: Install on GPU
       if: ${{ matrix.module == 'gpu' }}
       run: |
+        ${{ env.SELF_HOST_PYTHON }} -m pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
+        ${{ env.SELF_HOST_PYTHON }} -m pip install ucx-py-cu12 cloudpickle psutil tblib uvloop packaging
+        ${{ env.SELF_HOST_PYTHON }} pip install -e ".[dev,extra]"
         python setup.py build_ext -i
       working-directory: ./python
 
