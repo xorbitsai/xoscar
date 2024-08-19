@@ -148,7 +148,7 @@ jobs:
             -W ignore::PendingDeprecationWarning \
             --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar --capture=no
         else
-          pytest -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar --capture=no
+          ${{ env.SELF_HOST_PYTHON }} -m pytest -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar --capture=no
         fi
       working-directory: ./python
 
