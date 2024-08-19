@@ -141,18 +141,22 @@ jobs:
       working-directory: ./python
 
     - name: Test with pytest
-      env:
-        MODULE: ${{ matrix.module }}
+      if: ${{ matrix.module != 'gpu' }}
       run: |
-        if [[ "$MODULE" == "xoscar" ]]; then
-          pytest --timeout=1500 \
-            -W ignore::PendingDeprecationWarning \
-            --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar --capture=no
-        else
-          ${{ env.SELF_HOST_PYTHON }} -m pytest -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar --capture=no
-        fi
+        pytest --timeout=1500 \
+          -W ignore::PendingDeprecationWarning \
+          --cov-config=setup.cfg --cov-report=xml \
+          --cov=xoscar xoscar --capture=no
       working-directory: ./python
 
+    - name: Test with pytest GPU
+      if: ${{ matrix.module == 'gpu' }}
+      run: |
+        ${{ env.SELF_HOST_PYTHON }} -m pytest -m cuda \
+          --cov-config=setup.cfg --cov-report=xml \
+          --cov=xoscar --capture=no
+      working-directory: ./python
+    
     - name: Report coverage data
       uses: codecov/codecov-action@v4
       with:
