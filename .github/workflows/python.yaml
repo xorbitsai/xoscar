@@ -136,9 +136,8 @@ jobs:
         source activate xoscar-test
         pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
         pip install ucx-py-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky
-        # pip uninstall xoscar
-        # python setup.py clean --all
-        # pip install -e ./
+        python setup.py clean --all
+        pip install -e ./
       working-directory: ./python
 
     - name: Test with pytest
