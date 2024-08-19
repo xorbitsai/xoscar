@@ -134,9 +134,9 @@ jobs:
       if: ${{ matrix.module == 'gpu' }}
       run: |
         ${{ env.SELF_HOST_PYTHON }} -m pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
-        ${{ env.SELF_HOST_PYTHON }} -m pip install ucx-py-cu12 cloudpickle psutil tblib uvloop packaging
-        ${{ env.SELF_HOST_PYTHON }} pip install -e ".[dev,extra]"
-        python setup.py build_ext -i
+        ${{ env.SELF_HOST_PYTHON }} -m pip install ucx-py-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky
+        ${{ env.SELF_HOST_PYTHON }} -m pip install -e ".[dev,extra]"
+        ${{ env.SELF_HOST_PYTHON }} setup.py build_ext -i
       working-directory: ./python
 
     - name: Test with pytest
