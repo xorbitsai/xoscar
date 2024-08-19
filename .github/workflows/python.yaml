@@ -133,11 +133,12 @@ jobs:
     - name: Install on GPU
       if: ${{ matrix.module == 'gpu' }}
       run: |
-        ${{ env.SELF_HOST_PYTHON }} -m pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
-        ${{ env.SELF_HOST_PYTHON }} -m pip install ucx-py-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky
-        ${{ env.SELF_HOST_PYTHON }} -m pip uninstall xoscar
-        ${{ env.SELF_HOST_PYTHON }} setup.py clean --all
-        ${{ env.SELF_HOST_PYTHON }} -m pip install -e ./
+        source activate xoscar-test
+        pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
+        pip install ucx-py-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky
+        # pip uninstall xoscar
+        # python setup.py clean --all
+        # pip install -e ./
       working-directory: ./python
 
     - name: Test with pytest
@@ -152,7 +153,8 @@ jobs:
     - name: Test with pytest GPU
       if: ${{ matrix.module == 'gpu' }}
       run: |
-        ${{ env.SELF_HOST_PYTHON }} -m pytest -m cuda \
+        source activate xoscar-test
+        pytest -m cuda \
           --cov-config=setup.cfg --cov-report=xml \
           --cov=xoscar --capture=no
       working-directory: ./python
