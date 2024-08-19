@@ -135,9 +135,9 @@ jobs:
       run: |
         ${{ env.SELF_HOST_PYTHON }} -m pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
         ${{ env.SELF_HOST_PYTHON }} -m pip install ucx-py-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky
+        ${{ env.SELF_HOST_PYTHON }} -m pip uninstall xoscar
         ${{ env.SELF_HOST_PYTHON }} setup.py clean --all
-        ${{ env.SELF_HOST_PYTHON }} -m pip install -e ".[dev,extra]"
-        ${{ env.SELF_HOST_PYTHON }} setup.py build_ext -i
+        ${{ env.SELF_HOST_PYTHON }} -m pip install -e ./
       working-directory: ./python
 
     - name: Test with pytest
