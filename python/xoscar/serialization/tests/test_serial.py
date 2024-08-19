@@ -231,8 +231,9 @@ def test_cudf():
     test_df = cudf.DataFrame(raw_df)
     cudf.testing.assert_frame_equal(test_df, deserialize(*serialize(test_df)))
 
-    raw_df.columns = pd.MultiIndex.from_tuples([("a", "a"), ("a", "b"), ("b", "c")])
-    test_df = cudf.DataFrame(raw_df)
+    multi_index = pd.MultiIndex.from_tuples([("a", "a"), ("a", "b"), ("b", "c")])
+    raw_df.columns = multi_index
+    test_df = cudf.DataFrame(raw_df, columns=multi_index)
     cudf.testing.assert_frame_equal(test_df, deserialize(*serialize(test_df)))
 
 

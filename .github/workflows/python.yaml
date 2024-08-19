@@ -70,6 +70,8 @@ jobs:
     needs: lint
     env:
       CONDA_ENV: xoscar-test
+      SELF_HOST_PYTHON: /root/miniconda3/envs/xoscar-test/bin/python
+      SELF_HOST_CONDA: /root/miniconda3/condabin/conda
     defaults:
       run:
         shell: bash -l {0}
@@ -85,7 +87,7 @@ jobs:
           - { os: windows-latest, python-version: 3.9}
           - { os: windows-latest, python-version: 3.10}
         include:
-          - { os: self-hosted, module: gpu, python-version: 3.9}
+          - { os: self-hosted, module: gpu, python-version: 3.11}
 
     steps:
     - name: Check out code
@@ -131,7 +133,12 @@ jobs:
     - name: Install on GPU
       if: ${{ matrix.module == 'gpu' }}
       run: |
-        python setup.py build_ext -i
+        source activate ${{ env.CONDA_ENV }}
+        conda install -y conda-forge::nccl=2.22.3
+        pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
+        pip install ucx-py-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky
+        python setup.py clean --all
+        pip install -e ./
       working-directory: ./python
 
     - name: Test with pytest
@@ -143,6 +150,7 @@ jobs:
             -W ignore::PendingDeprecationWarning \
             --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar --capture=no
         else
+          source activate ${{ env.CONDA_ENV }}
           pytest -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar --capture=no
         fi
       working-directory: ./python
