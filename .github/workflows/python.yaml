@@ -146,7 +146,6 @@ jobs:
       if: ${{ matrix.module == 'doc-build' }}
       run: |
         make html
-        make html_zh_cn
       working-directory: ./doc
 
     - name: Test with pytest
