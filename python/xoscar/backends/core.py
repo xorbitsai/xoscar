@@ -43,9 +43,7 @@ class ActorCallerThreaded:
     """
 
     def __init__(self):
-        self.lock = threading.Lock()
         self.local = threading.local()
-        self.all_callers = []
 
     def _get_local(self) -> ActorCaller:
         try:
@@ -53,8 +51,6 @@ class ActorCallerThreaded:
         except AttributeError:
             caller = ActorCaller()
             self.local.caller = caller
-            with self.lock:
-                self.all_callers.append(caller)
             return caller
 
     async def get_copy_to_client(self, address: str) -> CallerClient:
@@ -96,25 +92,12 @@ class ActorCallerThreaded:
         return await caller.call(router, dest_address, message, wait)
 
     async def stop(self):
-        with self.lock:
-            all_callers = self.all_callers
         local_caller = self._get_local()
-        for caller in all_callers:
-            if caller == local_caller:
-                await caller.stop()
-            else:
-                future = asyncio.run_coroutine_threadsafe(caller.stop(), caller._loop)
-                await future.result()
+        await local_caller.stop()
 
     def stop_nonblock(self):
-        with self.lock:
-            all_callers = self.all_callers
         local_caller = self._get_local()
-        for caller in all_callers:
-            if caller == local_caller:
-                caller.stop_nonblock()
-            else:
-                caller._loop.call_soon_threadsafe(caller.stop_nonblock)
+        local_caller.stop_nonblock()
 
 
 class CallerClient:
