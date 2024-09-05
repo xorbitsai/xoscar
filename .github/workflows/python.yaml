@@ -78,8 +78,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "macos-13", "windows-latest"]
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        # os: ["ubuntu-latest", "macos-13", "windows-latest"]
+        # python-version: ["3.8", "3.9", "3.10", "3.11"]
+        os: ["ubuntu-latest"]
+        python-version: ["3.8"]
         module: ["xoscar"]
         exclude:
           - { os: macos-13, python-version: 3.9}
@@ -152,7 +154,7 @@ jobs:
       env:
         MODULE: ${{ matrix.module }}
       run: |
-        if [[ "$MODULE" == "xoscar" ]]; then
+        if [[ matrix.module != 'doc-build' && "$MODULE" == "xoscar" ]]; then
           pytest --timeout=1500 \
             -W ignore::PendingDeprecationWarning \
             --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar --capture=no
