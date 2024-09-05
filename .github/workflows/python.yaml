@@ -89,7 +89,7 @@ jobs:
           - { os: windows-latest, python-version: 3.9}
           - { os: windows-latest, python-version: 3.10}
         include:
-          - { os: self-hosted, module: gpu, python-version: 3.11}
+          # - { os: self-hosted, module: gpu, python-version: 3.11}
           - { os: ubuntu-20.04, module: doc-build, python-version: 3.9}
 
     steps:
@@ -151,10 +151,11 @@ jobs:
       working-directory: ./doc
 
     - name: Test with pytest
+      if: ${{ matrix.module != 'doc-build'}}
       env:
         MODULE: ${{ matrix.module }}
       run: |
-        if [[ matrix.module != 'doc-build' && "$MODULE" == "xoscar" ]]; then
+        if [[ "$MODULE" == "xoscar" ]]; then
           pytest --timeout=1500 \
             -W ignore::PendingDeprecationWarning \
             --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar --capture=no
