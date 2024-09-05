@@ -88,6 +88,7 @@ jobs:
           - { os: windows-latest, python-version: 3.10}
         include:
           - { os: self-hosted, module: gpu, python-version: 3.11}
+          - { os: ubuntu-20.04, module: doc-build, python-version: 3.9}
 
     steps:
     - name: Check out code
@@ -141,7 +142,14 @@ jobs:
         pip install -e ./
       working-directory: ./python
 
+    - name: Build doc
+      if: ${{ matrix.module == 'doc-build' }}
+      run: |
+        make html
+      working-directory: ./doc
+
     - name: Test with pytest
+      if: ${{ matrix.module != 'doc-build'}}
       env:
         MODULE: ${{ matrix.module }}
       run: |
