@@ -106,9 +106,9 @@ jobs:
         python-version: ${{ matrix.python-version }}
         activate-environment: ${{ env.CONDA_ENV }}
 
-    # Fix "version `GLIBCXX_3.4.30' not found (required by xoscar_store.cpython-311-x86_64-linux-gnu.so)" issue in Python 3.11
-    - name: Install libstdcxx-ng for Python 3.11
-      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version == '3.11') }}
+    # Fix "version `GLIBCXX_3.4.30' not found (required by xoscar_store.cpython-311-x86_64-linux-gnu.so)" issue
+    - name: Install libstdcxx-ng
+      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') }}
       run: |
         conda install -c conda-forge libstdcxx-ng
 
@@ -122,9 +122,11 @@ jobs:
       working-directory: ./python
 
     - name: Install ucx dependencies
-      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version != '3.11') }}
+      if: ${{ (matrix.os == 'ubuntu-latest') && (matrix.python-version >= '3.9')}}
       run: |
-        conda install -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
+        # ucx-py move to ucxx and ucxx-cu12 can be run on CPU
+        # conda install -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
+        pip install ucxx-cu12
 
     - name: Install fury
       if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version == '3.9') }}
@@ -137,7 +139,7 @@ jobs:
         source activate ${{ env.CONDA_ENV }}
         conda install -y conda-forge::nccl=2.22.3
         pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
-        pip install ucx-py-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky
+        pip install ucxx-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky
         python setup.py clean --all
         pip install -e ./
       working-directory: ./python

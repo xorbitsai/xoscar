@@ -21,7 +21,7 @@ requires = [
     "pandas==1.4.0; python_version>='3.10' and python_version<'3.11' and platform_machine=='arm64'",
     "pandas==1.5.1; python_version>='3.11' and python_version<'3.12'",
     "pandas>=2.1.1; python_version>'3.11'",
-    "numpy<2.0.0",
+    "numpy",
     "cython>=0.29.33",
     "requests>=2.4.0",
     "cloudpickle>=2.2.1; python_version>='3.11'",
