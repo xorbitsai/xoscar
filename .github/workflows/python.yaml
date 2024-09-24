@@ -117,16 +117,16 @@ jobs:
         MODULE: ${{ matrix.module }}
       if: ${{ matrix.module != 'gpu' }}
       run: |
-        pip install numpy scipy cython coverage flaky ucxx-cu12
+        pip install numpy scipy cython coverage flaky
         pip install -e ".[dev,extra]"
-        ucx_info -v
+        # ucx_info -v
       working-directory: ./python
 
-    # - name: Install ucx dependencies
-    #   if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version != '3.11') }}
-    #   run: |
-    #     conda install -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
-    #     pip install -U numpy
+    - name: Install ucx dependencies
+      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest')}}
+      run: |
+        # conda install -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
+        pip install ucxx-cu12
 
     - name: Install fury
       if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version == '3.9') }}
