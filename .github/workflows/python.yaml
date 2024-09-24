@@ -119,7 +119,6 @@ jobs:
       run: |
         pip install numpy scipy cython coverage flaky
         pip install -e ".[dev,extra]"
-        # ucx_info -v
       working-directory: ./python
 
     - name: Install ucx dependencies
