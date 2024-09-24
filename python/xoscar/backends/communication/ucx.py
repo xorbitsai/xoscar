@@ -34,7 +34,7 @@ from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server
 from .errors import ChannelClosed
 
-ucp = lazy_import("ucp")
+ucp = lazy_import("ucxx")
 numba_cuda = lazy_import("numba.cuda")
 rmm = lazy_import("rmm")
 
@@ -86,7 +86,7 @@ class UCXInitializer:
                 tls += ",cuda_copy"
 
             if ucx_config.get("infiniband"):  # pragma: no cover
-                tls = "rc," + tls
+                tls = "ib," + tls
             if ucx_config.get("nvlink"):  # pragma: no cover
                 tls += ",cuda_ipc"
 
@@ -177,7 +177,8 @@ class UCXInitializer:
         new_environ.update(envs)
         os.environ = new_environ  # type: ignore
         try:
-            ucp.init(options=options, env_takes_precedence=True)
+            # let UCX determine the appropriate transports
+            ucp.init()
         finally:
             os.environ = original_environ
 
@@ -313,7 +314,7 @@ class UCXChannel(Channel):
                         await self.ucp_endpoint.send(buf)
                 for buffer in buffers:
                     await self.ucp_endpoint.send(buffer)
-        except ucp.exceptions.UCXBaseException:  # pragma: no cover
+        except ucp.exceptions.UCXError::  # pragma: no cover
             self.abort()
             raise ChannelClosed("While writing, the connection was closed")
 
@@ -516,7 +517,7 @@ class UCXClient(Client):
 
         try:
             ucp_endpoint = await ucp.create_endpoint(host, port)
-        except ucp.exceptions.UCXBaseException as e:  # pragma: no cover
+        except ucp.exceptions.UCXError as e:  # pragma: no cover
             raise ChannelClosed(
                 f"Connection closed before handshake completed, "
                 f"local address: {local_address}, dest address: {dest_address}"
