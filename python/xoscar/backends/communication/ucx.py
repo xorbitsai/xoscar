@@ -314,7 +314,7 @@ class UCXChannel(Channel):
                         await self.ucp_endpoint.send(buf)
                 for buffer in buffers:
                     await self.ucp_endpoint.send(buffer)
-        except ucp.exceptions.UCXError::  # pragma: no cover
+        except ucp.exceptions.UCXError:  # pragma: no cover
             self.abort()
             raise ChannelClosed("While writing, the connection was closed")
 
