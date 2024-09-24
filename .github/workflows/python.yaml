@@ -106,9 +106,9 @@ jobs:
         python-version: ${{ matrix.python-version }}
         activate-environment: ${{ env.CONDA_ENV }}
 
-    # Fix "version `GLIBCXX_3.4.30' not found (required by xoscar_store.cpython-311-x86_64-linux-gnu.so)" issue in Python 3.11
+    # Fix "version `GLIBCXX_3.4.30' not found (required by xoscar_store.cpython-311-x86_64-linux-gnu.so)" issue
     - name: Install libstdcxx-ng for Python 3.11
-      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version == '3.11') }}
+      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') }}
       run: |
         conda install -c conda-forge libstdcxx-ng
 
