@@ -125,6 +125,7 @@ jobs:
       if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version != '3.11') }}
       run: |
         conda install -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
+        pip install -U numpy
 
     - name: Install fury
       if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version == '3.9') }}
