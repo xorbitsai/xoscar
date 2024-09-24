@@ -123,8 +123,9 @@ jobs:
       working-directory: ./python
 
     - name: Install ucx dependencies
-      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest')}}
+      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version >= '3.9')}}
       run: |
+        # ucx-py move to ucxx and ucxx-cu12 can be run on CPU
         # conda install -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
         pip install ucxx-cu12
 
