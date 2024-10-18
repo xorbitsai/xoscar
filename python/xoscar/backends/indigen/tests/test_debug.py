@@ -149,13 +149,13 @@ async def test_cycle_logs(actor_pool, debug_logger):
 
     chain = [(ref2.uid, ref2.address), (ref1.uid, ref1.address)]
 
+    # https://github.com/python/cpython/issues/86296
     # test cycle detection with chain
-    with pytest.raises(asyncio.TimeoutError), cut_file_log(debug_logger) as log_file:
+    with pytest.raises(
+        asyncio.CancelledError if is_py_312() else asyncio.TimeoutError
+    ), cut_file_log(debug_logger) as log_file:
         task = asyncio.create_task(ref1.call_chain(chain))
-        if is_py_312():
-            await asyncio.wait_for(asyncio.shield(task), 1)
-        else:
-            await asyncio.wait_for(task, 1)
+        await asyncio.wait_for(task, 1)
     assert "cycle" in log_file.getvalue()
 
     # test yield call (should not produce loops)
@@ -171,12 +171,11 @@ async def test_cycle_logs(actor_pool, debug_logger):
     assert log_file.getvalue() == ""
 
     # test calling actor inside itself
-    with pytest.raises(asyncio.TimeoutError), cut_file_log(debug_logger) as log_file:
+    with pytest.raises(
+        asyncio.CancelledError if is_py_312() else asyncio.TimeoutError
+    ), cut_file_log(debug_logger) as log_file:
         task = asyncio.create_task(ref1.call_self_ref())
-        if is_py_312():
-            await asyncio.wait_for(asyncio.shield(task), 1)
-        else:
-            await asyncio.wait_for(task, 1)
+        await asyncio.wait_for(task, 1)
     assert "cycle" in log_file.getvalue()
 
 
