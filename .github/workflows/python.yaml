@@ -79,13 +79,13 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest", "macos-13", "windows-latest"]
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
         module: ["xoscar"]
         exclude:
-          - { os: macos-13, python-version: 3.9}
           - { os: macos-13, python-version: 3.10}
-          - { os: windows-latest, python-version: 3.9}
+          - { os: macos-13, python-version: 3.11}
           - { os: windows-latest, python-version: 3.10}
+          - { os: windows-latest, python-version: 3.11}
         include:
           - { os: self-hosted, module: gpu, python-version: 3.11}
           - { os: ubuntu-20.04, module: doc-build, python-version: 3.9}
@@ -111,6 +111,12 @@ jobs:
       if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') }}
       run: |
         conda install -c conda-forge libstdcxx-ng
+
+    # Important for python >= 3.12
+    - name: Update pip and setuptools
+      if: ${{ matrix.python-version >= '3.12' }}
+      run: |
+        pip install -U pip setuptools
 
     - name: Install dependencies
       env:
