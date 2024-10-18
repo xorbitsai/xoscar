@@ -47,7 +47,7 @@ struct formatter<std::error_code> {
     decltype(auto) format(const std::error_code &err,
                           FormatContext &ctx) const {
         return format_to(ctx.out(),
-                         "({}: {} - {})",
+                         fmt::runtime("({}: {} - {})"),
                          err.category(),
                          err.value(),
                          err.message());
