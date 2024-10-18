@@ -26,6 +26,7 @@ import pytest
 import xoscar as mo
 
 from ....debug import get_debug_options, reload_debug_opts_from_env
+from ....utils import is_py_312
 
 
 class DebugActor(mo.Actor):
@@ -151,7 +152,10 @@ async def test_cycle_logs(actor_pool, debug_logger):
     # test cycle detection with chain
     with pytest.raises(asyncio.TimeoutError), cut_file_log(debug_logger) as log_file:
         task = asyncio.create_task(ref1.call_chain(chain))
-        await asyncio.wait_for(task, 1)
+        if is_py_312():
+            await asyncio.wait_for(asyncio.shield(task), 1)
+        else:
+            await asyncio.wait_for(task, 1)
     assert "cycle" in log_file.getvalue()
 
     # test yield call (should not produce loops)
@@ -169,7 +173,10 @@ async def test_cycle_logs(actor_pool, debug_logger):
     # test calling actor inside itself
     with pytest.raises(asyncio.TimeoutError), cut_file_log(debug_logger) as log_file:
         task = asyncio.create_task(ref1.call_self_ref())
-        await asyncio.wait_for(task, 1)
+        if is_py_312():
+            await asyncio.wait_for(asyncio.shield(task), 1)
+        else:
+            await asyncio.wait_for(task, 1)
     assert "cycle" in log_file.getvalue()
 
 

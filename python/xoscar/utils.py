@@ -464,6 +464,10 @@ def is_linux():
     return sys.platform.startswith("linux")
 
 
+def is_py_312():
+    return sys.version_info.major == 3 and sys.version_info.minor == 12
+
+
 def is_v4_zero_ip(ip_port_addr: str) -> bool:
     return ip_port_addr.split("://")[-1].startswith("0.0.0.0:")
 

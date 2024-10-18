@@ -30,7 +30,7 @@ from urllib.parse import urlparse
 from ..._utils import to_binary
 from ...constants import XOSCAR_UNIX_SOCKET_DIR
 from ...serialization import AioDeserializer, AioSerializer, deserialize
-from ...utils import classproperty, implements, is_v6_ip
+from ...utils import classproperty, implements, is_py_312, is_v6_ip
 from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server
 from .utils import read_buffers, write_buffers
@@ -128,13 +128,24 @@ class _BaseSocketServer(Server, metaclass=ABCMeta):
 
     @implements(Server.join)
     async def join(self, timeout=None):
+        """
+        For python 3.12, there's a bug for `serve_forever`:
+        # https://github.com/python/cpython/issues/123720,
+        which leads to hang forever.
+        """
         if timeout is None:
-            await self._aio_server.serve_forever()
+            if is_py_312():
+                await self._aio_server.start_serving()
+            else:
+                await self._aio_server.serve_forever()
         else:
-            future = asyncio.create_task(self._aio_server.serve_forever())
+            if is_py_312():
+                future = asyncio.create_task(self._aio_server.start_serving())
+            else:
+                future = asyncio.create_task(self._aio_server.serve_forever())
             try:
                 await asyncio.wait_for(future, timeout=timeout)
-            except (futures.TimeoutError, asyncio.TimeoutError):
+            except (futures.TimeoutError, asyncio.TimeoutError, TimeoutError):
                 future.cancel()
 
     @implements(Server.on_connected)
@@ -161,7 +172,10 @@ class _BaseSocketServer(Server, metaclass=ABCMeta):
     @implements(Server.stop)
     async def stop(self):
         self._aio_server.close()
-        await self._aio_server.wait_closed()
+        # Python 3.12: # https://github.com/python/cpython/issues/104344
+        # `wait_closed` leads to hang
+        if not is_py_312():
+            await self._aio_server.wait_closed()
         # close all channels
         await asyncio.gather(
             *(channel.close() for channel in self._channels if not channel.closed)
