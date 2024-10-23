@@ -24,7 +24,7 @@ import pytest
 
 from ....aio import AioEvent
 from ....tests.core import require_cudf, require_cupy
-from ....utils import ensure_coverage, get_next_port, is_py_312, lazy_import
+from ....utils import ensure_coverage, get_next_port, lazy_import
 from .. import (
     Channel,
     DummyChannel,
@@ -69,7 +69,6 @@ local_params = gen_params().copy()
 local_params.append((DummyServer, dict(), "dummy://0"))
 
 
-@pytest.mark.skipif(is_py_312(), reason="requires python != 3.12")
 @pytest.mark.parametrize("server_type, config, con", local_params)
 @pytest.mark.asyncio
 async def test_comm(server_type, config, con):

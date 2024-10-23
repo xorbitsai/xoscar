@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures as futures
+import logging
 import os
 import socket
 import sys
@@ -36,6 +37,9 @@ from .core import register_client, register_server
 from .utils import read_buffers, write_buffers
 
 _is_windows: bool = sys.platform.startswith("win")
+
+
+logger = logging.getLogger(__name__)
 
 
 class SocketChannel(Channel):
@@ -135,13 +139,19 @@ class _BaseSocketServer(Server, metaclass=ABCMeta):
                 # For python 3.12, there's a bug for `serve_forever`:
                 # https://github.com/python/cpython/issues/123720,
                 # which is unable to be cancelled.
-                raise RuntimeError("`timeout` cannot be `None` for Python 3.12 .")
+                # Here is really a simulation of `wait_for`
+                task = asyncio.create_task(self._aio_server.serve_forever())
+                await asyncio.sleep(timeout)
+                if task.done():
+                    logger.warning(f"`serve_forever` should never be done.")
+                else:
+                    task.cancel()
             else:
                 future = asyncio.create_task(self._aio_server.serve_forever())
-            try:
-                await asyncio.wait_for(future, timeout=timeout)
-            except (futures.TimeoutError, asyncio.TimeoutError, TimeoutError):
-                future.cancel()
+                try:
+                    await asyncio.wait_for(future, timeout=timeout)
+                except (futures.TimeoutError, asyncio.TimeoutError, TimeoutError):
+                    future.cancel()
 
     @implements(Server.on_connected)
     async def on_connected(self, *args, **kwargs):
