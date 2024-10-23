@@ -128,19 +128,14 @@ class _BaseSocketServer(Server, metaclass=ABCMeta):
 
     @implements(Server.join)
     async def join(self, timeout=None):
-        """
-        For python 3.12, there's a bug for `serve_forever`:
-        # https://github.com/python/cpython/issues/123720,
-        which leads to hang forever.
-        """
         if timeout is None:
-            if is_py_312():
-                await self._aio_server.start_serving()
-            else:
-                await self._aio_server.serve_forever()
+            await self._aio_server.serve_forever()
         else:
             if is_py_312():
-                future = asyncio.create_task(self._aio_server.start_serving())
+                # For python 3.12, there's a bug for `serve_forever`:
+                # https://github.com/python/cpython/issues/123720,
+                # which is unable to be cancelled.
+                raise RuntimeError("`timeout` cannot be `None` for Python 3.12 .")
             else:
                 future = asyncio.create_task(self._aio_server.serve_forever())
             try:
