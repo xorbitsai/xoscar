@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 from enum import Enum
 from types import TracebackType
 from typing import Any, Type
@@ -21,7 +22,9 @@ from tblib import pickling_support
 
 from ..core cimport ActorRef, BufferRef
 from ..serialization.core cimport Serializer
+
 from ..utils import wrap_exception
+
 from .._utils cimport new_random_id
 
 # make sure traceback can be pickled
@@ -244,6 +247,11 @@ cdef class ErrorMessage(_MessageBase):
         # error message.
         if issubclass(self.error_type, _AsCauseBase):
             return self.error.with_traceback(self.traceback)
+
+        # for being compatible with Python 3.12 `asyncio.wait_for`
+        # https://github.com/python/cpython/pull/113850
+        if isinstance(self.error, asyncio.CancelledError):
+            return asyncio.CancelledError(f"[address={self.address}, pid={self.pid}]").with_traceback(self.traceback)
 
         return wrap_exception(
             self.error,

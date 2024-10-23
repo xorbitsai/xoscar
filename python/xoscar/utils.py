@@ -30,6 +30,7 @@ import sys
 import time
 import uuid
 from abc import ABC
+from functools import lru_cache
 from types import TracebackType
 from typing import Callable, Type, Union
 
@@ -464,6 +465,7 @@ def is_linux():
     return sys.platform.startswith("linux")
 
 
+@lru_cache
 def is_py_312():
     return sys.version_info.major == 3 and sys.version_info.minor == 12
 

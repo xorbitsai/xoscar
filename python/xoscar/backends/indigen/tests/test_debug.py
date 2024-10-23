@@ -26,7 +26,6 @@ import pytest
 import xoscar as mo
 
 from ....debug import get_debug_options, reload_debug_opts_from_env
-from ....utils import is_py_312
 
 
 class DebugActor(mo.Actor):
@@ -149,11 +148,8 @@ async def test_cycle_logs(actor_pool, debug_logger):
 
     chain = [(ref2.uid, ref2.address), (ref1.uid, ref1.address)]
 
-    # https://github.com/python/cpython/issues/86296
     # test cycle detection with chain
-    with pytest.raises(
-        asyncio.CancelledError if is_py_312() else asyncio.TimeoutError
-    ), cut_file_log(debug_logger) as log_file:
+    with pytest.raises(asyncio.TimeoutError), cut_file_log(debug_logger) as log_file:
         task = asyncio.create_task(ref1.call_chain(chain))
         await asyncio.wait_for(task, 1)
     assert "cycle" in log_file.getvalue()
@@ -171,9 +167,7 @@ async def test_cycle_logs(actor_pool, debug_logger):
     assert log_file.getvalue() == ""
 
     # test calling actor inside itself
-    with pytest.raises(
-        asyncio.CancelledError if is_py_312() else asyncio.TimeoutError
-    ), cut_file_log(debug_logger) as log_file:
+    with pytest.raises(asyncio.TimeoutError), cut_file_log(debug_logger) as log_file:
         task = asyncio.create_task(ref1.call_self_ref())
         await asyncio.wait_for(task, 1)
     assert "cycle" in log_file.getvalue()
