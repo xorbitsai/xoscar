@@ -29,7 +29,7 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     execute_process(
       COMMAND
         cmd /c
-        "echo %cd% && cd ..\\..\\..\\..\\third_party\\libuv && mkdir build && cd build && mkdir uvlib && cmake .. -DCMAKE_INSTALL_PREFIX=uvlib && msbuild.exe INSTALL.vcxproj"
+        "echo %cd% && cd ..\\..\\..\\..\\third_party\\libuv && mkdir build && cd build && mkdir uvlib && cmake .. -DCMAKE_INSTALL_PREFIX=uvlib && msbuild.exe /p:AdditionalOptions=\"/utf-8\" INSTALL.vcxproj"
     )
   endif()
   set(libuv_ROOT ${CMAKE_SOURCE_DIR}/third_party/libuv/build/uvlib)
