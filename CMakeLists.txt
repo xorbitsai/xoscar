@@ -30,7 +30,7 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     execute_process(
       COMMAND
         cmd /c
-        "cd ..\\..\\..\\..\\..\\third_party\\libuv&&mkdir build&&cd build && mkdir uvlib&&cmake .. -DCMAKE_INSTALL_PREFIX=uvlib&&msbuild.exe INSTALL.vcxproj"
+        "cd third_party\\libuv&&mkdir build&&cd build && mkdir uvlib&&cmake .. -DCMAKE_INSTALL_PREFIX=uvlib&&msbuild.exe INSTALL.vcxproj"
     )
     message(STATUS "here===========11")
   endif()
