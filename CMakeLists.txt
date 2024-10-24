@@ -26,6 +26,7 @@ include_directories(${PYTHON_INCLUDE_PATH})
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
   set(libuv_dir ${CMAKE_SOURCE_DIR}/third_party/libuv/build/uvlib)
   if(NOT EXISTS ${libuv_dir})
+    message(STATUS "====Source Directory: ${CMAKE_CURRENT_SOURCE_DIR}")
     execute_process(
       COMMAND
         cmd /c
