@@ -26,21 +26,12 @@ include_directories(${PYTHON_INCLUDE_PATH})
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
   set(libuv_dir ${CMAKE_SOURCE_DIR}/third_party/libuv/build/uvlib)
   if(NOT EXISTS ${libuv_dir})
-    message(STATUS "====Source Directory: ${CMAKE_CURRENT_SOURCE_DIR}")
     execute_process(
       COMMAND
         cmd /c
         "echo %cd% && cd ..\\..\\..\\..\\third_party\\libuv && mkdir build && cd build && mkdir uvlib && cmake .. -DCMAKE_INSTALL_PREFIX=uvlib && msbuild.exe INSTALL.vcxproj"
     )
-    message(STATUS "here===========11")
   endif()
-  if(NOT EXISTS ${libuv_dir})
-    message(STATUS "==== no exists ${libuv_dir}")
-  else()
-    message(STATUS "!!!! exists ${libuv_dir}")
-  endif()
-  message(STATUS "libuv dir = ${libuv_dir}")
-  message(STATUS "Source Directory: ${CMAKE_CURRENT_SOURCE_DIR}")
   set(libuv_ROOT ${CMAKE_SOURCE_DIR}/third_party/libuv/build/uvlib)
   set(uv_HEADER_PATH ${CMAKE_SOURCE_DIR}/third_party/libuv/include)
   include_directories(${uv_HEADER_PATH})
