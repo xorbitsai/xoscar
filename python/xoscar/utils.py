@@ -467,7 +467,7 @@ def is_linux():
 
 @lru_cache
 def is_py_312():
-    return sys.version_info.major == 3 and sys.version_info.minor == 12
+    return sys.version_info[:2] == (3, 12)
 
 
 def is_v4_zero_ip(ip_port_addr: str) -> bool:
