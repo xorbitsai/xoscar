@@ -154,6 +154,18 @@ class XoscarCmakeExtension(Extension):
 
 
 class CMakeBuild(build_ext):
+    def finalize_options(self):
+        """
+        For python 3.12, the build_temp and build_lib dirs are temp dirs which are depended on your OS,
+        which leads to that cannot find the copy directory during C++ compiled process.
+        However, for Python < 3.12, these two dirs can be automatically located in the `build` directory of the project directory.
+        Therefore, in order to be compatible with all Python versions,
+        directly using fixed dirs here.
+        """
+        self.build_temp = "build_temp"
+        self.build_lib = "build_lib"
+        super().finalize_options()
+
     def copy_extensions_to_source(self):
         build_py = self.get_finalized_command('build_py')
         for ext in self.extensions:
