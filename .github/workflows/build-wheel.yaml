@@ -99,31 +99,31 @@ jobs:
         with:
           path: ./python/dist/*.tar.gz
 
-  upload_pypi:
-    needs: [build_wheels, build_sdist]
-    runs-on: ubuntu-latest
-    # upload to PyPI on every tag starting with 'v'
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    steps:
-      - uses: actions/download-artifact@v3
-        with:
-          # unpacks default artifact into dist/
-          # if `name: artifact` is omitted, the action will create extra parent dir
-          name: artifact
-          path: dist
-
-      # if is xprobe repo, upload to pypi
-      - uses: pypa/gh-action-pypi-publish@v1.5.0
-        if: github.repository == 'xorbitsai/xoscar'
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_PASSWORD }}
-
-      # if is not xprobe repo, upload to test
-      - uses: pypa/gh-action-pypi-publish@v1.5.0
-        if: github.repository != 'xorbitsai/xoscar'
-        with:
-          user: __token__
-          password: ${{ secrets.TEST_PYPI_PASSWORD }}
-          verbose: true
-          repository_url: https://test.pypi.org/legacy/
+#  upload_pypi:
+#    needs: [build_wheels, build_sdist]
+#    runs-on: ubuntu-latest
+#    # upload to PyPI on every tag starting with 'v'
+#    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+#    steps:
+#      - uses: actions/download-artifact@v3
+#        with:
+#          # unpacks default artifact into dist/
+#          # if `name: artifact` is omitted, the action will create extra parent dir
+#          name: artifact
+#          path: dist
+#
+#      # if is xprobe repo, upload to pypi
+#      - uses: pypa/gh-action-pypi-publish@v1.5.0
+#        if: github.repository == 'xorbitsai/xoscar'
+#        with:
+#          user: __token__
+#          password: ${{ secrets.PYPI_PASSWORD }}
+#
+#      # if is not xprobe repo, upload to test
+#      - uses: pypa/gh-action-pypi-publish@v1.5.0
+#        if: github.repository != 'xorbitsai/xoscar'
+#        with:
+#          user: __token__
+#          password: ${{ secrets.TEST_PYPI_PASSWORD }}
+#          verbose: true
+#          repository_url: https://test.pypi.org/legacy/
