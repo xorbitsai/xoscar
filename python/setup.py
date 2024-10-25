@@ -28,6 +28,7 @@ from Cython.Build import cythonize
 from packaging.version import Version
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
+from setuptools.command.install_lib import install_lib
 from setuptools.extension import Library
 
 try:
@@ -340,10 +341,16 @@ class CMakeBuild(build_ext):
                     )
 
 
+class XoscarInstall(install_lib):
+    def finalize_options(self):
+        self.build_dir = "build_lib"
+        super().finalize_options()
+
+
 setup_options = dict(
     version=versioneer.get_version(),
     ext_modules=extensions + [XoscarCmakeExtension("xoscar_pygloo")],
-    cmdclass={"build_ext": CMakeBuild},
+    cmdclass={"build_ext": CMakeBuild, "install_lib": XoscarInstall},
     long_description=build_long_description(),
     long_description_content_type="text/markdown",
 )
