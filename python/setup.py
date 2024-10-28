@@ -17,6 +17,7 @@ import platform
 import re
 import subprocess
 import sys
+import sysconfig
 from distutils.command.build_ext import build_ext as _du_build_ext
 from distutils.file_util import copy_file, move_file
 from pathlib import Path
@@ -144,6 +145,45 @@ PLAT_TO_CMAKE = {
     "win-arm64": "ARM64",
 }
 
+TARGET_TO_PLAT = {
+    'x86': 'win32',
+    'x64': 'win-amd64',
+    'arm': 'win-arm32',
+    'arm64': 'win-arm64',
+}
+
+
+# Copied from https://github.com/pypa/setuptools/blob/main/setuptools/_distutils/util.py#L50
+def get_host_platform():
+    """
+    Return a string that identifies the current platform. Use this
+    function to distinguish platform-specific build directories and
+    platform-specific built distributions.
+    """
+
+    # This function initially exposed platforms as defined in Python 3.9
+    # even with older Python versions when distutils was split out.
+    # Now it delegates to stdlib sysconfig, but maintains compatibility.
+    return sysconfig.get_platform()
+
+
+def get_platform():
+    if os.name == 'nt':
+        target = os.environ.get('VSCMD_ARG_TGT_ARCH')
+        return TARGET_TO_PLAT.get(target) or get_host_platform()
+    return get_host_platform()
+
+
+plat_specifier = ".{}-{}".format(get_platform(), sys.implementation.cache_tag)
+
+
+def get_build_lib():
+    return os.path.join("build", "lib" + plat_specifier)
+
+
+def get_build_temp():
+    return os.path.join("build", 'temp' + plat_specifier)
+
 
 # A CMakeExtension needs a sourcedir instead of a file list.
 # The name must be the _single_ output extension from the CMake build.
@@ -161,10 +201,10 @@ class CMakeBuild(build_ext):
         which leads to that cannot find the copy directory during C++ compiled process.
         However, for Python < 3.12, these two dirs can be automatically located in the `build` directory of the project directory.
         Therefore, in order to be compatible with all Python versions,
-        directly using fixed dirs here.
+        directly using fixed dirs here by coping source codes from `setuptools`.
         """
-        self.build_temp = "build_temp"
-        self.build_lib = "build_lib"
+        self.build_temp = get_build_temp()
+        self.build_lib = get_build_lib()
         super().finalize_options()
 
     def copy_extensions_to_source(self):
@@ -340,17 +380,25 @@ class CMakeBuild(build_ext):
                         dry_run=self.dry_run
                     )
 
-
-class XoscarInstall(install_lib):
-    def finalize_options(self):
-        self.build_dir = "build_lib"
-        super().finalize_options()
+# class XoscarInstall(install_lib):
+#     def run(self):
+#         super().run()
+#
+#         lib_path = os.path.join(repo_root, "build_lib", "xoscar")
+#         build_path = os.path.join(repo_root, "build")
+#         target_path = None
+#         for item in os.listdir(build_path):
+#             item_path = os.path.join(build_path, item)
+#             if os.path.isdir(item_path) and item.startswith('lib'):
+#                 target_path = item_path
+#                 break
+#         self.copy_tree(lib_path, os.path.join(target_path, "xoscar"))
 
 
 setup_options = dict(
     version=versioneer.get_version(),
     ext_modules=extensions + [XoscarCmakeExtension("xoscar_pygloo")],
-    cmdclass={"build_ext": CMakeBuild, "install_lib": XoscarInstall},
+    cmdclass={"build_ext": CMakeBuild},
     long_description=build_long_description(),
     long_description_content_type="text/markdown",
 )
