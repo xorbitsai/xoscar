@@ -380,20 +380,6 @@ class CMakeBuild(build_ext):
                         dry_run=self.dry_run
                     )
 
-# class XoscarInstall(install_lib):
-#     def run(self):
-#         super().run()
-#
-#         lib_path = os.path.join(repo_root, "build_lib", "xoscar")
-#         build_path = os.path.join(repo_root, "build")
-#         target_path = None
-#         for item in os.listdir(build_path):
-#             item_path = os.path.join(build_path, item)
-#             if os.path.isdir(item_path) and item.startswith('lib'):
-#                 target_path = item_path
-#                 break
-#         self.copy_tree(lib_path, os.path.join(target_path, "xoscar"))
-
 
 setup_options = dict(
     version=versioneer.get_version(),
