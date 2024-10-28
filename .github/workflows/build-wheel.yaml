@@ -22,7 +22,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-13, windows-latest]
         arch: [auto]
-        requires-python: [">=3.9,<3.11", ">=3.11,<3.13"]
+        requires-python: [">=3.9,<3.10", ">=3.10,<3.11", ">=3.11,<3.12", ">=3.12,<3.13"]
         include:
           - os: ubuntu-latest
             arch: aarch64
@@ -50,10 +50,16 @@ jobs:
             requires-python: ">=3.12,<3.13"
           - os: macos-13
             arch: arm64
-            requires-python: ">=3.9,<3.11"
+            requires-python: ">=3.9,<3.10"
           - os: macos-13
             arch: arm64
-            requires-python: ">=3.11,<3.13"
+            requires-python: ">=3.10,<3.11"
+          - os: macos-13
+            arch: arm64
+            requires-python: ">=3.11,<3.12"
+          - os: macos-13
+            arch: arm64
+            requires-python: ">=3.12,<3.13"
 
     steps:
       - uses: actions/checkout@v3
