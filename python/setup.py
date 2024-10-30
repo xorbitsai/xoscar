@@ -17,6 +17,7 @@ import platform
 import re
 import subprocess
 import sys
+import sysconfig
 from distutils.command.build_ext import build_ext as _du_build_ext
 from distutils.file_util import copy_file, move_file
 from pathlib import Path
@@ -28,6 +29,7 @@ from Cython.Build import cythonize
 from packaging.version import Version
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
+from setuptools.command.install_lib import install_lib
 from setuptools.extension import Library
 
 try:
@@ -143,6 +145,45 @@ PLAT_TO_CMAKE = {
     "win-arm64": "ARM64",
 }
 
+TARGET_TO_PLAT = {
+    'x86': 'win32',
+    'x64': 'win-amd64',
+    'arm': 'win-arm32',
+    'arm64': 'win-arm64',
+}
+
+
+# Copied from https://github.com/pypa/setuptools/blob/main/setuptools/_distutils/util.py#L50
+def get_host_platform():
+    """
+    Return a string that identifies the current platform. Use this
+    function to distinguish platform-specific build directories and
+    platform-specific built distributions.
+    """
+
+    # This function initially exposed platforms as defined in Python 3.9
+    # even with older Python versions when distutils was split out.
+    # Now it delegates to stdlib sysconfig, but maintains compatibility.
+    return sysconfig.get_platform()
+
+
+def get_platform():
+    if os.name == 'nt':
+        target = os.environ.get('VSCMD_ARG_TGT_ARCH')
+        return TARGET_TO_PLAT.get(target) or get_host_platform()
+    return get_host_platform()
+
+
+plat_specifier = ".{}-{}".format(get_platform(), sys.implementation.cache_tag)
+
+
+def get_build_lib():
+    return os.path.join("build", "lib" + plat_specifier)
+
+
+def get_build_temp():
+    return os.path.join("build", 'temp' + plat_specifier)
+
 
 # A CMakeExtension needs a sourcedir instead of a file list.
 # The name must be the _single_ output extension from the CMake build.
@@ -154,6 +195,18 @@ class XoscarCmakeExtension(Extension):
 
 
 class CMakeBuild(build_ext):
+    def finalize_options(self):
+        """
+        For python 3.12, the build_temp and build_lib dirs are temp dirs which are depended on your OS,
+        which leads to that cannot find the copy directory during C++ compiled process.
+        However, for Python < 3.12, these two dirs can be automatically located in the `build` directory of the project directory.
+        Therefore, in order to be compatible with all Python versions,
+        directly using fixed dirs here by coping source codes from `setuptools`.
+        """
+        self.build_temp = get_build_temp()
+        self.build_lib = get_build_lib()
+        super().finalize_options()
+
     def copy_extensions_to_source(self):
         build_py = self.get_finalized_command('build_py')
         for ext in self.extensions:

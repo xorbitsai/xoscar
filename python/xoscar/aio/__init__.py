@@ -11,15 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import asyncio
-import sys
-
 from .file import AioFileObject
 from .lru import alru_cache
 from .parallelism import AioEvent
-
-if sys.version_info[:2] < (3, 9):
-    from ._threads import to_thread
-
-    asyncio.to_thread = to_thread

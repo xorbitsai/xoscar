@@ -22,11 +22,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-13, windows-latest]
         arch: [auto]
-        requires-python: [">=3.8,<3.10", ">=3.10,<3.12"]
+        # Cannot set like this: ">=3.9,<3.11" here,
+        # which will result in two packages running within a single runner,
+        # potentially causing conflicts in the Python environment.
+        requires-python: [">=3.9,<3.10", ">=3.10,<3.11", ">=3.11,<3.12", ">=3.12,<3.13"]
         include:
-          - os: ubuntu-latest
-            arch: aarch64
-            requires-python: ">=3.8,<3.9"
           - os: ubuntu-latest
             arch: aarch64
             requires-python: ">=3.9,<3.10"
@@ -36,18 +36,33 @@ jobs:
           - os: ubuntu-latest
             arch: aarch64
             requires-python: ">=3.11,<3.12"
+          - os: ubuntu-latest
+            arch: aarch64
+            requires-python: ">=3.12,<3.13"
           - os: macos-13
             arch: universal2
-            requires-python: ">=3.8,<3.10"
+            requires-python: ">=3.9,<3.10"
           - os: macos-13
             arch: universal2
-            requires-python: ">=3.10,<3.12"
+            requires-python: ">=3.10,<3.11"
+          - os: macos-13
+            arch: universal2
+            requires-python: ">=3.11,<3.12"
+          - os: macos-13
+            arch: universal2
+            requires-python: ">=3.12,<3.13"
           - os: macos-13
             arch: arm64
-            requires-python: ">=3.8,<3.10"
+            requires-python: ">=3.9,<3.10"
           - os: macos-13
             arch: arm64
-            requires-python: ">=3.10,<3.12"
+            requires-python: ">=3.10,<3.11"
+          - os: macos-13
+            arch: arm64
+            requires-python: ">=3.11,<3.12"
+          - os: macos-13
+            arch: arm64
+            requires-python: ">=3.12,<3.13"
 
     steps:
       - uses: actions/checkout@v3

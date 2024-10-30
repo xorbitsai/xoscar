@@ -16,6 +16,7 @@ limitations under the License. */
 #include "error.h"
 #include "exception.h"
 #include "fmt/chrono.h"
+#include "fmt/ranges.h"
 
 #include <system_error>
 #include <utility>
