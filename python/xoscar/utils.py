@@ -23,7 +23,6 @@ import inspect
 import io
 import logging
 import os
-import pkgutil
 import random
 import socket
 import sys
