@@ -19,11 +19,11 @@ import asyncio
 import dataclasses
 import functools
 import importlib
+import importlib.util as importlib_utils
 import inspect
 import io
 import logging
 import os
-import pkgutil
 import random
 import socket
 import sys
@@ -267,7 +267,7 @@ def lazy_import(
             self._on_loads.append(func)
             return func
 
-    if pkgutil.find_loader(prefix_name) is not None:
+    if importlib_utils.find_spec(prefix_name) is not None:
         return LazyModule()
     elif placeholder:
         return ModulePlaceholder(prefix_name)
