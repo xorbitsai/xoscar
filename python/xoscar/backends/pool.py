@@ -554,7 +554,8 @@ class AbstractActorPool(ABC):
         while not self._stopped.is_set():
             try:
                 message = await channel.recv()
-            except EOFError:
+            except Exception as e:
+                logger.debug(f"pool: close connection due to {e}")
                 # no data to read, check channel
                 try:
                     await channel.close()

@@ -74,15 +74,22 @@ class ActorCaller:
             try:
                 try:
                     message: _MessageBase = await client.recv()
-                except (EOFError, ConnectionError, BrokenPipeError):
+                except (
+                    EOFError,
+                    ConnectionError,
+                    BrokenPipeError,
+                    AssertionError,
+                ) as e:
+                    # AssertionError is from get_header
                     # remote server closed, close client and raise ServerClosed
+                    logger.debug(f"{client.dest_address} close due to {e}")
                     try:
                         await client.close()
                     except (ConnectionError, BrokenPipeError):
                         # close failed, ignore it
                         pass
                     raise ServerClosed(
-                        f"Remote server {client.dest_address} closed"
+                        f"Remote server {client.dest_address} closed: {e}"
                     ) from None
                 future = self._client_to_message_futures[client].pop(message.message_id)
                 if not future.done():
