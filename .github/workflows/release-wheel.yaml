@@ -1,0 +1,57 @@
+name: Release wheel
+
+on:
+  workflow_dispatch:
+    tags:
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release_wheels:
+    name: Build wheels on ${{ matrix.os }} for ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        arch: [auto]
+        # Cannot set like this: ">=3.9,<3.11" here,
+        # which will result in two packages running within a single runner,
+        # potentially causing conflicts in the Python environment.
+        requires-python: [">=3.10,<3.11", ">=3.11,<3.12"]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Add msbuild to PATH
+        if: ${{ matrix.os == 'windows-latest'}}
+        uses: microsoft/setup-msbuild@v1.1
+
+      - name: Set up QEMU
+        if: ${{ matrix.arch == 'aarch64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: all
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.16.5
+        env:
+          CIBW_ARCHS: ${{ matrix.arch }}
+          CIBW_PROJECT_REQUIRES_PYTHON: ${{ matrix.requires-python }}
+          CIBW_BEFORE_BUILD_MACOS: pip install -r CI/requirements-wheel.txt
+          CIBW_BEFORE_BUILD_WINDOWS: pip install -r CI/requirements-wheel.txt
+          CIBW_TEST_COMMAND: pytest {project}/CI/test_functionality.py --capture=no
+          CIBW_TEST_REQUIRES: pytest requests pytest-asyncio
+          CIBW_BUILD_VERBOSITY: 1
+        with:
+          package-dir: ./python/
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: wheelhouse/*.whl
