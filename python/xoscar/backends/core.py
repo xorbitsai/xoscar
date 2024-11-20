@@ -70,50 +70,61 @@ class ActorCaller:
         return client
 
     async def _listen(self, client: Client):
-        while not client.closed:
-            try:
+        try:
+            while not client.closed:
                 try:
-                    message: _MessageBase = await client.recv()
-                except (EOFError, ConnectionError, BrokenPipeError):
-                    # remote server closed, close client and raise ServerClosed
                     try:
-                        await client.close()
-                    except (ConnectionError, BrokenPipeError):
-                        # close failed, ignore it
+                        message: _MessageBase = await client.recv()
+                    except (EOFError, ConnectionError, BrokenPipeError) as e:
+                        # AssertionError is from get_header
+                        # remote server closed, close client and raise ServerClosed
+                        logger.debug(f"{client.dest_address} close due to {e}")
+                        try:
+                            await client.close()
+                        except (ConnectionError, BrokenPipeError):
+                            # close failed, ignore it
+                            pass
+                        raise ServerClosed(
+                            f"Remote server {client.dest_address} closed: {e}"
+                        ) from None
+                    future = self._client_to_message_futures[client].pop(
+                        message.message_id
+                    )
+                    if not future.done():
+                        future.set_result(message)
+                except DeserializeMessageFailed as e:
+                    message_id = e.message_id
+                    future = self._client_to_message_futures[client].pop(message_id)
+                    future.set_exception(e.__cause__)  # type: ignore
+                except Exception as e:  # noqa: E722  # pylint: disable=bare-except
+                    message_futures = self._client_to_message_futures[client]
+                    self._client_to_message_futures[client] = dict()
+                    for future in message_futures.values():
+                        future.set_exception(copy.copy(e))
+                finally:
+                    # message may have Ray ObjectRef, delete it early in case next loop doesn't run
+                    # as soon as expected.
+                    try:
+                        del message
+                    except NameError:
                         pass
-                    raise ServerClosed(
-                        f"Remote server {client.dest_address} closed"
-                    ) from None
-                future = self._client_to_message_futures[client].pop(message.message_id)
-                if not future.done():
-                    future.set_result(message)
-            except DeserializeMessageFailed as e:
-                message_id = e.message_id
-                future = self._client_to_message_futures[client].pop(message_id)
-                future.set_exception(e.__cause__)  # type: ignore
-            except Exception as e:  # noqa: E722  # pylint: disable=bare-except
-                message_futures = self._client_to_message_futures[client]
-                self._client_to_message_futures[client] = dict()
-                for future in message_futures.values():
-                    future.set_exception(copy.copy(e))
-            finally:
-                # message may have Ray ObjectRef, delete it early in case next loop doesn't run
-                # as soon as expected.
-                try:
-                    del message
-                except NameError:
-                    pass
-                try:
-                    del future
-                except NameError:
-                    pass
-                await asyncio.sleep(0)
+                    try:
+                        del future
+                    except NameError:
+                        pass
+                    await asyncio.sleep(0)
 
-        message_futures = self._client_to_message_futures[client]
-        self._client_to_message_futures[client] = dict()
-        error = ServerClosed(f"Remote server {client.dest_address} closed")
-        for future in message_futures.values():
-            future.set_exception(copy.copy(error))
+            message_futures = self._client_to_message_futures[client]
+            self._client_to_message_futures[client] = dict()
+            error = ServerClosed(f"Remote server {client.dest_address} closed")
+            for future in message_futures.values():
+                future.set_exception(copy.copy(error))
+        finally:
+            try:
+                await client.close()
+            except:  # noqa: E722  # nosec  # pylint: disable=bare-except
+                # ignore all error if fail to close at last
+                pass
 
     async def call_with_client(
         self, client: Client, message: _MessageBase, wait: bool = True
