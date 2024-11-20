@@ -551,24 +551,31 @@ class AbstractActorPool(ABC):
         return False
 
     async def on_new_channel(self, channel: Channel):
-        while not self._stopped.is_set():
-            try:
-                message = await channel.recv()
-            except Exception as e:
-                logger.debug(f"pool: close connection due to {e}")
-                # no data to read, check channel
+        try:
+            while not self._stopped.is_set():
                 try:
-                    await channel.close()
-                except (ConnectionError, EOFError):
-                    # close failed, ignore
-                    pass
-                return
-            if await self._handle_ucx_meta_message(message, channel):
-                continue
-            asyncio.create_task(self.process_message(message, channel))
-            # delete to release the reference of message
-            del message
-            await asyncio.sleep(0)
+                    message = await channel.recv()
+                except (EOFError, ConnectionError, BrokenPipeError) as e:
+                    logger.debug(f"pool: close connection due to {e}")
+                    # no data to read, check channel
+                    try:
+                        await channel.close()
+                    except (ConnectionError, EOFError):
+                        # close failed, ignore
+                        pass
+                    return
+                if await self._handle_ucx_meta_message(message, channel):
+                    continue
+                asyncio.create_task(self.process_message(message, channel))
+                # delete to release the reference of message
+                del message
+                await asyncio.sleep(0)
+        finally:
+            try:
+                await channel.close()
+            except:  # noqa: E722  # nosec  # pylint: disable=bare-except
+                # ignore all error if fail to close at last
+                pass
 
     async def __aenter__(self):
         await self.start()
