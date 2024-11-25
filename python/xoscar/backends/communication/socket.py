@@ -29,7 +29,7 @@ from typing import Any, Callable, Coroutine, Dict, Type
 from urllib.parse import urlparse
 
 from ..._utils import to_binary
-from ...constants import XOSCAR_UNIX_SOCKET_DIR
+from ...constants import XOSCAR_CONNECT_TIMEOUT, XOSCAR_UNIX_SOCKET_DIR
 from ...serialization import AioDeserializer, AioSerializer, deserialize
 from ...utils import classproperty, implements, is_py_312, is_v6_ip
 from .base import Channel, ChannelType, Client, Server
@@ -291,7 +291,13 @@ class SocketClient(Client):
     ) -> "Client":
         host, port_str = dest_address.rsplit(":", 1)
         port = int(port_str)
-        (reader, writer) = await asyncio.open_connection(host=host, port=port, **kwargs)
+        config = kwargs.get("config", {})
+        connect_timeout = config.get("connect_timeout", XOSCAR_CONNECT_TIMEOUT)
+        fut = asyncio.open_connection(host=host, port=port)
+        try:
+            reader, writer = await asyncio.wait_for(fut, timeout=connect_timeout)
+        except asyncio.TimeoutError:
+            raise ConnectionError("connect timeout")
         channel = SocketChannel(
             reader, writer, local_address=local_address, dest_address=dest_address
         )

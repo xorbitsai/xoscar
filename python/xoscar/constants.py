@@ -19,3 +19,5 @@ XOSCAR_TEMP_DIR = Path(os.getenv("XOSCAR_DIR", Path.home())) / ".xoscar"
 
 # unix socket.
 XOSCAR_UNIX_SOCKET_DIR = XOSCAR_TEMP_DIR / "socket"
+
+XOSCAR_CONNECT_TIMEOUT = 8
