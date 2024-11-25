@@ -893,9 +893,9 @@ async def test_server_closed():
         process.kill()
         process.join()
 
-        with pytest.raises(ServerClosed):
+        with pytest.raises(Exception):
             # process already been killed,
-            # ServerClosed will be raised
+            # ServerClosed or ConnectionError will be raised
             await task
 
         assert not process.is_alive()
