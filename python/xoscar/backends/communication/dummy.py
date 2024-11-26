@@ -19,7 +19,7 @@ import asyncio
 import concurrent.futures as futures
 import logging
 import weakref
-from typing import Any, Callable, Coroutine, Dict, Type, Optional
+from typing import Any, Callable, Coroutine, Dict, Optional, Type
 from urllib.parse import urlparse
 
 from ...errors import ServerClosed
