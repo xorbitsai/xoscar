@@ -100,9 +100,9 @@ class DummyServer(Server):
         else tuple()
     )
 
-    _address_to_instances: weakref.WeakValueDictionary[str, "DummyServer"] = (
-        weakref.WeakValueDictionary()
-    )
+    _address_to_instances: weakref.WeakValueDictionary[
+        str, "DummyServer"
+    ] = weakref.WeakValueDictionary()
     _channels: weakref.WeakSet[Channel]
     _tasks: set[asyncio.Task]
     scheme: str | None = "dummy"
@@ -247,6 +247,9 @@ class DummyClient(Client):
             task_loop = self._task.get_loop()
             if task_loop is not None:
                 if not task_loop.is_running():
-                    logger.warning("Dummy channel cancel task on a stopped loop, dest address: %s.", self.dest_address)
+                    logger.warning(
+                        "Dummy channel cancel task on a stopped loop, dest address: %s.",
+                        self.dest_address,
+                    )
             self._task.cancel()
             self._task = None
