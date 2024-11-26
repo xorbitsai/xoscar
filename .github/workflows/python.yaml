@@ -39,7 +39,7 @@ jobs:
         uses: psf/black@stable
         with:
           src: "python/xoscar"
-          options: "--check --verbose"
+          options: "--diff --verbose"
       - uses: isort/isort-action@master
         with:
           sortPaths: "python/xoscar"
