@@ -18,6 +18,8 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+import threading
+import weakref
 from typing import Type, Union
 
 from .._utils import Timer
@@ -31,8 +33,8 @@ ResultMessageType = Union[ResultMessage, ErrorMessage]
 logger = logging.getLogger(__name__)
 
 
-class ActorCaller:
-    __slots__ = "_client_to_message_futures", "_clients", "_profiling_data"
+class ActorCallerThreadLocal:
+    __slots__ = ("_client_to_message_futures", "_clients", "_profiling_data")
 
     _client_to_message_futures: dict[Client, dict[bytes, asyncio.Future]]
     _clients: dict[Client, asyncio.Task]
@@ -191,3 +193,33 @@ class ActorCaller:
     def cancel_tasks(self):
         # cancel listening for all clients
         _ = [task.cancel() for task in self._clients.values()]
+
+
+class ActorCaller:
+    __slots__ = "_thread_local"
+
+    class _RefHolder:
+        pass
+
+    _close_loop = asyncio.new_event_loop()
+    _close_thread = threading.Thread(target=_close_loop.run_forever, daemon=True)
+    _close_thread.start()
+
+    def __init__(self):
+        self._thread_local = threading.local()
+
+    def __getattr__(self, item):
+        try:
+            actor_caller = self._thread_local.actor_caller
+        except AttributeError:
+            actor_caller = self._thread_local.actor_caller = ActorCallerThreadLocal()
+            ref = self._thread_local.ref = ActorCaller._RefHolder()
+            # If the thread exit, we clean the related actor callers and channels.
+            weakref.finalize(
+                ref,
+                asyncio.run_coroutine_threadsafe,
+                actor_caller.stop(),
+                self._close_loop,
+            )
+
+        return getattr(actor_caller, item)
