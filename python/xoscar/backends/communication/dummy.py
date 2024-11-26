@@ -19,7 +19,7 @@ import asyncio
 import concurrent.futures as futures
 import logging
 import weakref
-from typing import Any, Callable, Coroutine, Dict, Type
+from typing import Any, Callable, Coroutine, Dict, Type, Optional
 from urllib.parse import urlparse
 
 from ...errors import ServerClosed
@@ -206,7 +206,7 @@ class DummyClient(Client):
         self, local_address: str | None, dest_address: str | None, channel: Channel
     ):
         super().__init__(local_address, dest_address, channel)
-        self._task = None
+        self._task: Optional[asyncio.Task] = None
 
     @staticmethod
     @implements(Client.connect)
