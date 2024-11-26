@@ -77,7 +77,11 @@ MALFORMED_MSG = "Received malformed data, please check Xoscar version on both si
 def get_header_length(header_bytes: bytes):
     version = struct.unpack("B", header_bytes[:1])[0]
     # now we only have default version
-    assert version == DEFAULT_SERIALIZATION_VERSION, MALFORMED_MSG
+    if version != DEFAULT_SERIALIZATION_VERSION:
+        # when version not matched,
+        # we will immediately abort the connection
+        # EOFError will be captured by channel
+        raise EOFError(MALFORMED_MSG)
     # header length
     header_length = struct.unpack("<Q", header_bytes[1:9])[0]
     # compress

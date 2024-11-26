@@ -886,7 +886,7 @@ async def test_server_closed():
 
         # check if error raised normally when subprocess killed
         task = asyncio.create_task(actor_ref.sleep(10))
-        await asyncio.sleep(0)
+        await asyncio.sleep(0.1)
 
         # kill subprocess 1
         process = list(pool._sub_processes.values())[0]
