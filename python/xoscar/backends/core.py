@@ -195,6 +195,7 @@ class ActorCallerThreadLocal:
         return await self.call_with_client(client, message, wait)
 
     async def stop(self):
+        logger.debug("Actor caller stop.")
         try:
             await asyncio.gather(*[client.close() for client in self._clients])
         except (ConnectionError, ServerClosed):
@@ -223,14 +224,18 @@ class ActorCaller:
         try:
             actor_caller = self._thread_local.actor_caller
         except AttributeError:
+            thread_info = str(threading.current_thread())
+            logger.debug("Creating a new actor caller for thread: %s", thread_info)
             actor_caller = self._thread_local.actor_caller = ActorCallerThreadLocal()
             ref = self._thread_local.ref = ActorCaller._RefHolder()
             # If the thread exit, we clean the related actor callers and channels.
-            weakref.finalize(
-                ref,
-                asyncio.run_coroutine_threadsafe,
-                actor_caller.stop(),
-                self._close_loop,
-            )
+
+            def _cleanup():
+                asyncio.run_coroutine_threadsafe(actor_caller.stop(), self._close_loop)
+                logger.debug(
+                    "Clean up the actor caller due to thread exit: %s", thread_info
+                )
+
+            weakref.finalize(ref, _cleanup)
 
         return getattr(actor_caller, item)

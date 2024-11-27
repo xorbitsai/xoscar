@@ -478,6 +478,7 @@ class UCXServer(Server):
                 await channel.close()
             # Remove channel if channel exit
             self._channels.discard(channel)
+            logger.debug("Channel exit: %s", channel.info)
 
     @implements(Server.stop)
     async def stop(self):

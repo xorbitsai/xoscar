@@ -237,7 +237,12 @@ class DummyClient(Client):
         client = DummyClient(local_address, dest_address, client_channel)
         client._task = task
         server._tasks.add(task)
-        task.add_done_callback(server._tasks.discard)
+
+        def _discard(t):
+            server._tasks.discard(t)
+            logger.info("Channel exit: %s", server_channel.info)
+
+        task.add_done_callback(_discard)
         return client
 
     @implements(Client.close)
