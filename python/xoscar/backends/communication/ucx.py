@@ -368,7 +368,7 @@ class UCXServer(Server):
     scheme = "ucx"
 
     _ucp_listener: "ucp.Listener"  # type: ignore
-    _channels: List[UCXChannel]
+    _channels: set[UCXChannel]
 
     def __init__(
         self,
@@ -381,7 +381,7 @@ class UCXServer(Server):
         self.host = host
         self.port = port
         self._ucp_listener = ucp_listener
-        self._channels = []
+        self._channels = set()
         self._closed = asyncio.Event()
 
     @classproperty
@@ -469,9 +469,15 @@ class UCXServer(Server):
         channel = UCXChannel(
             ucp_endpoint, local_address=local_address, dest_address=dest_address
         )
-        self._channels.append(channel)
+        self._channels.add(channel)
         # handle over channel to some handlers
-        await self.channel_handler(channel)
+        try:
+            await self.channel_handler(channel)
+        finally:
+            if not channel.closed:
+                await channel.close()
+            # Remove channel if channel exit
+            self._channels.discard(channel)
 
     @implements(Server.stop)
     async def stop(self):
@@ -480,7 +486,7 @@ class UCXServer(Server):
         await asyncio.gather(
             *(channel.close() for channel in self._channels if not channel.closed)
         )
-        self._channels = []
+        self._channels.clear()
         self._ucp_listener = None
         self._closed.set()
 
