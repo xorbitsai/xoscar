@@ -221,7 +221,7 @@ class ActorCaller:
 
     @staticmethod
     def _safe_exit_thread(loop, thread):
-        # To avoid
+        # To avoid _enter_buffered_busy: could not acquire lock
         loop.call_soon_threadsafe(loop.stop)
         thread.join()
 
