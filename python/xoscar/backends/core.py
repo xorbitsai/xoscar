@@ -217,6 +217,7 @@ class ActorCaller:
     _close_loop = asyncio.new_event_loop()
     _close_thread = threading.Thread(target=_close_loop.run_forever, daemon=True)
     _close_thread.start()
+    atexit.register(_close_loop.call_soon_threadsafe, _close_loop.stop)
 
     @staticmethod
     def _safe_exit_thread(loop, thread):
