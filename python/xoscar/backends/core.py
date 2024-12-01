@@ -208,6 +208,40 @@ class ActorCallerThreadLocal:
         _ = [task.cancel() for task in self._clients.values()]
 
 
+def _cancel_all_tasks(loop):
+    to_cancel = asyncio.all_tasks(loop)
+    if not to_cancel:
+        return
+
+    for task in to_cancel:
+        task.cancel()
+
+    loop.run_until_complete(asyncio.gather(*to_cancel, return_exceptions=True))
+
+    for task in to_cancel:
+        if task.cancelled():
+            continue
+        if task.exception() is not None:
+            loop.call_exception_handler(
+                {
+                    "message": "unhandled exception during asyncio.run() shutdown",
+                    "exception": task.exception(),
+                    "task": task,
+                }
+            )
+
+
+def _safe_run_forever(loop):
+    loop.run_forever()
+    _cancel_all_tasks(loop)
+
+
+def _safe_exit_thread(loop, thread):
+    # To avoid _enter_buffered_busy: could not acquire lock
+    loop.call_soon_threadsafe(loop.stop)
+    thread.join()
+
+
 class ActorCaller:
     __slots__ = "_thread_local"
 
@@ -215,16 +249,10 @@ class ActorCaller:
         pass
 
     _close_loop = asyncio.new_event_loop()
-    _close_thread = threading.Thread(target=_close_loop.run_forever, daemon=True)
+    _close_thread = threading.Thread(
+        target=_safe_run_forever, args=(_close_loop,), daemon=True
+    )
     _close_thread.start()
-    atexit.register(_close_loop.call_soon_threadsafe, _close_loop.stop)
-
-    @staticmethod
-    def _safe_exit_thread(loop, thread):
-        # To avoid _enter_buffered_busy: could not acquire lock
-        loop.call_soon_threadsafe(loop.stop)
-        thread.join()
-
     atexit.register(_safe_exit_thread, _close_loop, _close_thread)
 
     def __init__(self):
