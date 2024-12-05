@@ -90,7 +90,9 @@ class SocketChannel(Channel):
                 await self.writer.drain()
         except RuntimeError as e:
             if self.writer.is_closing():
-                raise ChannelClosed("Channel already closed, cannot write message") from e
+                raise ChannelClosed(
+                    "Channel already closed, cannot write message"
+                ) from e
             raise e
 
     @implements(Channel.recv)
