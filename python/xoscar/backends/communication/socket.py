@@ -34,6 +34,7 @@ from ...serialization import AioDeserializer, AioSerializer, deserialize
 from ...utils import classproperty, implements, is_py_312, is_v6_ip
 from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server
+from .errors import ChannelClosed
 from .utils import read_buffers, write_buffers
 
 _is_windows: bool = sys.platform.startswith("win")
@@ -80,12 +81,17 @@ class SocketChannel(Channel):
         serializer = AioSerializer(message, compress=compress)
         buffers = await serializer.run()
 
-        # write buffers
-        write_buffers(self.writer, buffers)
-        async with self._send_lock:
-            # add lock, or when parallel send,
-            # assertion error may be raised
-            await self.writer.drain()
+        try:
+            # write buffers
+            write_buffers(self.writer, buffers)
+            async with self._send_lock:
+                # add lock, or when parallel send,
+                # assertion error may be raised
+                await self.writer.drain()
+        except RuntimeError as e:
+            if self.writer.is_closing():
+                raise ChannelClosed("Channel already closed, cannot write message") from e
+            raise e
 
     @implements(Channel.recv)
     async def recv(self):

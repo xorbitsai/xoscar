@@ -249,12 +249,5 @@ class DummyClient(Client):
     async def close(self):
         await super().close()
         if self._task is not None:
-            task_loop = self._task.get_loop()
-            if task_loop is not None:
-                if not task_loop.is_running():
-                    logger.warning(
-                        "Dummy channel cancel task on a stopped loop, dest address: %s.",
-                        self.dest_address,
-                    )
             self._task.cancel()
             self._task = None
