@@ -196,12 +196,14 @@ class ActorCallerThreadLocal:
         return await self.call_with_client(client, message, wait)
 
     async def stop(self):
-        logger.debug("Actor caller stop.")
         try:
             await asyncio.gather(*[client.close() for client in self._clients])
         except (ConnectionError, ServerClosed):
             pass
-        self.cancel_tasks()
+        try:
+            self.cancel_tasks()
+        except:
+            pass
 
     def cancel_tasks(self):
         # cancel listening for all clients
@@ -232,14 +234,11 @@ def _cancel_all_tasks(loop):
 
 
 def _safe_run_forever(loop):
-    loop.run_forever()
-    _cancel_all_tasks(loop)
-
-
-def _safe_exit_thread(loop, thread):
-    # To avoid _enter_buffered_busy: could not acquire lock
-    loop.call_soon_threadsafe(loop.stop)
-    thread.join()
+    try:
+        loop.run_forever()
+    finally:
+        _cancel_all_tasks(loop)
+        loop.stop()
 
 
 class ActorCaller:
@@ -253,7 +252,7 @@ class ActorCaller:
         target=_safe_run_forever, args=(_close_loop,), daemon=True
     )
     _close_thread.start()
-    atexit.register(_safe_exit_thread, _close_loop, _close_thread)
+    atexit.register(_close_loop.call_soon_threadsafe, _close_loop.stop)
 
     def __init__(self):
         self._thread_local = threading.local()
