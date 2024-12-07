@@ -377,7 +377,7 @@ class AbstractActorPool(ABC):
         try:
             await channel.send(result)
         except (ChannelClosed, ConnectionResetError):
-            if not self._stopped.is_set():
+            if not self._stopped.is_set() and not channel.closed:
                 raise
         except Exception as ex:
             logger.exception(
