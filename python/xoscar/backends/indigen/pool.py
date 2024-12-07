@@ -199,6 +199,7 @@ class MainActorPool(MainActorPoolBase):
                         main_pool_pid,
                     ),
                     name=f"IndigenActorPool{process_index}",
+                    daemon=True,
                 )
                 process.start()
 
@@ -309,6 +310,7 @@ class MainActorPool(MainActorPoolBase):
             raise
         finally:
             status_queue.put(process_status)
+            status_queue.cancel_join_thread()
         await pool.join()
 
     async def append_sub_pool(
@@ -370,6 +372,7 @@ class MainActorPool(MainActorPoolBase):
                     target=self._start_sub_pool,
                     args=(self._config, process_index, status_queue, main_pool_pid),
                     name=f"IndigenActorPool{process_index}",
+                    daemon=True,
                 )
                 process.start()
 
