@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 import concurrent.futures as futures
 import configparser
 import contextlib
@@ -29,6 +30,7 @@ import sys
 import threading
 import uuid
 from dataclasses import dataclass
+from multiprocessing import util
 from types import TracebackType
 from typing import List, Optional
 
@@ -77,6 +79,19 @@ elif sys.version_info[:2] == (3, 6):  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 _init_main_suspended_local = threading.local()
+
+
+def _terminate_children():
+    for c in multiprocessing.active_children():
+        try:
+            c.terminate()
+        except Exception:
+            pass
+
+
+if util:
+    # Import multiprocessing.util to register _exit_function at exit.
+    atexit.register(_terminate_children)
 
 
 def _patch_spawn_get_preparation_data():
@@ -309,6 +324,7 @@ class MainActorPool(MainActorPoolBase):
             raise
         finally:
             status_queue.put(process_status)
+            status_queue.cancel_join_thread()
         await pool.join()
 
     async def append_sub_pool(
