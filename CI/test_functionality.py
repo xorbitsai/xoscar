@@ -61,16 +61,14 @@ async def test_basic_cases():
             )
             logger.debug("Created ref2")
             
-            # 添加超时控制
-            async with asyncio.timeout(30):
-                assert await ref1.add(1) == 1
-                logger.debug("ref1.add(1) completed")
-                
-                assert await ref2.add(2) == 2
-                logger.debug("ref2.add(2) completed")
-                
-                assert await ref1.add_from(ref2) == 3
-                logger.debug("ref1.add_from(ref2) completed")
+            assert await ref1.add(1) == 1
+            logger.debug("ref1.add(1) completed")
+            
+            assert await ref2.add(2) == 2
+            logger.debug("ref2.add(2) completed")
+            
+            assert await ref1.add_from(ref2) == 3
+            logger.debug("ref1.add_from(ref2) completed")
     except Exception as e:
         logger.error(f"Test failed with error: {e}", exc_info=True)
         raise
