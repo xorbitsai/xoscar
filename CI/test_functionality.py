@@ -34,13 +34,13 @@ class MyActor(mo.Actor):
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(60)  # 设置更短的超时时间，以便更快发现问题
+@pytest.mark.timeout(60) 
 async def test_basic_cases():
     logger.debug("Starting test_basic_cases")
     pool = await mo.create_actor_pool(
         "127.0.0.1", 
         n_process=2,
-        subprocess_start_method='spawn'  # 显式指定启动方法
+        subprocess_start_method='spawn'
     )
     logger.debug("Actor pool created")
     
