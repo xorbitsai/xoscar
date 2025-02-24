@@ -41,6 +41,7 @@ from ..core import ListSerializer, Placeholder  # type: ignore
 cupy = lazy_import("cupy")
 cudf = lazy_import("cudf")
 pyfury = lazy_import("pyfury")
+mx = lazy_import("mlx.core")
 
 
 class CustomList(list):
@@ -242,6 +243,16 @@ def test_scipy_sparse():
     val = sps.random(100, 100, 0.1, format="csr")
     deserial = deserialize(*serialize(val))
     assert (val != deserial).nnz == 0
+
+
+@pytest.mark.skipif(mx is None, reason="need mlx to run the test")
+def test_mlx():
+    val = mx.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=mx.float16)
+    serial = serialize(val)
+    deserial = deserialize(*serial)
+    # buffer should have length 1
+    assert len(serial[1]) == 1
+    np.testing.assert_array_equal(np.asarray(val), np.asarray(deserial))
 
 
 class MockSerializerForErrors(ListSerializer):

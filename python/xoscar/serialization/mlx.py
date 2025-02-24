@@ -1,5 +1,4 @@
-# Copyright 2022-2023 XProbe Inc.
-# derived from copyright 1999-2021 Alibaba Group Holding Ltd.
+# Copyright 2022-2025 XProbe Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,8 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import cuda, exception, mlx, numpy, scipy
-from .aio import AioDeserializer, AioSerializer
-from .core import Serializer, deserialize, serialize, serialize_with_spawn
+from typing import Any, List
 
-del cuda, numpy, scipy, mlx, exception
+from ..utils import lazy_import
+from .core import Serializer, buffered
+
+mx = lazy_import("mlx.core")
+
+
+class MLXSerislizer(Serializer):
+    @buffered
+    def serial(self, obj: "mx.array", context: dict):  # type: ignore
+        return ({},), [memoryview(obj)], True
+
+    def deserial(self, serialized: tuple, context: dict, subs: List[Any]):
+        return mx.array(subs[0])
+
+
+if mx is not None:
+    MLXSerislizer.register(mx.array)
