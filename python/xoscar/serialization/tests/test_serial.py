@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import io
 import os
 import threading
 from collections import OrderedDict, defaultdict
@@ -33,9 +34,11 @@ try:
 except ImportError:
     sps = None
 
+from ...aio.file import AioFileObject
 from ...tests.core import require_cudf, require_cupy
 from ...utils import lazy_import
 from .. import deserialize, serialize, serialize_with_spawn
+from ..aio import AioDeserializer, AioSerializer
 from ..core import ListSerializer, Placeholder  # type: ignore
 
 cupy = lazy_import("cupy")
@@ -253,6 +256,28 @@ def test_mlx():
     # buffer should have length 1
     assert len(serial[1]) == 1
     np.testing.assert_array_equal(np.asarray(val), np.asarray(deserial))
+
+
+@pytest.mark.skipif(mx is None, reason="need mlx to run the test")
+@pytest.mark.asyncio
+async def test_serial_deserial_mlx():
+    async def _test(data):
+        buffers = await AioSerializer(data).run()
+        f = AioFileObject(io.BytesIO())
+        for b in buffers:
+            await f.write(b)
+        await f.seek(0)
+        val2 = await AioDeserializer(f).run()
+        np.testing.assert_array_equal(np.asarray(data), np.asarray(val2))
+
+    val = mx.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=mx.float16)
+    await _test(val)
+
+    val2 = val[::1, 1:]
+    await _test(val2)
+
+    val3 = val2 + 1
+    await _test(val3)
 
 
 class MockSerializerForErrors(ListSerializer):
