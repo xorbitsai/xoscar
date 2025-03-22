@@ -36,6 +36,7 @@ class MessageType(Enum):
     cancel = 9
     copy_to_buffers = 10
     copy_to_fileobjs = 11
+    forward = 12  # message forwarded to other pool
 
 class ControlMessageType(Enum):
     stop = 0
@@ -226,6 +227,23 @@ class CancelMessage(_MessageBase):
         message_id: bytes | None = None,
         address: str | None = None,
         cancel_message_id: bytes | None = None,
+        protocol: int = DEFAULT_PROTOCOL,
+        message_trace: list | None = None,
+    ): ...
+
+class ForwardMessage(_MessageBase):
+    message_type = MessageType.forward
+
+    address: str
+    forward_from: list[str]
+    raw_message: _MessageBase
+
+    def __init__(
+        self,
+        message_id: bytes | None = None,
+        address: str | None = None,
+        forward_from: list[str] | None = None,
+        raw_message: _MessageBase | None = None,
         protocol: int = DEFAULT_PROTOCOL,
         message_trace: list | None = None,
     ): ...

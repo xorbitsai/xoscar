@@ -18,6 +18,7 @@ cdef class ActorRef:
     cdef object __weakref__
     cdef public str address
     cdef public object uid
+    cdef public list proxy_addresses
     cdef dict _methods
 
 

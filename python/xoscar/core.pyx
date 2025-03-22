@@ -112,11 +112,12 @@ cdef class ActorRef:
     """
     Reference of an Actor at user side
     """
-    def __init__(self, str address, object uid):
+    def __init__(self, str address, object uid, list proxy_addresses = None):
         if isinstance(uid, str):
             uid = uid.encode()
         self.uid = uid
         self.address = address
+        self.proxy_addresses = proxy_addresses
         self._methods = dict()
 
     def destroy(self, object callback=None):

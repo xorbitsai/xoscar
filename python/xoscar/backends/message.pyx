@@ -47,6 +47,7 @@ class MessageType(Enum):
     cancel = 9
     copy_to_buffers = 10
     copy_to_fileobjs = 11
+    forward = 12
 
 
 class ControlMessageType(Enum):
@@ -533,6 +534,50 @@ cdef class CopyToFileObjectsMessage(CopyToBuffersMessage):
     message_type = MessageType.copy_to_fileobjs
 
 
+cdef class ForwardMessage(_MessageBase):
+    message_type =  MessageType.forward
+
+    cdef:
+        public str address
+        public list forward_from
+        public _MessageBase raw_message
+
+    def __init__(
+        self,
+        bytes message_id = None,
+        str address = None,
+        list forward_from = None,
+        _MessageBase raw_message = None,
+        int protocol = DEFAULT_PROTOCOL,
+        list message_trace = None,
+    ):
+        _MessageBase.__init__(
+            self,
+            message_id,
+            protocol=protocol,
+            message_trace=message_trace
+        )
+        self.address = address
+        self.forward_from = forward_from
+        self.raw_message = raw_message
+
+    cdef _MessageSerialItem serial(self):
+        cdef _MessageSerialItem item = _MessageBase.serial(self)
+        cdef _MessageSerialItem raw_message_serialized = self.raw_message.serial()
+        item.serialized += (self.address, self.forward_from, raw_message_serialized)
+        return item
+
+    cdef deserial_members(self, tuple serialized, list subs):
+        _MessageBase.deserial_members(self, serialized, subs)
+        self.address = serialized[-3]
+        self.forward_from = serialized[-2]
+        cdef _MessageSerialItem serial_item = <_MessageSerialItem>serialized[-1]
+        tp = _message_type_to_message_cls[serial_item.serialized[0]]
+        cdef _MessageBase raw_message = <_MessageBase>(tp())
+        raw_message.deserial_members(serial_item.serialized, serial_item.subs)
+        self.raw_message = raw_message
+
+
 cdef dict _message_type_to_message_cls = {
     MessageType.control.value: ControlMessage,
     MessageType.result.value: ResultMessage,
@@ -545,7 +590,8 @@ cdef dict _message_type_to_message_cls = {
     MessageType.tell.value: TellMessage,
     MessageType.cancel.value: CancelMessage,
     MessageType.copy_to_buffers.value: CopyToBuffersMessage,
-    MessageType.copy_to_fileobjs.value: CopyToFileObjectsMessage
+    MessageType.copy_to_fileobjs.value: CopyToFileObjectsMessage,
+    MessageType.forward.value: ForwardMessage,
 }
 
 
