@@ -33,6 +33,8 @@ class ActorPoolConfig:
             self._conf["metrics"] = dict()
         if "comm" not in self._conf:
             self._conf["comm"] = dict()
+        if "proxy" not in self._conf:
+            self._conf["proxy"] = dict()
 
     @property
     def n_pool(self):
@@ -143,3 +145,27 @@ class ActorPoolConfig:
 
     def get_comm_config(self) -> dict:
         return self._conf["comm"]
+
+    def get_proxy_config(self) -> dict:
+        return self._conf["proxy"]
+
+    def add_proxy(self, from_addr: str, to_addr: str):
+        self._conf["proxy"][from_addr] = to_addr
+
+    def remove_proxy(self, from_addr: str):
+        del self._conf["proxy"][from_addr]
+
+    def get_proxy(self, from_addr: str) -> str | None:
+        proxy_map = self._conf["proxy"]
+        host = from_addr.split(":", 1)[0]
+
+        if addr := proxy_map.get(from_addr):
+            return addr
+        elif addr := proxy_map.get(host):
+            # host match
+            return addr
+        elif addr := proxy_map.get("*"):
+            # wildcard that matches all addresses
+            return addr
+        else:
+            return None

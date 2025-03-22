@@ -235,14 +235,12 @@ class ForwardMessage(_MessageBase):
     message_type = MessageType.forward
 
     address: str
-    forward_from: list[str]
     raw_message: _MessageBase
 
     def __init__(
         self,
         message_id: bytes | None = None,
         address: str | None = None,
-        forward_from: list[str] | None = None,
         raw_message: _MessageBase | None = None,
         protocol: int = DEFAULT_PROTOCOL,
         message_trace: list | None = None,

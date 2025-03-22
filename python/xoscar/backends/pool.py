@@ -62,6 +62,7 @@ from .message import (
     CreateActorMessage,
     DestroyActorMessage,
     ErrorMessage,
+    ForwardMessage,
     HasActorMessage,
     MessageType,
     ResultMessage,
@@ -123,6 +124,7 @@ def _register_message_handler(pool_type: Type["AbstractActorPool"]):
         (MessageType.send, pool_type.send),
         (MessageType.tell, pool_type.tell),
         (MessageType.cancel, pool_type.cancel),
+        (MessageType.forward, pool_type.forward),
         (MessageType.control, pool_type.handle_control_command),
         (MessageType.copy_to_buffers, pool_type.handle_copy_to_buffers_message),
         (MessageType.copy_to_fileobjs, pool_type.handle_copy_to_fileobjs_message),
@@ -311,6 +313,22 @@ class AbstractActorPool(ABC):
             result or error message
         """
 
+    async def forward(self, message: ForwardMessage) -> ResultMessageType:
+        """
+        Forward message
+
+        Parameters
+        ----------
+        message: ForwardMessage
+            Forward message.
+
+        Returns
+        -------
+        result_message
+            result or error message
+        """
+        return await self.call(message.address, message.raw_message)
+
     def _sync_pool_config(self, actor_pool_config: ActorPoolConfig):
         self._config = actor_pool_config
         # remove router from global one
@@ -426,6 +444,22 @@ class AbstractActorPool(ABC):
         await self._send_channel(processor.result, channel)
 
     async def call(self, dest_address: str, message: _MessageBase) -> ResultMessageType:
+        # handle proxy
+        proxy_address = self._config.get_proxy(dest_address)
+        if (
+            proxy_address
+            and proxy_address != self.external_address
+            and not isinstance(message, ControlMessage)
+        ):
+            # send to proxy when:
+            # 1. proxy address exists
+            # 2, ignore control message, control message is used internally, no chance to forward
+            # wrap message with ForwardMessage
+            new_message = ForwardMessage(
+                new_message_id(), address=dest_address, raw_message=message
+            )
+            return await self._caller.call(self._router, proxy_address, new_message)
+
         return await self._caller.call(self._router, dest_address, message)  # type: ignore
 
     @staticmethod

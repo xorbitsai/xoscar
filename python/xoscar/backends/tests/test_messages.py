@@ -25,8 +25,7 @@ def test_serial_forward_message():
     )
     forward_message = ForwardMessage(
         message_id=new_message_id(),
-        address="127.0.0.1:1111",
-        forward_from=["127.0.0.1:1112"],
+        address="127.0.0.1:1112",
         raw_message=send_message,
     )
 
@@ -34,7 +33,6 @@ def test_serial_forward_message():
     assert id(forward_message) != id(forward_message2)
     assert forward_message.message_id == forward_message2.message_id
     assert forward_message.address == forward_message2.address
-    assert forward_message.forward_from == forward_message2.forward_from
     assert id(forward_message.raw_message) != id(forward_message2.raw_message)
     assert (
         forward_message.raw_message.actor_ref == forward_message2.raw_message.actor_ref
