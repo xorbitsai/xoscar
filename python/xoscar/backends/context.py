@@ -41,6 +41,7 @@ from .message import (
     CreateActorMessage,
     DestroyActorMessage,
     ErrorMessage,
+    ForwardMessage,
     HasActorMessage,
     ResultMessage,
     SendMessage,
@@ -71,12 +72,40 @@ class IndigenActorContext(BaseActorContext):
     def __del__(self):
         self._caller.cancel_tasks()
 
+    @staticmethod
+    def get_address_and_message(
+        router: Router,
+        address: str,
+        message: _MessageBase,
+        actor_ref: ActorRef | None = None,
+    ) -> tuple[str, _MessageBase]:
+        if actor_ref and actor_ref.proxy_addresses:
+            forward_message = ForwardMessage(
+                message_id=new_message_id(), address=address, raw_message=message
+            )
+            return actor_ref.proxy_addresses[-1], forward_message
+
+        proxy_address = router.get_proxy(address)
+        if proxy_address and proxy_address != address:
+            forward_message = ForwardMessage(
+                message_id=new_message_id(), address=address, raw_message=message
+            )
+            return proxy_address, forward_message
+        else:
+            return address, message
+
     async def _call(
-        self, address: str, message: _MessageBase, wait: bool = True
+        self,
+        address: str,
+        message: _MessageBase,
+        wait: bool = True,
+        actor_ref: ActorRef | None = None,
     ) -> Union[ResultMessage, ErrorMessage, asyncio.Future]:
-        return await self._caller.call(
-            Router.get_instance_or_empty(), address, message, wait=wait
+        router = Router.get_instance_or_empty()
+        address, message = self.get_address_and_message(
+            router, address, message, actor_ref=actor_ref
         )
+        return await self._caller.call(router, address, message, wait=wait)
 
     async def _call_with_client(
         self, client: Client, message: _MessageBase, wait: bool = True
@@ -146,7 +175,9 @@ class IndigenActorContext(BaseActorContext):
         message = HasActorMessage(
             new_message_id(), actor_ref, protocol=DEFAULT_PROTOCOL
         )
-        future = await self._call(actor_ref.address, message, wait=False)
+        future = await self._call(
+            actor_ref.address, message, wait=False, actor_ref=actor_ref
+        )
         result = await self._wait(future, actor_ref.address, message)  # type: ignore
         return self._process_result_message(result)
 
@@ -154,7 +185,9 @@ class IndigenActorContext(BaseActorContext):
         message = DestroyActorMessage(
             new_message_id(), actor_ref, protocol=DEFAULT_PROTOCOL
         )
-        future = await self._call(actor_ref.address, message, wait=False)
+        future = await self._call(
+            actor_ref.address, message, wait=False, actor_ref=actor_ref
+        )
         result = await self._wait(future, actor_ref.address, message)  # type: ignore
         return self._process_result_message(result)
 
@@ -168,7 +201,7 @@ class IndigenActorContext(BaseActorContext):
             protocol=DEFAULT_PROTOCOL,
         )
         main_address = self._process_result_message(
-            await self._call(actor_ref.address, control_message)  # type: ignore
+            await self._call(actor_ref.address, control_message, actor_ref=actor_ref)  # type: ignore
         )
         real_actor_ref = await self.actor_ref(actor_ref)
         if real_actor_ref.address == main_address:
@@ -182,7 +215,7 @@ class IndigenActorContext(BaseActorContext):
             protocol=DEFAULT_PROTOCOL,
         )
         # stop server
-        result = await self._call(main_address, stop_message)
+        result = await self._call(main_address, stop_message, actor_ref=actor_ref)
         return self._process_result_message(result)  # type: ignore
 
     async def actor_ref(self, *args, **kwargs):
@@ -194,7 +227,9 @@ class IndigenActorContext(BaseActorContext):
         message = ActorRefMessage(
             new_message_id(), actor_ref, protocol=DEFAULT_PROTOCOL
         )
-        future = await self._call(actor_ref.address, message, wait=False)
+        future = await self._call(
+            actor_ref.address, message, wait=False, actor_ref=actor_ref
+        )
         result = await self._wait(future, actor_ref.address, message)
         res = self._process_result_message(result)
         if res.address != connect_addr:
@@ -225,7 +260,9 @@ class IndigenActorContext(BaseActorContext):
             actor_ref.address,
         ):
             detect_cycle_send(send_message, wait_response)
-            future = await self._call(actor_ref.address, send_message, wait=False)
+            future = await self._call(
+                actor_ref.address, send_message, wait=False, actor_ref=actor_ref
+            )
             if wait_response:
                 result = await self._wait(future, actor_ref.address, send_message)  # type: ignore
                 return self._process_result_message(result)
@@ -315,6 +352,8 @@ class IndigenActorContext(BaseActorContext):
     async def _get_client(self, address: str) -> Client:
         router = Router.get_instance()
         assert router is not None, "`copy_to` can only be used inside pools"
+        if router.get_proxy(address):
+            raise RuntimeError("Cannot run `copy_to` when enabling proxy")
         return await self._get_copy_to_client(router, address)
 
     async def copy_to_buffers(

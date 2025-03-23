@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .utils import get_proxies, get_proxy
+
 
 class ActorPoolConfig:
     __slots__ = ("_conf",)
@@ -157,15 +159,7 @@ class ActorPoolConfig:
 
     def get_proxy(self, from_addr: str) -> str | None:
         proxy_map = self._conf["proxy"]
-        host = from_addr.split(":", 1)[0]
+        return get_proxy(proxy_map, from_addr)
 
-        if addr := proxy_map.get(from_addr):
-            return addr
-        elif addr := proxy_map.get(host):
-            # host match
-            return addr
-        elif addr := proxy_map.get("*"):
-            # wildcard that matches all addresses
-            return addr
-        else:
-            return None
+    def get_proxies(self, from_addr: str) -> list[str] | None:
+        return get_proxies(self._conf["proxy"], from_addr)

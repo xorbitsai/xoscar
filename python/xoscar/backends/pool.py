@@ -477,6 +477,7 @@ class AbstractActorPool(ABC):
             gen_local_address(process_index),
             actor_pool_config.external_to_internal_address_map,
             comm_config=actor_pool_config.get_comm_config(),
+            proxy_config=actor_pool_config.get_proxy_config(),
         )
         kw["env"] = curr_pool_config["env"]
 
@@ -681,9 +682,10 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
             actor_id = message.actor_ref.uid
             if actor_id not in self._actors:
                 raise ActorNotExist(f"Actor {actor_id} does not exist")
+            proxies = self._config.get_proxies(self.external_address)
             result = ResultMessage(
                 message.message_id,
-                ActorRef(self.external_address, actor_id),
+                ActorRef(self.external_address, actor_id, proxy_addresses=proxies),
                 protocol=message.protocol,
             )
             processor.result = result
@@ -796,6 +798,7 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
                 gen_local_address(process_index),
                 actor_pool_config.external_to_internal_address_map,
                 comm_config=actor_pool_config.get_comm_config(),
+                proxy_config=actor_pool_config.get_proxy_config(),
             )
 
     @classmethod
@@ -1189,6 +1192,7 @@ class MainActorPoolBase(ActorPoolBase):
         actor_ref = message.actor_ref
         actor_ref.uid = to_binary(actor_ref.uid)
         if actor_ref.address == self.external_address and actor_ref.uid in self._actors:
+            actor_ref.proxy_addresses = self._config.get_proxies(actor_ref.address)
             return ResultMessage(
                 message.message_id, actor_ref, protocol=message.protocol
             )
@@ -1197,6 +1201,7 @@ class MainActorPoolBase(ActorPoolBase):
         for address, item in self._allocated_actors.items():
             ref = create_actor_ref(address, actor_ref.uid)
             if ref in item:
+                ref.proxy_addresses = self._config.get_proxies(ref.address)
                 return ResultMessage(message.message_id, ref, protocol=message.protocol)
 
         with _ErrorProcessor(

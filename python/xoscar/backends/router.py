@@ -20,6 +20,7 @@ import threading
 from typing import Any, Dict, List, Optional, Type
 
 from .communication import Client, get_client_type
+from .utils import get_proxies, get_proxy
 
 
 class Router:
@@ -32,6 +33,7 @@ class Router:
         "_local_mapping",
         "_mapping",
         "_comm_config",
+        "_proxy_config",
         "_cache_local",
     )
 
@@ -56,6 +58,7 @@ class Router:
         local_address: str | None,
         mapping: dict[str, str] | None = None,
         comm_config: dict | None = None,
+        proxy_config: dict | None = None,
     ):
         self._curr_external_addresses = external_addresses
         self._local_mapping = dict()
@@ -65,6 +68,7 @@ class Router:
             mapping = dict()
         self._mapping = mapping
         self._comm_config = comm_config or dict()
+        self._proxy_config = proxy_config or dict()
         self._cache_local = threading.local()
 
     @property
@@ -92,6 +96,7 @@ class Router:
         self._local_mapping.update(router._local_mapping)
         self._mapping.update(router._mapping)
         self._comm_config.update(router._comm_config)
+        self._proxy_config.update(router._proxy_config)
         self._cache_local = threading.local()
 
     def remove_router(self, router: "Router"):
@@ -205,3 +210,9 @@ class Router:
             if cached:
                 self._cache[external_address, from_who, client_type] = client
             return client
+
+    def get_proxy(self, from_addr: str) -> str | None:
+        return get_proxy(self._proxy_config, from_addr)
+
+    def get_proxies(self, from_addr: str) -> list[str] | None:
+        return get_proxies(self._proxy_config, from_addr)
