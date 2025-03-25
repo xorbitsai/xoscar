@@ -21,6 +21,7 @@ import pytest
 import xoscar as xo
 
 from ....utils import get_next_port
+from ...router import Router
 
 
 @pytest.fixture
@@ -47,10 +48,10 @@ async def actor_pools():
     )
     await pool2.start()
     try:
-        yield pool1, pool2
+        async with pool1, pool2:
+            yield pool1, pool2
     finally:
-        await pool1.stop()
-        await pool2.stop()
+        Router.set_instance(None)
 
 
 class TestActor(xo.Actor):
