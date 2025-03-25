@@ -456,7 +456,7 @@ class AbstractActorPool(ABC):
             # 2, ignore control message, control message is used internally, no chance to forward
             # wrap message with ForwardMessage
             new_message = ForwardMessage(
-                new_message_id(), address=dest_address, raw_message=message
+                message_id=message.message_id, address=dest_address, raw_message=message
             )
             return await self._caller.call(self._router, proxy_address, new_message)
 
@@ -640,7 +640,8 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
             self._actors[actor_id] = actor
             await self._run_coro(message.message_id, actor.__post_create__())
 
-            result = ActorRef(address, actor_id)
+            proxies = self._config.get_proxies(address)
+            result = ActorRef(address, actor_id, proxy_addresses=proxies)
             # ensemble result message
             processor.result = ResultMessage(
                 message.message_id, result, protocol=message.protocol
@@ -1542,6 +1543,7 @@ async def create_actor_pool(
     suspend_sigint: bool | None = None,
     use_uvloop: str | bool = "auto",
     logging_conf: dict | None = None,
+    proxy_conf: dict | None = None,
     on_process_down: Callable[[MainActorPoolType, str], None] | None = None,
     on_process_recover: Callable[[MainActorPoolType, str], None] | None = None,
     extra_conf: dict | None = None,
@@ -1588,6 +1590,8 @@ async def create_actor_pool(
     )
     actor_pool_config = ActorPoolConfig()
     actor_pool_config.add_metric_configs(kwargs.get("metrics", {}))
+    # add proxy config
+    actor_pool_config.add_proxy_config(proxy_conf)
     # add main config
     process_index_gen = pool_cls.process_index_gen(address)
     main_process_index = next(process_index_gen)

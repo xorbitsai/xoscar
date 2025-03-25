@@ -18,16 +18,16 @@ from __future__ import annotations
 def get_proxy(proxy_map: dict[str, str], from_addr: str) -> str | None:
     host = from_addr.split(":", 1)[0]
 
-    if addr := proxy_map.get(from_addr):
+    addr = proxy_map.get(from_addr)
+    if addr and addr != from_addr:
         return addr
-    elif addr := proxy_map.get(host):
-        # host match
+    addr = proxy_map.get(host)
+    if addr and addr != from_addr:
         return addr
-    elif addr := proxy_map.get("*"):
-        # wildcard that matches all addresses
+    addr = proxy_map.get("*")
+    if addr and addr != from_addr:
         return addr
-    else:
-        return None
+    return None
 
 
 def get_proxies(proxy_map: dict[str, str], from_addr: str) -> list[str] | None:

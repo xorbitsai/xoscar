@@ -351,13 +351,14 @@ cdef class DestroyActorMessage(_MessageBase):
     cdef _MessageSerialItem serial(self):
         cdef _MessageSerialItem item = _MessageBase.serial(self)
         item.serialized += (
-            self.actor_ref.address, self.actor_ref.uid, self.from_main
+            self.actor_ref.address, self.actor_ref.uid,
+            self.actor_ref.proxy_addresses, self.from_main
         )
         return item
 
     cdef deserial_members(self, tuple serialized, list subs):
         _MessageBase.deserial_members(self, serialized, subs)
-        self.actor_ref = ActorRef(serialized[-3], serialized[-2])
+        self.actor_ref = ActorRef(serialized[-4], serialized[-3], serialized[-2])
         self.from_main = serialized[-1]
 
 
@@ -382,13 +383,13 @@ cdef class HasActorMessage(_MessageBase):
     cdef _MessageSerialItem serial(self):
         cdef _MessageSerialItem item = _MessageBase.serial(self)
         item.serialized += (
-            self.actor_ref.address, self.actor_ref.uid
+            self.actor_ref.address, self.actor_ref.uid, self.actor_ref.proxy_addresses
         )
         return item
 
     cdef deserial_members(self, tuple serialized, list subs):
         _MessageBase.deserial_members(self, serialized, subs)
-        self.actor_ref = ActorRef(serialized[-2], serialized[-1])
+        self.actor_ref = ActorRef(serialized[-3], serialized[-2], serialized[-1])
 
 
 cdef class ActorRefMessage(_MessageBase):
@@ -412,13 +413,13 @@ cdef class ActorRefMessage(_MessageBase):
     cdef _MessageSerialItem serial(self):
         cdef _MessageSerialItem item = _MessageBase.serial(self)
         item.serialized += (
-            self.actor_ref.address, self.actor_ref.uid
+            self.actor_ref.address, self.actor_ref.uid, self.actor_ref.proxy_addresses
         )
         return item
 
     cdef deserial_members(self, tuple serialized, list subs):
         _MessageBase.deserial_members(self, serialized, subs)
-        self.actor_ref = ActorRef(serialized[-2], serialized[-1])
+        self.actor_ref = ActorRef(serialized[-3], serialized[-2], serialized[-1])
 
 
 cdef class SendMessage(_MessageBase):
@@ -450,14 +451,14 @@ cdef class SendMessage(_MessageBase):
     cdef _MessageSerialItem serial(self):
         cdef _MessageSerialItem item = _MessageBase.serial(self)
         item.serialized += (
-            self.actor_ref.address, self.actor_ref.uid
+            self.actor_ref.address, self.actor_ref.uid, self.actor_ref.proxy_addresses
         )
         item.subs = [self.content]
         return item
 
     cdef deserial_members(self, tuple serialized, list subs):
         _MessageBase.deserial_members(self, serialized, subs)
-        self.actor_ref = ActorRef(serialized[-2], serialized[-1])
+        self.actor_ref = ActorRef(serialized[-3], serialized[-2], serialized[-1])
         self.content = subs[0]
 
 
@@ -561,16 +562,20 @@ cdef class ForwardMessage(_MessageBase):
     cdef _MessageSerialItem serial(self):
         cdef _MessageSerialItem item = _MessageBase.serial(self)
         cdef _MessageSerialItem raw_message_serialized = self.raw_message.serial()
-        item.serialized += (self.address, raw_message_serialized)
+        item.serialized += (self.address,)
+        item.serialized += raw_message_serialized.serialized
+        item.subs += raw_message_serialized.subs
         return item
 
     cdef deserial_members(self, tuple serialized, list subs):
-        _MessageBase.deserial_members(self, serialized, subs)
-        self.address = serialized[-2]
-        cdef _MessageSerialItem serial_item = <_MessageSerialItem>serialized[-1]
-        tp = _message_type_to_message_cls[serial_item.serialized[0]]
+        # 5 is magic number that means serialized for _MessageBase
+        base_serialized = serialized[:5]
+        _MessageBase.deserial_members(self, base_serialized, [])
+        self.address = serialized[5]
+        # process raw message
+        tp = _message_type_to_message_cls[serialized[6]]
         cdef _MessageBase raw_message = <_MessageBase>(tp())
-        raw_message.deserial_members(serial_item.serialized, serial_item.subs)
+        raw_message.deserial_members(serialized[6:], subs)
         self.raw_message = raw_message
 
 

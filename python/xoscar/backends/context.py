@@ -81,14 +81,14 @@ class IndigenActorContext(BaseActorContext):
     ) -> tuple[str, _MessageBase]:
         if actor_ref and actor_ref.proxy_addresses:
             forward_message = ForwardMessage(
-                message_id=new_message_id(), address=address, raw_message=message
+                message_id=message.message_id, address=address, raw_message=message
             )
             return actor_ref.proxy_addresses[-1], forward_message
 
         proxy_address = router.get_proxy(address)
         if proxy_address and proxy_address != address:
             forward_message = ForwardMessage(
-                message_id=new_message_id(), address=address, raw_message=message
+                message_id=message.message_id, address=address, raw_message=message
             )
             return proxy_address, forward_message
         else:

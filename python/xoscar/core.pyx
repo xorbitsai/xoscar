@@ -95,7 +95,7 @@ cpdef create_local_actor_ref(address, uid):
     return None
 
 
-cpdef create_actor_ref(address, uid):
+cpdef create_actor_ref(address, uid, list proxy_addresses = None):
     """
     Create an actor reference.
     TODO(fyrestone): Remove the create_actor_ref in _utils.pyx
@@ -105,7 +105,8 @@ cpdef create_actor_ref(address, uid):
     ActorRef or LocalActorRef
     """
     actor = _get_local_actor(address, uid)
-    return ActorRef(address, uid) if actor is None else LocalActorRef(actor)
+    return ActorRef(address, uid, proxy_addresses=proxy_addresses) \
+        if actor is None else LocalActorRef(actor)
 
 
 cdef class ActorRef:
@@ -125,7 +126,7 @@ cdef class ActorRef:
         return ctx.destroy_actor(self)
 
     def __reduce__(self):
-        return create_actor_ref, (self.address, self.uid)
+        return create_actor_ref, (self.address, self.uid, self.proxy_addresses)
 
     def __getattr__(self, item):
         if item.startswith('_') and item not in ["__xoscar_next__", "__xoscar_destroy_generator__"]:
@@ -147,7 +148,11 @@ cdef class ActorRef:
         return False
 
     def __repr__(self):
-        return 'ActorRef(uid={!r}, address={!r})'.format(self.uid, self.address)
+        if not self.proxy_addresses:
+            return 'ActorRef(uid={!r}, address={!r})'.format(self.uid, self.address)
+        else:
+            return (f"ActorRef(uid={self.uid}, address={self.address}, "
+                    f"proxy_addresses={self.proxy_addresses})")
 
 
 cdef class _DelayedArgument:

@@ -20,7 +20,9 @@ from ..message import ForwardMessage, SendMessage, new_message_id
 def test_serial_forward_message():
     send_message = SendMessage(
         message_id=new_message_id(),
-        actor_ref=create_actor_ref("127.0.0.1:1111", "MyActor"),
+        actor_ref=create_actor_ref(
+            "127.0.0.1:1111", "MyActor", proxy_addresses=["127.0.0.1:1112"]
+        ),
         content="sth",
     )
     forward_message = ForwardMessage(
@@ -29,6 +31,8 @@ def test_serial_forward_message():
         raw_message=send_message,
     )
 
+    print(deserialize(*serialize(send_message)))
+
     forward_message2 = deserialize(*serialize(forward_message))
     assert id(forward_message) != id(forward_message2)
     assert forward_message.message_id == forward_message2.message_id
@@ -36,5 +40,9 @@ def test_serial_forward_message():
     assert id(forward_message.raw_message) != id(forward_message2.raw_message)
     assert (
         forward_message.raw_message.actor_ref == forward_message2.raw_message.actor_ref
+    )
+    assert (
+        forward_message.raw_message.actor_ref.proxy_addresses
+        == forward_message2.raw_message.actor_ref.proxy_addresses
     )
     assert forward_message.raw_message.content == forward_message2.raw_message.content

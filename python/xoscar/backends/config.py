@@ -151,8 +151,9 @@ class ActorPoolConfig:
     def get_proxy_config(self) -> dict:
         return self._conf["proxy"]
 
-    def add_proxy(self, from_addr: str, to_addr: str):
-        self._conf["proxy"][from_addr] = to_addr
+    def add_proxy_config(self, proxy_config: dict[str, str] | None):
+        if proxy_config:
+            self._conf["proxy"].update(proxy_config)
 
     def remove_proxy(self, from_addr: str):
         del self._conf["proxy"][from_addr]
