@@ -24,7 +24,7 @@ from ....utils import get_next_port
 
 
 @pytest.fixture
-async def patched_actor_pools():
+async def actor_pools():
     start_method = (
         os.environ.get("POOL_START_METHOD", "forkserver")
         if sys.platform != "win32"
@@ -83,8 +83,8 @@ class CallerActor(xo.Actor):
 
 
 @pytest.mark.asyncio
-async def test_client(patched_actor_pools):
-    pool1, pool2 = patched_actor_pools
+async def test_client(actor_pools):
+    pool1, pool2 = actor_pools
 
     actor_ref = await xo.create_actor(
         TestActor,
