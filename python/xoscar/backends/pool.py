@@ -449,7 +449,7 @@ class AbstractActorPool(ABC):
         if (
             proxy_address
             and proxy_address != self.external_address
-            and not isinstance(message, ControlMessage)
+            and message.message_type != MessageType.control
         ):
             # send to proxy when:
             # 1. proxy address exists
