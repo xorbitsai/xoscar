@@ -31,8 +31,6 @@ def test_serial_forward_message():
         raw_message=send_message,
     )
 
-    print(deserialize(*serialize(send_message)))
-
     forward_message2 = deserialize(*serialize(forward_message))
     assert id(forward_message) != id(forward_message2)
     assert forward_message.message_id == forward_message2.message_id
