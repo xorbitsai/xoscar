@@ -279,6 +279,10 @@ async def test_serial_deserial_mlx():
     val3 = val2 + 1
     await _test(val3)
 
+    val4 = val.transpose()
+    assert memoryview(val4).f_contiguous
+    await _test(val4)
+
 
 class MockSerializerForErrors(ListSerializer):
     serializer_id = 25951
