@@ -17,13 +17,13 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Optional, Type
 
 from .communication import Client, get_client_type
 
 _CACHE_KEY_TYPE = (
     tuple[str, Any, Optional[Type[Client]]]
-    | tuple[str, Any, Optional[Type[Client]], tuple[str, ...] | None]
+    | tuple[str, Any, Optional[Type[Client]], Optional[tuple[str, ...]]]
 )
 
 
@@ -188,7 +188,7 @@ class Router:
 
     def _get_client_type_to_addresses(
         self, external_address: str
-    ) -> Dict[Type[Client], str]:
+    ) -> dict[Type[Client], str]:
         client_type_to_addresses = dict()
         client_type_to_addresses[get_client_type(external_address)] = external_address
         if external_address in self._curr_external_addresses:  # pragma: no cover
@@ -203,7 +203,7 @@ class Router:
             client_type_to_addresses[client_type] = addr  # type: ignore
         return client_type_to_addresses
 
-    def get_all_client_types(self, external_address: str) -> List[Type[Client]]:
+    def get_all_client_types(self, external_address: str) -> list[Type[Client]]:
         return list(self._get_client_type_to_addresses(external_address))
 
     async def get_client_via_type(

@@ -31,6 +31,7 @@ from .message import (
     DeserializeMessageFailed,
     ErrorMessage,
     ForwardMessage,
+    MessageType,
     ResultMessage,
     _MessageBase,
 )
@@ -212,6 +213,7 @@ class ActorCallerThreadLocal:
         if (
             client.channel_type == ChannelType.remote
             and client.dest_address != dest_address
+            and message.message_type != MessageType.control
         ):
             # wrap message with forward message
             message = ForwardMessage(
