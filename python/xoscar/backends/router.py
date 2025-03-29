@@ -17,14 +17,14 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from typing import Any, Optional, Type
+from typing import Any, Optional, Type, Union
 
 from .communication import Client, get_client_type
 
-_CACHE_KEY_TYPE = (
-    tuple[str, Any, Optional[Type[Client]]]
-    | tuple[str, Any, Optional[Type[Client]], Optional[tuple[str, ...]]]
-)
+_CACHE_KEY_TYPE = Union[
+    tuple[str, Any, Optional[Type[Client]]],
+    tuple[str, Any, Optional[Type[Client]], Optional[tuple[str, ...]]],
+]
 
 
 class Router:
