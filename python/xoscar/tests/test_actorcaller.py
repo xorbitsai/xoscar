@@ -18,6 +18,7 @@ from unittest import mock
 
 import pytest
 
+from ..backends.communication import ChannelType
 from ..backends.core import ActorCaller
 from ..backends.router import Router
 from ..errors import ServerClosed
@@ -32,6 +33,7 @@ async def test_send_when_close(fake_get_client):
             self.send_num = 0
             self._messages = asyncio.Queue()
             self.dest_address = "test"
+            self.channel_type = ChannelType.local
 
         async def send(self, message):
             await self._messages.put(message)

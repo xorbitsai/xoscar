@@ -315,7 +315,11 @@ class SocketClient(Client):
         except asyncio.TimeoutError:
             raise ConnectionError("connect timeout")
         channel = SocketChannel(
-            reader, writer, local_address=local_address, dest_address=dest_address
+            reader,
+            writer,
+            local_address=local_address,
+            dest_address=dest_address,
+            channel_type=ChannelType.remote,
         )
         return SocketClient(local_address, dest_address, channel)
 
@@ -431,6 +435,10 @@ class UnixSocketClient(Client):
                 "Cannot connect unix socket due to file not exists"
             )
         channel = SocketChannel(
-            reader, writer, local_address=local_address, dest_address=dest_address
+            reader,
+            writer,
+            local_address=local_address,
+            dest_address=dest_address,
+            channel_type=ChannelType.ipc,
         )
         return UnixSocketClient(local_address, dest_address, channel)
