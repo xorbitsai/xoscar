@@ -13,9 +13,11 @@
 # limitations under the License.
 
 import asyncio
+import multiprocessing
 import os
 import sys
 
+import psutil
 import pytest
 
 import xoscar as xo
@@ -24,34 +26,58 @@ from ....utils import get_next_port
 from ...router import Router
 
 
-@pytest.fixture
-async def actor_pools():
+async def _run_actor_pool(started, address, proxy_config):
     start_method = (
         os.environ.get("POOL_START_METHOD", "forkserver")
         if sys.platform != "win32"
         else None
     )
-    addr1 = f"127.0.0.1:{get_next_port()}"
-    pool1 = await xo.create_actor_pool(
-        addr1,
+    pool = await xo.create_actor_pool(
+        address,
         n_process=2,
         subprocess_start_method=start_method,
-        proxy_conf={"127.0.0.1": addr1},
+        proxy_conf=proxy_config,
     )
-    await pool1.start()
-    addr2 = f"127.0.0.1:{get_next_port()}"
-    pool2 = await xo.create_actor_pool(
-        addr2,
-        n_process=1,
-        subprocess_start_method=start_method,
-        proxy_conf={"127.0.0.1": addr2},
-    )
-    await pool2.start()
+    await pool.start()
+    started.set()
+    await pool.join()
+
+
+def _run_in_process(started, address, proxy_config):
+    asyncio.run(_run_actor_pool(started, address, proxy_config))
+
+
+@pytest.fixture
+async def actor_pools():
+    addrs = addr1, addr2, addr3 = [f"127.0.0.1:{get_next_port()}" for _ in range(3)]
+    processes = []
     try:
-        async with pool1, pool2:
-            yield pool1, pool2
+        for addr in addrs:
+            proxy_conf = {
+                "127.0.0.1": addr,
+            }
+            if addr == addr1:
+                proxy_conf[addr3] = addr2
+            elif addr == addr3:
+                proxy_conf[addr1] = addr2
+            s = multiprocessing.Event()
+            p = multiprocessing.Process(
+                target=_run_in_process, args=(s, addr, proxy_conf)
+            )
+            p.start()
+            s.wait()
+
+            ps = psutil.Process(p.pid).children()
+            processes.extend(ps)
+
+        yield addr1, addr3
     finally:
         Router.set_instance(None)
+        for p in processes:
+            try:
+                p.kill()
+            except:
+                continue
 
 
 class TestActor(xo.Actor):
@@ -82,14 +108,19 @@ class CallerActor(xo.Actor):
         assert ref.proxy_addresses
         return getattr(ref, method)(*args, **kwargs)
 
+    async def call2(self, address, uid, method, *args, **kwargs):
+        ref = await xo.actor_ref(address, uid)
+        assert ref.proxy_addresses
+        return getattr(ref, method)(*args, **kwargs)
+
 
 @pytest.mark.asyncio
 async def test_client(actor_pools):
-    pool1, pool2 = actor_pools
+    addr1, addr2 = actor_pools
 
     actor_ref = await xo.create_actor(
         TestActor,
-        address=pool1.external_address,
+        address=addr1,
         uid="test",
         allocate_strategy=xo.allocate_strategy.RandomSubPool(),
     )
@@ -102,7 +133,7 @@ async def test_client(actor_pools):
     await actor_ref.acc.tell()
     assert await actor_ref.get() == 1
 
-    actor_ref2 = await xo.actor_ref(pool1.external_address, "test")
+    actor_ref2 = await xo.actor_ref(addr1, "test")
     assert actor_ref2 == actor_ref
     assert actor_ref2.proxy_addresses == actor_ref.proxy_addresses
 
@@ -115,7 +146,7 @@ async def test_client(actor_pools):
     caller_ref = await xo.create_actor(
         CallerActor,
         actor_ref,
-        address=pool2.external_address,
+        address=addr2,
         uid="caller",
         allocate_strategy=xo.allocate_strategy.RandomSubPool(),
     )
@@ -125,3 +156,4 @@ async def test_client(actor_pools):
 
     await caller_ref.call("acc")
     assert await caller_ref.call("get") == 2
+    assert await caller_ref.call2(actor_ref.address, actor_ref.uid, "get") == 2

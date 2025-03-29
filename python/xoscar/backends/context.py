@@ -79,11 +79,18 @@ class IndigenActorContext(BaseActorContext):
         message: _MessageBase,
         actor_ref: ActorRef | None = None,
     ) -> tuple[str, _MessageBase]:
+        if address == router.external_address:
+            return address, message
+
         if actor_ref and actor_ref.proxy_addresses:
             forward_message = ForwardMessage(
                 message_id=message.message_id, address=address, raw_message=message
             )
-            return actor_ref.proxy_addresses[-1], forward_message
+            dest_address = actor_ref.proxy_addresses[-1]
+            if dest_address2 := router.get_proxy(dest_address):
+                if dest_address2 != dest_address and dest_address2 != address:
+                    dest_address = dest_address2
+            return dest_address, forward_message
 
         proxy_address = router.get_proxy(address)
         if proxy_address and proxy_address != address:
@@ -99,17 +106,20 @@ class IndigenActorContext(BaseActorContext):
         address: str,
         message: _MessageBase,
         wait: bool = True,
-        actor_ref: ActorRef | None = None,
+        proxy_addresses: list[str] | None = None,
     ) -> Union[ResultMessage, ErrorMessage, asyncio.Future]:
-        router = Router.get_instance_or_empty()
-        address, message = self.get_address_and_message(
-            router, address, message, actor_ref=actor_ref
+        return await self._caller.call(
+            Router.get_instance_or_empty(),
+            address,
+            message,
+            wait=wait,
+            proxy_addresses=proxy_addresses,
         )
-        return await self._caller.call(router, address, message, wait=wait)
 
     async def _call_with_client(
         self, client: Client, message: _MessageBase, wait: bool = True
     ) -> Union[ResultMessage, ErrorMessage, asyncio.Future]:
+        # NOTE: used by copyto, cannot support proxy
         return await self._caller.call_with_client(client, message, wait)
 
     async def _call_send_buffers(
@@ -176,7 +186,10 @@ class IndigenActorContext(BaseActorContext):
             new_message_id(), actor_ref, protocol=DEFAULT_PROTOCOL
         )
         future = await self._call(
-            actor_ref.address, message, wait=False, actor_ref=actor_ref
+            actor_ref.address,
+            message,
+            wait=False,
+            proxy_addresses=actor_ref.proxy_addresses,
         )
         result = await self._wait(future, actor_ref.address, message)  # type: ignore
         return self._process_result_message(result)
@@ -186,7 +199,10 @@ class IndigenActorContext(BaseActorContext):
             new_message_id(), actor_ref, protocol=DEFAULT_PROTOCOL
         )
         future = await self._call(
-            actor_ref.address, message, wait=False, actor_ref=actor_ref
+            actor_ref.address,
+            message,
+            wait=False,
+            proxy_addresses=actor_ref.proxy_addresses,
         )
         result = await self._wait(future, actor_ref.address, message)  # type: ignore
         return self._process_result_message(result)
@@ -201,7 +217,7 @@ class IndigenActorContext(BaseActorContext):
             protocol=DEFAULT_PROTOCOL,
         )
         main_address = self._process_result_message(
-            await self._call(actor_ref.address, control_message, actor_ref=actor_ref)  # type: ignore
+            await self._call(actor_ref.address, control_message, proxy_addresses=actor_ref.proxy_addresses)  # type: ignore
         )
         real_actor_ref = await self.actor_ref(actor_ref)
         if real_actor_ref.address == main_address:
@@ -215,7 +231,9 @@ class IndigenActorContext(BaseActorContext):
             protocol=DEFAULT_PROTOCOL,
         )
         # stop server
-        result = await self._call(main_address, stop_message, actor_ref=actor_ref)
+        result = await self._call(
+            main_address, stop_message, proxy_addresses=actor_ref.proxy_addresses
+        )
         return self._process_result_message(result)  # type: ignore
 
     async def actor_ref(self, *args, **kwargs):
@@ -228,7 +246,10 @@ class IndigenActorContext(BaseActorContext):
             new_message_id(), actor_ref, protocol=DEFAULT_PROTOCOL
         )
         future = await self._call(
-            actor_ref.address, message, wait=False, actor_ref=actor_ref
+            actor_ref.address,
+            message,
+            wait=False,
+            proxy_addresses=actor_ref.proxy_addresses,
         )
         result = await self._wait(future, actor_ref.address, message)
         res = self._process_result_message(result)
@@ -261,7 +282,10 @@ class IndigenActorContext(BaseActorContext):
         ):
             detect_cycle_send(send_message, wait_response)
             future = await self._call(
-                actor_ref.address, send_message, wait=False, actor_ref=actor_ref
+                actor_ref.address,
+                send_message,
+                wait=False,
+                proxy_addresses=actor_ref.proxy_addresses,
             )
             if wait_response:
                 result = await self._wait(future, actor_ref.address, send_message)  # type: ignore

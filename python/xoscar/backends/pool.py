@@ -444,22 +444,6 @@ class AbstractActorPool(ABC):
         await self._send_channel(processor.result, channel)
 
     async def call(self, dest_address: str, message: _MessageBase) -> ResultMessageType:
-        # handle proxy
-        proxy_address = self._config.get_proxy(dest_address)
-        if (
-            proxy_address
-            and proxy_address != self.external_address
-            and message.message_type != MessageType.control
-        ):
-            # send to proxy when:
-            # 1. proxy address exists
-            # 2, ignore control message, control message is used internally, no chance to forward
-            # wrap message with ForwardMessage
-            new_message = ForwardMessage(
-                message_id=message.message_id, address=dest_address, raw_message=message
-            )
-            return await self._caller.call(self._router, proxy_address, new_message)
-
         return await self._caller.call(self._router, dest_address, message)  # type: ignore
 
     @staticmethod
@@ -640,7 +624,7 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
             self._actors[actor_id] = actor
             await self._run_coro(message.message_id, actor.__post_create__())
 
-            proxies = self._config.get_proxies(address)
+            proxies = self._router.get_proxies(address)
             result = ActorRef(address, actor_id, proxy_addresses=proxies)
             # ensemble result message
             processor.result = ResultMessage(
@@ -683,7 +667,7 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
             actor_id = message.actor_ref.uid
             if actor_id not in self._actors:
                 raise ActorNotExist(f"Actor {actor_id} does not exist")
-            proxies = self._config.get_proxies(self.external_address)
+            proxies = self._router.get_proxies(self.external_address)
             result = ResultMessage(
                 message.message_id,
                 ActorRef(self.external_address, actor_id, proxy_addresses=proxies),
@@ -1193,7 +1177,7 @@ class MainActorPoolBase(ActorPoolBase):
         actor_ref = message.actor_ref
         actor_ref.uid = to_binary(actor_ref.uid)
         if actor_ref.address == self.external_address and actor_ref.uid in self._actors:
-            actor_ref.proxy_addresses = self._config.get_proxies(actor_ref.address)
+            actor_ref.proxy_addresses = self._router.get_proxies(actor_ref.address)
             return ResultMessage(
                 message.message_id, actor_ref, protocol=message.protocol
             )
@@ -1202,7 +1186,7 @@ class MainActorPoolBase(ActorPoolBase):
         for address, item in self._allocated_actors.items():
             ref = create_actor_ref(address, actor_ref.uid)
             if ref in item:
-                ref.proxy_addresses = self._config.get_proxies(ref.address)
+                ref.proxy_addresses = self._router.get_proxies(ref.address)
                 return ResultMessage(message.message_id, ref, protocol=message.protocol)
 
         with _ErrorProcessor(

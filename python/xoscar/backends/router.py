@@ -22,6 +22,11 @@ from typing import Any, Dict, List, Optional, Type
 from .communication import Client, get_client_type
 from .utils import get_proxies, get_proxy
 
+_CACHE_KEY_TYPE = (
+    tuple[str, Any, Optional[Type[Client]]]
+    | tuple[str, Any, Optional[Type[Client]], tuple[str, ...] | None]
+)
+
 
 class Router:
     """
@@ -72,7 +77,7 @@ class Router:
         self._cache_local = threading.local()
 
     @property
-    def _cache(self) -> dict[tuple[str, Any, Optional[Type[Client]]], Client]:
+    def _cache(self) -> dict[_CACHE_KEY_TYPE, Client]:
         try:
             return self._cache_local.cache
         except AttributeError:
@@ -129,14 +134,23 @@ class Router:
         external_address: str,
         from_who: Any = None,
         cached: bool = True,
+        proxy_addresses: list[str] | None = None,
         **kw,
     ) -> Client:
         async with self._lock:
-            if cached and (external_address, from_who, None) in self._cache:
-                cached_client = self._cache[external_address, from_who, None]
+            proxy_addrs: tuple[str, ...] | None = (
+                tuple(proxy_addresses) if proxy_addresses else None
+            )
+            if (
+                cached
+                and (external_address, from_who, None, proxy_addrs) in self._cache
+            ):
+                cached_client = self._cache[
+                    external_address, from_who, None, proxy_addrs
+                ]
                 if cached_client.closed:
                     # closed before, ignore it
-                    del self._cache[external_address, from_who, None]
+                    del self._cache[external_address, from_who, None, proxy_addrs]
                 else:
                     return cached_client
 
@@ -144,10 +158,22 @@ class Router:
             if address is None:
                 # no inner address, just use external address
                 address = external_address
+                # check if proxy address exists
+                proxy_address = proxy_addresses[-1] if proxy_addresses else None
+                if proxy_address is None:
+                    proxy_address = self.get_proxy(address)
+                    if proxy_address and proxy_address != self.external_address:
+                        address = proxy_address
+                else:
+                    if new_proxy_address := self.get_proxy(proxy_address):
+                        address = new_proxy_address
+                    else:
+                        address = proxy_address
+
             client_type: Type[Client] = get_client_type(address)
             client = await self._create_client(client_type, address, **kw)
             if cached:
-                self._cache[external_address, from_who, None] = client
+                self._cache[external_address, from_who, None, proxy_addrs] = client
             return client
 
     async def _create_client(

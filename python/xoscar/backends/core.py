@@ -26,8 +26,14 @@ from typing import Type, Union
 from .._utils import Timer
 from ..errors import ServerClosed
 from ..profiling import get_profiling_data
-from .communication import Client, UCXClient
-from .message import DeserializeMessageFailed, ErrorMessage, ResultMessage, _MessageBase
+from .communication import ChannelType, Client, UCXClient
+from .message import (
+    DeserializeMessageFailed,
+    ErrorMessage,
+    ForwardMessage,
+    ResultMessage,
+    _MessageBase,
+)
 from .router import Router
 
 ResultMessageType = Union[ResultMessage, ErrorMessage]
@@ -67,8 +73,15 @@ class ActorCallerThreadLocal:
         self._listen_client(client)
         return client
 
-    async def get_client(self, router: Router, dest_address: str) -> Client:
-        client = await router.get_client(dest_address, from_who=self)
+    async def get_client(
+        self,
+        router: Router,
+        dest_address: str,
+        proxy_addresses: list[str] | None = None,
+    ) -> Client:
+        client = await router.get_client(
+            dest_address, from_who=self, proxy_addresses=proxy_addresses
+        )
         self._listen_client(client)
         return client
 
@@ -191,8 +204,19 @@ class ActorCallerThreadLocal:
         dest_address: str,
         message: _MessageBase,
         wait: bool = True,
+        proxy_addresses: list[str] | None = None,
     ) -> ResultMessage | ErrorMessage | asyncio.Future:
-        client = await self.get_client(router, dest_address)
+        client = await self.get_client(
+            router, dest_address, proxy_addresses=proxy_addresses
+        )
+        if (
+            client.channel_type == ChannelType.remote
+            and client.dest_address != dest_address
+        ):
+            # wrap message with forward message
+            message = ForwardMessage(
+                message_id=message.message_id, address=dest_address, raw_message=message
+            )
         return await self.call_with_client(client, message, wait)
 
     async def stop(self):
