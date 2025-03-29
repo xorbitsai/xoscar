@@ -22,8 +22,10 @@ import itertools
 import logging
 import multiprocessing
 import os
+import sys
 import threading
 import traceback
+import uuid
 from abc import ABC, ABCMeta, abstractmethod
 from typing import Any, Callable, Coroutine, Optional, Type, TypeVar
 
@@ -31,6 +33,7 @@ import psutil
 
 from .._utils import TypeDispatcher, create_actor_ref, to_binary
 from ..api import Actor
+from ..constants import XOSCAR_TEMP_DIR
 from ..core import ActorRef, BufferRef, FileObjectRef, register_local_pool
 from ..debug import debug_async_timeout, record_message_trace
 from ..errors import (
@@ -42,6 +45,7 @@ from ..errors import (
 )
 from ..metrics import init_metrics
 from ..utils import implements, is_zero_ip, register_asyncio_task_timeout_detector
+from ..virtualenv import VirtualEnvManager, get_virtual_env_manager
 from .allocate_strategy import AddressSpecified, allocated_type
 from .communication import (
     Channel,
@@ -139,6 +143,7 @@ class AbstractActorPool(ABC):
         "internal_address",
         "env",
         "_servers",
+        "_virtual_env_manager",
         "_router",
         "_config",
         "_stopped",
@@ -161,6 +166,7 @@ class AbstractActorPool(ABC):
         router: Router,
         config: ActorPoolConfig,
         servers: list[Server],
+        virtual_env_manager: VirtualEnvManager,
     ):
         # register local pool for local actor lookup.
         # The pool is weakrefed, so we don't need to unregister it.
@@ -176,6 +182,7 @@ class AbstractActorPool(ABC):
         self._router = router
         self._config = config
         self._servers = servers
+        self._virtual_env_manager = virtual_env_manager
 
         self._stopped = asyncio.Event()
 
@@ -484,12 +491,21 @@ class AbstractActorPool(ABC):
         except (futures.TimeoutError, asyncio.TimeoutError):  # pragma: no cover
             wait_stopped.cancel()
 
+    def _clear_virtual_env(self):
+        if virtual_env_conf := self._config.get_virtual_env_conf(self.process_index):
+            if virtual_env_conf.get("clear"):
+                self._virtual_env_manager.remove_env()
+
     async def stop(self):
         try:
             # clean global router
             router = Router.get_instance()
             if router is not None:
                 router.remove_router(self._router)
+
+            # clear virtual env if configured
+            self._clear_virtual_env()
+
             stop_tasks = []
             # stop all servers
             stop_tasks.extend([server.stop() for server in self._servers])
@@ -816,6 +832,28 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
         )
         cls._update_stored_addresses(servers, server_addresses, actor_pool_config, kw)
 
+        # preppare virtual env
+        kw["virtual_env_manager"] = None
+        virtual_env_config = actor_pool_config.get_virtual_env_conf(process_index)
+        if virtual_env_config:
+            env_type = virtual_env_config.get("env_type")
+            env_name = virtual_env_config.get("env_name", str(uuid.uuid4()))
+            env_packages = virtual_env_config.get("packages")
+            env_index_url = virtual_env_config.get("index_url")
+            env_path = virtual_env_config.get(
+                "path", os.path.join(XOSCAR_TEMP_DIR, env_name)
+            )
+            if not env_packages:
+                raise ValueError(
+                    "packages need to be provided when configured virtual env"
+                )
+            kw["virtual_env_manager"] = manager = get_virtual_env_manager(
+                env_type, env_path  # type: ignore
+            )
+            manager.create_env()
+            manager.install_packages(env_packages, index_url=env_index_url)
+            sys.path.insert(0, manager.get_lib_path())
+
         # set default router
         # actor context would be able to use exact client
         cls._set_global_router(kw["router"])
@@ -846,6 +884,7 @@ class SubActorPoolBase(ActorPoolBase):
         servers: list[Server],
         main_address: str,
         main_pool_pid: Optional[int],
+        virtual_env_manager: VirtualEnvManager,
     ):
         super().__init__(
             process_index,
@@ -856,6 +895,7 @@ class SubActorPoolBase(ActorPoolBase):
             router,
             config,
             servers,
+            virtual_env_manager,
         )
         self._main_address = main_address
         if main_pool_pid:
@@ -973,6 +1013,7 @@ class MainActorPoolBase(ActorPoolBase):
         router: Router,
         config: ActorPoolConfig,
         servers: list[Server],
+        virtual_env_manager: VirtualEnvManager,
         subprocess_start_method: str | None = None,
         auto_recover: str | bool = "actor",
         on_process_down: Callable[[MainActorPoolType, str], None] | None = None,
@@ -987,6 +1028,7 @@ class MainActorPoolBase(ActorPoolBase):
             router,
             config,
             servers,
+            virtual_env_manager,
         )
         self._subprocess_start_method = subprocess_start_method
 
@@ -1506,6 +1548,7 @@ async def create_actor_pool(
     on_process_down: Callable[[MainActorPoolType, str], None] | None = None,
     on_process_recover: Callable[[MainActorPoolType, str], None] | None = None,
     extra_conf: dict | None = None,
+    virtual_env_confs: list[dict] | None = None,
     **kwargs,
 ) -> MainActorPoolType:
     if n_process is None:
@@ -1516,6 +1559,11 @@ async def create_actor_pool(
         )
     if envs and len(envs) != n_process:
         raise ValueError(f"`envs` should be of size {n_process}, got {len(envs)}")
+    if virtual_env_confs and len(virtual_env_confs) != n_process:
+        raise ValueError(
+            f"`virtual_env_confs` should be of size {n_process}, "
+            f"got {len(virtual_env_confs)}"
+        )
     if external_address_schemes and len(external_address_schemes) != n_process + 1:
         raise ValueError(
             f"`external_address_schemes` should be of size {n_process + 1}, "
@@ -1586,6 +1634,7 @@ async def create_actor_pool(
             suspend_sigint=suspend_sigint,
             use_uvloop=use_uvloop,  # type: ignore
             logging_conf=logging_conf,
+            virtual_env_conf=virtual_env_confs[i] if virtual_env_confs else None,
             kwargs=kwargs,
         )
     actor_pool_config.add_comm_config(extra_conf)

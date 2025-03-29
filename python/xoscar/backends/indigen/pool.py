@@ -337,6 +337,7 @@ class MainActorPool(MainActorPoolBase):
         suspend_sigint: bool | None = None,
         use_uvloop: bool | None = None,
         logging_conf: dict | None = None,
+        virtual_env_conf: dict | None = None,
         start_method: str | None = None,
         kwargs: dict | None = None,
     ):
@@ -373,6 +374,7 @@ class MainActorPool(MainActorPoolBase):
             suspend_sigint,
             _use_uv_loop,
             _logging_conf,
+            virtual_env_conf,
             kwargs,
         )
 

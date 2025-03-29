@@ -49,6 +49,7 @@ class ActorPoolConfig:
         suspend_sigint: bool | None = False,
         use_uvloop: bool | None = False,
         logging_conf: dict | None = None,
+        virtual_env_conf: dict | None = None,
         kwargs: dict | None = None,
     ):
         pools: dict = self._conf["pools"]
@@ -63,6 +64,7 @@ class ActorPoolConfig:
             "suspend_sigint": suspend_sigint,
             "use_uvloop": use_uvloop,
             "logging_conf": logging_conf,
+            "virtual_env_conf": virtual_env_conf,
             "kwargs": kwargs or {},
         }
 
@@ -91,6 +93,14 @@ class ActorPoolConfig:
         raise ValueError(
             f"Cannot get process_index for {external_address}"
         )  # pragma: no cover
+
+    def get_virtual_env_conf(self, proces_index: int) -> dict | None:
+        config = self.get_pool_config(proces_index)
+        if virtual_env_conf := config.get("virtual_env_conf"):
+            virtual_env_conf.setdefault("clear", True)
+            return virtual_env_conf
+        else:
+            return None
 
     def reset_pool_external_address(
         self,
