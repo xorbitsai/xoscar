@@ -41,7 +41,6 @@ from .message import (
     CreateActorMessage,
     DestroyActorMessage,
     ErrorMessage,
-    ForwardMessage,
     HasActorMessage,
     ResultMessage,
     SendMessage,
@@ -71,35 +70,6 @@ class IndigenActorContext(BaseActorContext):
 
     def __del__(self):
         self._caller.cancel_tasks()
-
-    @staticmethod
-    def get_address_and_message(
-        router: Router,
-        address: str,
-        message: _MessageBase,
-        actor_ref: ActorRef | None = None,
-    ) -> tuple[str, _MessageBase]:
-        if address == router.external_address:
-            return address, message
-
-        if actor_ref and actor_ref.proxy_addresses:
-            forward_message = ForwardMessage(
-                message_id=message.message_id, address=address, raw_message=message
-            )
-            dest_address = actor_ref.proxy_addresses[-1]
-            if dest_address2 := router.get_proxy(dest_address):
-                if dest_address2 != dest_address and dest_address2 != address:
-                    dest_address = dest_address2
-            return dest_address, forward_message
-
-        proxy_address = router.get_proxy(address)
-        if proxy_address and proxy_address != address:
-            forward_message = ForwardMessage(
-                message_id=message.message_id, address=address, raw_message=message
-            )
-            return proxy_address, forward_message
-        else:
-            return address, message
 
     async def _call(
         self,

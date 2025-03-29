@@ -20,7 +20,6 @@ import threading
 from typing import Any, Dict, List, Optional, Type
 
 from .communication import Client, get_client_type
-from .utils import get_proxies, get_proxy
 
 _CACHE_KEY_TYPE = (
     tuple[str, Any, Optional[Type[Client]]]
@@ -238,7 +237,35 @@ class Router:
             return client
 
     def get_proxy(self, from_addr: str) -> str | None:
-        return get_proxy(self._proxy_config, from_addr)
+        host = from_addr.split(":", 1)[0]
+
+        proxy_map = self._proxy_config
+        addr = proxy_map.get(from_addr)
+        if addr and addr != from_addr:
+            return addr
+        addr = proxy_map.get(host)
+        if addr and addr != from_addr:
+            return addr
+        addr = proxy_map.get("*")
+        if addr and addr != from_addr:
+            return addr
+        return None
 
     def get_proxies(self, from_addr: str) -> list[str] | None:
-        return get_proxies(self._proxy_config, from_addr)
+        """
+        Get all proxies
+
+        e.g. Proxy mapping {'a': 'b', 'b': 'c'}
+        get_proxies('a') will return ['b', 'c']
+        """
+
+        proxies: list[str] = []
+        while True:
+            proxy = self.get_proxy(from_addr)
+            if not proxies and not proxy:
+                return None
+            elif not proxy:
+                return proxies
+            else:
+                proxies.append(proxy)
+                from_addr = proxy
