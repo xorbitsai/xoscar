@@ -404,6 +404,7 @@ class MainActorPool(MainActorPoolBase):
             process_index, process_status.external_addresses[0]
         )
         self.attach_sub_process(process_status.external_addresses[0], process)
+        self._allocated_actors[process_status.external_addresses[0]] = dict()
 
         control_message = ControlMessage(
             message_id=new_message_id(),

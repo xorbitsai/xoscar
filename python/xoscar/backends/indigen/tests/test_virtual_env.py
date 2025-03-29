@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import shutil
 import sys
 
 import pytest
@@ -35,6 +36,10 @@ class CheckTransformerActor(xo.Actor):
 
 @pytest.mark.asyncio
 async def test_virtual_env():
+    for env in ["env1", "env2", "env3"]:
+        if os.path.exists(os.path.join(XOSCAR_TEMP_DIR, env)):
+            shutil.rmtree(os.path.join(XOSCAR_TEMP_DIR, env))
+
     start_method = (
         os.environ.get("POOL_START_METHOD", "forkserver")
         if sys.platform != "win32"
@@ -83,5 +88,25 @@ async def test_virtual_env():
         )
         await a2.check()
 
-    assert not os.path.exists(os.path.join(XOSCAR_TEMP_DIR, "env1"))
-    assert not os.path.exists(os.path.join(XOSCAR_TEMP_DIR, "env2"))
+        await pool.append_sub_pool(
+            start_method=start_method,
+            virtual_env_conf={
+                "clear": True,
+                "env_type": "uv",
+                "env_name": "env3",
+                "packages": ["transformers==4.41.1"],
+                "index_url": "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+            },
+        )
+        assert os.path.exists(os.path.join(XOSCAR_TEMP_DIR, "env3"))
+        a3 = await xo.create_actor(
+            CheckTransformerActor,
+            "4.41.1",
+            uid="check3",
+            address=pool.external_address,
+            allocate_strategy=xo.allocate_strategy.ProcessIndex(3),
+        )
+        await a3.check()
+
+    for env in ["env1", "env2", "env3"]:
+        assert not os.path.exists(os.path.join(XOSCAR_TEMP_DIR, env))
