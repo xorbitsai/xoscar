@@ -28,7 +28,7 @@ from ...router import Router
 
 async def _run_actor_pool(started, address, proxy_config):
     start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
+        os.environ.get("POOL_START_METHOD", "spawn")
         if sys.platform != "win32"
         else None
     )
