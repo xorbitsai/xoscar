@@ -28,7 +28,7 @@ def is_uv_installed() -> bool:
 
 @pytest.mark.skipif(not is_uv_installed(), reason="uv not installed")
 def test_uv_virtialenv_manager():
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+    with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, ".env")
         manager = get_virtual_env_manager("uv", path)
 
@@ -47,6 +47,7 @@ def test_uv_virtialenv_manager():
 
             assert transformers.__version__ == "4.40.0"
 
+            del sys.modules["yaml"]
             manager.remove_env()
             assert not os.path.exists(path)
         finally:
