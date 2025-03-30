@@ -28,7 +28,7 @@ def is_uv_installed() -> bool:
 
 @pytest.mark.skipif(not is_uv_installed(), reason="uv not installed")
 def test_uv_virtialenv_manager():
-    with tempfile.TemporaryDirectory() as d:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         path = os.path.join(d, ".env")
         manager = get_virtual_env_manager("uv", path)
 
