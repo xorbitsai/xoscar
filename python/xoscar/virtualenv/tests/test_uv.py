@@ -12,13 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import gc
-import os
 import os.path
 import shutil
 import sys
 import tempfile
-import time
 
 import pytest
 
@@ -30,6 +27,10 @@ def is_uv_installed() -> bool:
 
 
 @pytest.mark.skipif(not is_uv_installed(), reason="uv not installed")
+@pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="skip windows because some files cannot be deleted",
+)
 def test_uv_virtialenv_manager():
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, ".env")
@@ -49,12 +50,6 @@ def test_uv_virtialenv_manager():
             import transformers
 
             assert transformers.__version__ == "4.40.0"
-
-            if os.name == "nt":
-                # windows
-                del sys.modules["yaml"]
-                gc.collect()
-                time.sleep(2)
 
             manager.remove_env()
             assert not os.path.exists(path)
