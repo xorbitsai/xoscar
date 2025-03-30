@@ -43,4 +43,4 @@ class UVVirtualEnvManager(VirtualEnvManager):
 
     def remove_env(self):
         if self.env_path.exists():
-            shutil.rmtree(self.env_path)
+            shutil.rmtree(self.env_path, ignore_errors=True)
