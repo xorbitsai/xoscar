@@ -23,6 +23,10 @@ from .core import VirtualEnvManager
 
 
 class UVVirtualEnvManager(VirtualEnvManager):
+    @classmethod
+    def is_available(cls):
+        return shutil.which("uv") is not None
+
     def create_env(self, python_path: Path | None = None) -> None:
         cmd = ["uv", "venv", str(self.env_path)]
         if python_path:

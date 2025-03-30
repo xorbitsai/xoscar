@@ -19,6 +19,11 @@ from pathlib import Path
 
 
 class VirtualEnvManager(ABC):
+    @classmethod
+    @abstractmethod
+    def is_available(cls):
+        pass
+
     def __init__(self, env_path: Path):
         self.env_path = env_path.resolve()
 

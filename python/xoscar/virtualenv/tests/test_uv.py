@@ -13,20 +13,16 @@
 # limitations under the License.
 
 import os.path
-import shutil
 import sys
 import tempfile
 
 import pytest
 
 from .. import get_virtual_env_manager
+from ..uv import UVVirtualEnvManager
 
 
-def is_uv_installed() -> bool:
-    return shutil.which("uv") is not None
-
-
-@pytest.mark.skipif(not is_uv_installed(), reason="uv not installed")
+@pytest.mark.skipif(not UVVirtualEnvManager.is_available(), reason="uv not installed")
 @pytest.mark.skipif(
     sys.platform.startswith("win"),
     reason="skip windows because some files cannot be deleted",
