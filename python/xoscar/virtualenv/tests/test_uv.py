@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
+import os
 import os.path
 import shutil
 import sys
 import tempfile
+import time
 
 import pytest
 
@@ -47,7 +50,12 @@ def test_uv_virtialenv_manager():
 
             assert transformers.__version__ == "4.40.0"
 
-            del sys.modules["yaml"]
+            if os.name == "nt":
+                # windows
+                del sys.modules["yaml"]
+                gc.collect()
+                time.sleep(2)
+
             manager.remove_env()
             assert not os.path.exists(path)
         finally:
