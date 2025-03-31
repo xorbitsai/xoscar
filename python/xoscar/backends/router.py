@@ -237,6 +237,20 @@ class Router:
             return client
 
     def get_proxy(self, from_addr: str) -> str | None:
+        """
+        Get proxy address that sent to.
+
+        Some patterns can be supported:
+
+        1. Direct address mapping, e.g. mapping 127.0.0.1:12345 -> 127.0.0.1:12346
+           The message will be sent to 127.0.0.1:12346 as forward one.
+        2. Host match, e.g. mapping 127.0.0.1 -> 127.0.0.1:12346
+           All the messages that match the host, e.g. 127.0.0.1:12345 and 127.0.0.1:12347
+           will be sent to 127.0.0.1:12346 as forward one.
+        3. Wildcard, e.g. mapping * -> 127.0.0.1:12346
+           All the messages will be sent to 127.0.0.1:12346 as forward one.
+        """
+
         host = from_addr.split(":", 1)[0]
 
         proxy_map = self._proxy_config
