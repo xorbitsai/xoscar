@@ -47,6 +47,7 @@ class MessageType(Enum):
     cancel = 9
     copy_to_buffers = 10
     copy_to_fileobjs = 11
+    forward = 12
 
 
 class ControlMessageType(Enum):
@@ -350,13 +351,14 @@ cdef class DestroyActorMessage(_MessageBase):
     cdef _MessageSerialItem serial(self):
         cdef _MessageSerialItem item = _MessageBase.serial(self)
         item.serialized += (
-            self.actor_ref.address, self.actor_ref.uid, self.from_main
+            self.actor_ref.address, self.actor_ref.uid,
+            self.actor_ref.proxy_addresses, self.from_main
         )
         return item
 
     cdef deserial_members(self, tuple serialized, list subs):
         _MessageBase.deserial_members(self, serialized, subs)
-        self.actor_ref = ActorRef(serialized[-3], serialized[-2])
+        self.actor_ref = ActorRef(serialized[-4], serialized[-3], serialized[-2])
         self.from_main = serialized[-1]
 
 
@@ -381,13 +383,13 @@ cdef class HasActorMessage(_MessageBase):
     cdef _MessageSerialItem serial(self):
         cdef _MessageSerialItem item = _MessageBase.serial(self)
         item.serialized += (
-            self.actor_ref.address, self.actor_ref.uid
+            self.actor_ref.address, self.actor_ref.uid, self.actor_ref.proxy_addresses
         )
         return item
 
     cdef deserial_members(self, tuple serialized, list subs):
         _MessageBase.deserial_members(self, serialized, subs)
-        self.actor_ref = ActorRef(serialized[-2], serialized[-1])
+        self.actor_ref = ActorRef(serialized[-3], serialized[-2], serialized[-1])
 
 
 cdef class ActorRefMessage(_MessageBase):
@@ -411,13 +413,13 @@ cdef class ActorRefMessage(_MessageBase):
     cdef _MessageSerialItem serial(self):
         cdef _MessageSerialItem item = _MessageBase.serial(self)
         item.serialized += (
-            self.actor_ref.address, self.actor_ref.uid
+            self.actor_ref.address, self.actor_ref.uid, self.actor_ref.proxy_addresses
         )
         return item
 
     cdef deserial_members(self, tuple serialized, list subs):
         _MessageBase.deserial_members(self, serialized, subs)
-        self.actor_ref = ActorRef(serialized[-2], serialized[-1])
+        self.actor_ref = ActorRef(serialized[-3], serialized[-2], serialized[-1])
 
 
 cdef class SendMessage(_MessageBase):
@@ -449,14 +451,14 @@ cdef class SendMessage(_MessageBase):
     cdef _MessageSerialItem serial(self):
         cdef _MessageSerialItem item = _MessageBase.serial(self)
         item.serialized += (
-            self.actor_ref.address, self.actor_ref.uid
+            self.actor_ref.address, self.actor_ref.uid, self.actor_ref.proxy_addresses
         )
         item.subs = [self.content]
         return item
 
     cdef deserial_members(self, tuple serialized, list subs):
         _MessageBase.deserial_members(self, serialized, subs)
-        self.actor_ref = ActorRef(serialized[-2], serialized[-1])
+        self.actor_ref = ActorRef(serialized[-3], serialized[-2], serialized[-1])
         self.content = subs[0]
 
 
@@ -533,6 +535,50 @@ cdef class CopyToFileObjectsMessage(CopyToBuffersMessage):
     message_type = MessageType.copy_to_fileobjs
 
 
+cdef class ForwardMessage(_MessageBase):
+    message_type =  MessageType.forward
+
+    cdef:
+        public str address
+        public _MessageBase raw_message
+
+    def __init__(
+        self,
+        bytes message_id = None,
+        str address = None,
+        _MessageBase raw_message = None,
+        int protocol = DEFAULT_PROTOCOL,
+        list message_trace = None,
+    ):
+        _MessageBase.__init__(
+            self,
+            message_id,
+            protocol=protocol,
+            message_trace=message_trace
+        )
+        self.address = address
+        self.raw_message = raw_message
+
+    cdef _MessageSerialItem serial(self):
+        cdef _MessageSerialItem item = _MessageBase.serial(self)
+        cdef _MessageSerialItem raw_message_serialized = self.raw_message.serial()
+        item.serialized += (self.address,)
+        item.serialized += raw_message_serialized.serialized
+        item.subs += raw_message_serialized.subs
+        return item
+
+    cdef deserial_members(self, tuple serialized, list subs):
+        # 5 is magic number that means serialized for _MessageBase
+        base_serialized = serialized[:5]
+        _MessageBase.deserial_members(self, base_serialized, [])
+        self.address = serialized[5]
+        # process raw message
+        tp = _message_type_to_message_cls[serialized[6]]
+        cdef _MessageBase raw_message = <_MessageBase>(tp())
+        raw_message.deserial_members(serialized[6:], subs)
+        self.raw_message = raw_message
+
+
 cdef dict _message_type_to_message_cls = {
     MessageType.control.value: ControlMessage,
     MessageType.result.value: ResultMessage,
@@ -545,7 +591,8 @@ cdef dict _message_type_to_message_cls = {
     MessageType.tell.value: TellMessage,
     MessageType.cancel.value: CancelMessage,
     MessageType.copy_to_buffers.value: CopyToBuffersMessage,
-    MessageType.copy_to_fileobjs.value: CopyToFileObjectsMessage
+    MessageType.copy_to_fileobjs.value: CopyToFileObjectsMessage,
+    MessageType.forward.value: ForwardMessage,
 }
 
 

@@ -33,6 +33,8 @@ class ActorPoolConfig:
             self._conf["metrics"] = dict()
         if "comm" not in self._conf:
             self._conf["comm"] = dict()
+        if "proxy" not in self._conf:
+            self._conf["proxy"] = dict()
 
     @property
     def n_pool(self):
@@ -143,3 +145,13 @@ class ActorPoolConfig:
 
     def get_comm_config(self) -> dict:
         return self._conf["comm"]
+
+    def get_proxy_config(self) -> dict:
+        return self._conf["proxy"]
+
+    def add_proxy_config(self, proxy_config: dict[str, str] | None):
+        if proxy_config:
+            self._conf["proxy"].update(proxy_config)
+
+    def remove_proxy(self, from_addr: str):
+        del self._conf["proxy"][from_addr]
