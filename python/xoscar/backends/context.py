@@ -72,15 +72,24 @@ class IndigenActorContext(BaseActorContext):
         self._caller.cancel_tasks()
 
     async def _call(
-        self, address: str, message: _MessageBase, wait: bool = True
+        self,
+        address: str,
+        message: _MessageBase,
+        wait: bool = True,
+        proxy_addresses: list[str] | None = None,
     ) -> Union[ResultMessage, ErrorMessage, asyncio.Future]:
         return await self._caller.call(
-            Router.get_instance_or_empty(), address, message, wait=wait
+            Router.get_instance_or_empty(),
+            address,
+            message,
+            wait=wait,
+            proxy_addresses=proxy_addresses,
         )
 
     async def _call_with_client(
         self, client: Client, message: _MessageBase, wait: bool = True
     ) -> Union[ResultMessage, ErrorMessage, asyncio.Future]:
+        # NOTE: used by copyto, cannot support proxy
         return await self._caller.call_with_client(client, message, wait)
 
     async def _call_send_buffers(
@@ -146,7 +155,12 @@ class IndigenActorContext(BaseActorContext):
         message = HasActorMessage(
             new_message_id(), actor_ref, protocol=DEFAULT_PROTOCOL
         )
-        future = await self._call(actor_ref.address, message, wait=False)
+        future = await self._call(
+            actor_ref.address,
+            message,
+            wait=False,
+            proxy_addresses=actor_ref.proxy_addresses,
+        )
         result = await self._wait(future, actor_ref.address, message)  # type: ignore
         return self._process_result_message(result)
 
@@ -154,7 +168,12 @@ class IndigenActorContext(BaseActorContext):
         message = DestroyActorMessage(
             new_message_id(), actor_ref, protocol=DEFAULT_PROTOCOL
         )
-        future = await self._call(actor_ref.address, message, wait=False)
+        future = await self._call(
+            actor_ref.address,
+            message,
+            wait=False,
+            proxy_addresses=actor_ref.proxy_addresses,
+        )
         result = await self._wait(future, actor_ref.address, message)  # type: ignore
         return self._process_result_message(result)
 
@@ -168,7 +187,7 @@ class IndigenActorContext(BaseActorContext):
             protocol=DEFAULT_PROTOCOL,
         )
         main_address = self._process_result_message(
-            await self._call(actor_ref.address, control_message)  # type: ignore
+            await self._call(actor_ref.address, control_message, proxy_addresses=actor_ref.proxy_addresses)  # type: ignore
         )
         real_actor_ref = await self.actor_ref(actor_ref)
         if real_actor_ref.address == main_address:
@@ -182,7 +201,9 @@ class IndigenActorContext(BaseActorContext):
             protocol=DEFAULT_PROTOCOL,
         )
         # stop server
-        result = await self._call(main_address, stop_message)
+        result = await self._call(
+            main_address, stop_message, proxy_addresses=actor_ref.proxy_addresses
+        )
         return self._process_result_message(result)  # type: ignore
 
     async def actor_ref(self, *args, **kwargs):
@@ -194,7 +215,12 @@ class IndigenActorContext(BaseActorContext):
         message = ActorRefMessage(
             new_message_id(), actor_ref, protocol=DEFAULT_PROTOCOL
         )
-        future = await self._call(actor_ref.address, message, wait=False)
+        future = await self._call(
+            actor_ref.address,
+            message,
+            wait=False,
+            proxy_addresses=actor_ref.proxy_addresses,
+        )
         result = await self._wait(future, actor_ref.address, message)
         res = self._process_result_message(result)
         if res.address != connect_addr:
@@ -225,7 +251,12 @@ class IndigenActorContext(BaseActorContext):
             actor_ref.address,
         ):
             detect_cycle_send(send_message, wait_response)
-            future = await self._call(actor_ref.address, send_message, wait=False)
+            future = await self._call(
+                actor_ref.address,
+                send_message,
+                wait=False,
+                proxy_addresses=actor_ref.proxy_addresses,
+            )
             if wait_response:
                 result = await self._wait(future, actor_ref.address, send_message)  # type: ignore
                 return self._process_result_message(result)
@@ -315,6 +346,8 @@ class IndigenActorContext(BaseActorContext):
     async def _get_client(self, address: str) -> Client:
         router = Router.get_instance()
         assert router is not None, "`copy_to` can only be used inside pools"
+        if router.get_proxy(address):
+            raise RuntimeError("Cannot run `copy_to` when enabling proxy")
         return await self._get_copy_to_client(router, address)
 
     async def copy_to_buffers(

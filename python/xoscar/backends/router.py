@@ -17,9 +17,14 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Optional, Type, Union
 
 from .communication import Client, get_client_type
+
+_CACHE_KEY_TYPE = Union[
+    tuple[str, Any, Optional[Type[Client]]],
+    tuple[str, Any, Optional[Type[Client]], Optional[tuple[str, ...]]],
+]
 
 
 class Router:
@@ -32,6 +37,7 @@ class Router:
         "_local_mapping",
         "_mapping",
         "_comm_config",
+        "_proxy_config",
         "_cache_local",
     )
 
@@ -56,6 +62,7 @@ class Router:
         local_address: str | None,
         mapping: dict[str, str] | None = None,
         comm_config: dict | None = None,
+        proxy_config: dict | None = None,
     ):
         self._curr_external_addresses = external_addresses
         self._local_mapping = dict()
@@ -65,10 +72,11 @@ class Router:
             mapping = dict()
         self._mapping = mapping
         self._comm_config = comm_config or dict()
+        self._proxy_config = proxy_config or dict()
         self._cache_local = threading.local()
 
     @property
-    def _cache(self) -> dict[tuple[str, Any, Optional[Type[Client]]], Client]:
+    def _cache(self) -> dict[_CACHE_KEY_TYPE, Client]:
         try:
             return self._cache_local.cache
         except AttributeError:
@@ -92,6 +100,7 @@ class Router:
         self._local_mapping.update(router._local_mapping)
         self._mapping.update(router._mapping)
         self._comm_config.update(router._comm_config)
+        self._proxy_config.update(router._proxy_config)
         self._cache_local = threading.local()
 
     def remove_router(self, router: "Router"):
@@ -124,14 +133,23 @@ class Router:
         external_address: str,
         from_who: Any = None,
         cached: bool = True,
+        proxy_addresses: list[str] | None = None,
         **kw,
     ) -> Client:
         async with self._lock:
-            if cached and (external_address, from_who, None) in self._cache:
-                cached_client = self._cache[external_address, from_who, None]
+            proxy_addrs: tuple[str, ...] | None = (
+                tuple(proxy_addresses) if proxy_addresses else None
+            )
+            if (
+                cached
+                and (external_address, from_who, None, proxy_addrs) in self._cache
+            ):
+                cached_client = self._cache[
+                    external_address, from_who, None, proxy_addrs
+                ]
                 if cached_client.closed:
                     # closed before, ignore it
-                    del self._cache[external_address, from_who, None]
+                    del self._cache[external_address, from_who, None, proxy_addrs]
                 else:
                     return cached_client
 
@@ -139,10 +157,22 @@ class Router:
             if address is None:
                 # no inner address, just use external address
                 address = external_address
+                # check if proxy address exists
+                proxy_address = proxy_addresses[-1] if proxy_addresses else None
+                if proxy_address is None:
+                    proxy_address = self.get_proxy(address)
+                    if proxy_address and proxy_address != self.external_address:
+                        address = proxy_address
+                else:
+                    if new_proxy_address := self.get_proxy(proxy_address):
+                        address = new_proxy_address
+                    else:
+                        address = proxy_address
+
             client_type: Type[Client] = get_client_type(address)
             client = await self._create_client(client_type, address, **kw)
             if cached:
-                self._cache[external_address, from_who, None] = client
+                self._cache[external_address, from_who, None, proxy_addrs] = client
             return client
 
     async def _create_client(
@@ -158,7 +188,7 @@ class Router:
 
     def _get_client_type_to_addresses(
         self, external_address: str
-    ) -> Dict[Type[Client], str]:
+    ) -> dict[Type[Client], str]:
         client_type_to_addresses = dict()
         client_type_to_addresses[get_client_type(external_address)] = external_address
         if external_address in self._curr_external_addresses:  # pragma: no cover
@@ -173,7 +203,7 @@ class Router:
             client_type_to_addresses[client_type] = addr  # type: ignore
         return client_type_to_addresses
 
-    def get_all_client_types(self, external_address: str) -> List[Type[Client]]:
+    def get_all_client_types(self, external_address: str) -> list[Type[Client]]:
         return list(self._get_client_type_to_addresses(external_address))
 
     async def get_client_via_type(
@@ -205,3 +235,51 @@ class Router:
             if cached:
                 self._cache[external_address, from_who, client_type] = client
             return client
+
+    def get_proxy(self, from_addr: str) -> str | None:
+        """
+        Get proxy address that sent to.
+
+        Some patterns can be supported:
+
+        1. Direct address mapping, e.g. mapping 127.0.0.1:12345 -> 127.0.0.1:12346
+           The message will be sent to 127.0.0.1:12346 as forward one.
+        2. Host match, e.g. mapping 127.0.0.1 -> 127.0.0.1:12346
+           All the messages that match the host, e.g. 127.0.0.1:12345 and 127.0.0.1:12347
+           will be sent to 127.0.0.1:12346 as forward one.
+        3. Wildcard, e.g. mapping * -> 127.0.0.1:12346
+           All the messages will be sent to 127.0.0.1:12346 as forward one.
+        """
+
+        host = from_addr.split(":", 1)[0]
+
+        proxy_map = self._proxy_config
+        addr = proxy_map.get(from_addr)
+        if addr and addr != from_addr:
+            return addr
+        addr = proxy_map.get(host)
+        if addr and addr != from_addr:
+            return addr
+        addr = proxy_map.get("*")
+        if addr and addr != from_addr:
+            return addr
+        return None
+
+    def get_proxies(self, from_addr: str) -> list[str] | None:
+        """
+        Get all proxies
+
+        e.g. Proxy mapping {'a': 'b', 'b': 'c'}
+        get_proxies('a') will return ['b', 'c']
+        """
+
+        proxies: list[str] = []
+        while True:
+            proxy = self.get_proxy(from_addr)
+            if not proxies and not proxy:
+                return None
+            elif not proxy:
+                return proxies
+            else:
+                proxies.append(proxy)
+                from_addr = proxy
