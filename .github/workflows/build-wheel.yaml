@@ -206,14 +206,14 @@ jobs:
 
       - name: Publish to PyPI
         if: github.repository == 'xorbitsai/xoscar'
-        uses: pypa/gh-action-pypi-publish@v1.8.11
+        uses: pypa/gh-action-pypi-publish@v1.12.4
         with:
           user: __token__
           password: ${{ secrets.PYPI_PASSWORD }}
 
       - name: Publish to Test PyPI
         if: github.repository != 'xorbitsai/xoscar'
-        uses: pypa/gh-action-pypi-publish@v1.8.11
+        uses: pypa/gh-action-pypi-publish@v1.12.4
         with:
           user: __token__
           password: ${{ secrets.TEST_PYPI_PASSWORD }}
