@@ -93,7 +93,7 @@ def test_uv_virtualenv_manager_with_cancel():
             install_thread.join()
 
             # Ensure the installation was cancelled and the package wasn't installed
-            with pytest.raises(ImportError):  # Ensure transformers is not installed
+            with pytest.raises(ImportError):
                 import pygraphviz  # noqa: F401 # pylint: disable=unused-import
 
             # Clean up the virtual environment
