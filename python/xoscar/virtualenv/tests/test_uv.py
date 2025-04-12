@@ -15,6 +15,7 @@
 import os.path
 import sys
 import tempfile
+import time
 
 import pytest
 
@@ -49,5 +50,55 @@ def test_uv_virtialenv_manager():
 
             manager.remove_env()
             assert not os.path.exists(path)
+        finally:
+            sys.path = raw_sys_path
+
+
+@pytest.mark.skipif(not UVVirtualEnvManager.is_available(), reason="uv not installed")
+@pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="skip windows because some files cannot be deleted",
+)
+def test_uv_virtualenv_manager_with_cancel():
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, ".env")
+        manager = get_virtual_env_manager("uv", path)
+
+        raw_sys_path = sys.path
+        try:
+            # Create the virtual environment
+            manager.create_env()
+            assert os.path.exists(path)
+
+            # Start the package installation in a separate thread
+            import threading
+
+            def install_task():
+                manager.install_packages(
+                    ["pygraphviz==1.8"],
+                    index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+                )
+
+            # Start the installation thread
+            install_thread = threading.Thread(target=install_task)
+            install_thread.start()
+
+            # Wait a bit to ensure installation has started
+            time.sleep(1)
+
+            # Call cancel_install to interrupt the installation process
+            manager.cancel_install()
+
+            # Wait for the installation thread to finish
+            install_thread.join()
+
+            # Ensure the installation was cancelled and the package wasn't installed
+            with pytest.raises(ImportError):  # Ensure transformers is not installed
+                import pygraphviz  # noqa: F401 # pylint: disable=unused-import
+
+            # Clean up the virtual environment
+            manager.remove_env()
+            assert not os.path.exists(path)
+
         finally:
             sys.path = raw_sys_path

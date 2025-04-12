@@ -18,11 +18,16 @@ import shutil
 import subprocess
 import sysconfig
 from pathlib import Path
+from typing import Optional
 
 from .core import VirtualEnvManager
 
 
 class UVVirtualEnvManager(VirtualEnvManager):
+    def __init__(self, env_path: Path):
+        super().__init__(env_path)
+        self._install_process: Optional[subprocess.Popen] = None
+
     @classmethod
     def is_available(cls):
         return shutil.which("uv") is not None
@@ -33,14 +38,41 @@ class UVVirtualEnvManager(VirtualEnvManager):
             cmd += ["--python", str(python_path)]
         subprocess.run(cmd, check=True)
 
-    def install_packages(self, packages: list[str], index_url: str | None = None):
+    def install_packages(
+        self,
+        packages: list[str],
+        index_url: str | None = None,
+        extra_index_url: str | None = None,
+        find_links: str | None = None,
+    ):
         if not packages:
             return
         cmd = ["uv", "pip", "install", "-p", str(self.env_path)] + packages
         if index_url:
             cmd += ["-i", index_url]  # specify index url
+        if extra_index_url:
+            cmd += ["--extra-index-url", extra_index_url]
+        if find_links:
+            cmd += ["-f", find_links]
 
-        subprocess.run(cmd, check=True)
+        self._install_process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+
+        stdout, stderr = self._install_process.communicate()
+        returncode = self._install_process.returncode
+
+        self._install_process = None  # install finished, clear reference
+
+        if returncode != 0:
+            raise subprocess.CalledProcessError(
+                returncode, cmd, output=stdout, stderr=stderr
+            )
+
+    def cancel_install(self):
+        if self._install_process and self._install_process.poll() is None:
+            self._install_process.terminate()
+            self._install_process.wait()
 
     def get_lib_path(self) -> str:
         return sysconfig.get_path("purelib", vars={"base": str(self.env_path)})

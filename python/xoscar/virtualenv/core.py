@@ -32,7 +32,17 @@ class VirtualEnvManager(ABC):
         pass
 
     @abstractmethod
-    def install_packages(self, packages: list[str], index_url: str | None = None):
+    def install_packages(
+        self,
+        packages: list[str],
+        index_url: str | None = None,
+        extra_index_url: str | None = None,
+        find_links: str | None = None,
+    ):
+        pass
+
+    @abstractmethod
+    def cancel_install(self):
         pass
 
     @abstractmethod
