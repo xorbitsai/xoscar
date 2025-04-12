@@ -38,22 +38,25 @@ class UVVirtualEnvManager(VirtualEnvManager):
             cmd += ["--python", str(python_path)]
         subprocess.run(cmd, check=True)
 
-    def install_packages(
-        self,
-        packages: list[str],
-        index_url: str | None = None,
-        extra_index_url: str | None = None,
-        find_links: str | None = None,
-    ):
+    def install_packages(self, packages: list[str], **kwargs):
+        """
+        Install packages into the virtual environment using uv.
+        Supports pip-compatible kwargs: index_url, extra_index_url, find_links.
+        """
         if not packages:
             return
+
         cmd = ["uv", "pip", "install", "-p", str(self.env_path)] + packages
-        if index_url:
-            cmd += ["-i", index_url]  # specify index url
-        if extra_index_url:
-            cmd += ["--extra-index-url", extra_index_url]
-        if find_links:
-            cmd += ["-f", find_links]
+
+        # Handle known pip-related kwargs
+        if "index_url" in kwargs and kwargs["index_url"]:
+            cmd += ["-i", kwargs["index_url"]]
+        if "extra_index_url" in kwargs and kwargs["extra_index_url"]:
+            cmd += ["--extra-index-url", kwargs["extra_index_url"]]
+        if "find_links" in kwargs and kwargs["find_links"]:
+            cmd += ["-f", kwargs["find_links"]]
+        if "trusted_host" in kwargs and kwargs["trusted_host"]:
+            cmd += ["--trusted-host", kwargs["trusted_host"]]
 
         self._install_process = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
