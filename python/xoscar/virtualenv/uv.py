@@ -18,11 +18,16 @@ import shutil
 import subprocess
 import sysconfig
 from pathlib import Path
+from typing import Optional
 
 from .core import VirtualEnvManager
 
 
 class UVVirtualEnvManager(VirtualEnvManager):
+    def __init__(self, env_path: Path):
+        super().__init__(env_path)
+        self._install_process: Optional[subprocess.Popen] = None
+
     @classmethod
     def is_available(cls):
         return shutil.which("uv") is not None
@@ -33,14 +38,44 @@ class UVVirtualEnvManager(VirtualEnvManager):
             cmd += ["--python", str(python_path)]
         subprocess.run(cmd, check=True)
 
-    def install_packages(self, packages: list[str], index_url: str | None = None):
+    def install_packages(self, packages: list[str], **kwargs):
+        """
+        Install packages into the virtual environment using uv.
+        Supports pip-compatible kwargs: index_url, extra_index_url, find_links.
+        """
         if not packages:
             return
-        cmd = ["uv", "pip", "install", "-p", str(self.env_path)] + packages
-        if index_url:
-            cmd += ["-i", index_url]  # specify index url
 
-        subprocess.run(cmd, check=True)
+        cmd = ["uv", "pip", "install", "-p", str(self.env_path)] + packages
+
+        # Handle known pip-related kwargs
+        if "index_url" in kwargs and kwargs["index_url"]:
+            cmd += ["-i", kwargs["index_url"]]
+        if "extra_index_url" in kwargs and kwargs["extra_index_url"]:
+            cmd += ["--extra-index-url", kwargs["extra_index_url"]]
+        if "find_links" in kwargs and kwargs["find_links"]:
+            cmd += ["-f", kwargs["find_links"]]
+        if "trusted_host" in kwargs and kwargs["trusted_host"]:
+            cmd += ["--trusted-host", kwargs["trusted_host"]]
+
+        self._install_process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+
+        stdout, stderr = self._install_process.communicate()
+        returncode = self._install_process.returncode
+
+        self._install_process = None  # install finished, clear reference
+
+        if returncode != 0:
+            raise subprocess.CalledProcessError(
+                returncode, cmd, output=stdout, stderr=stderr
+            )
+
+    def cancel_install(self):
+        if self._install_process and self._install_process.poll() is None:
+            self._install_process.terminate()
+            self._install_process.wait()
 
     def get_lib_path(self) -> str:
         return sysconfig.get_path("purelib", vars={"base": str(self.env_path)})
