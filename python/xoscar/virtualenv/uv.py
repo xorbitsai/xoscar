@@ -58,19 +58,11 @@ class UVVirtualEnvManager(VirtualEnvManager):
         if "trusted_host" in kwargs and kwargs["trusted_host"]:
             cmd += ["--trusted-host", kwargs["trusted_host"]]
 
-        self._install_process = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-
-        stdout, stderr = self._install_process.communicate()
-        returncode = self._install_process.returncode
-
-        self._install_process = None  # install finished, clear reference
+        self._install_process = process = subprocess.Popen(cmd)
+        returncode = process.wait()
 
         if returncode != 0:
-            raise subprocess.CalledProcessError(
-                returncode, cmd, output=stdout, stderr=stderr
-            )
+            raise subprocess.CalledProcessError(returncode, cmd)
 
     def cancel_install(self):
         if self._install_process and self._install_process.poll() is None:
