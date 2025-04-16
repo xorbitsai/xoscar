@@ -61,6 +61,8 @@ class UVVirtualEnvManager(VirtualEnvManager):
         self._install_process = process = subprocess.Popen(cmd)
         returncode = process.wait()
 
+        self._install_process = None  # install finished, clear reference
+
         if returncode != 0:
             raise subprocess.CalledProcessError(returncode, cmd)
 
