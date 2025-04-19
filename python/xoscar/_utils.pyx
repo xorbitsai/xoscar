@@ -213,7 +213,8 @@ def create_actor_ref(*args, **kwargs):
     if kwargs:
         raise ValueError('Only `address` or `uid` keywords are supported')
 
-    if 2 <= len(args) <= 3:
+    # args: [address, uid], or [address, uid, proxy_addresses]
+    if 2 <= len(args) <= 3 and isinstance(args[0], (str, bytes)):
         if address:
             raise ValueError('address has been specified')
         address = to_str(args[0])
