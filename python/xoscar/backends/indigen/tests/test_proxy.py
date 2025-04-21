@@ -157,3 +157,61 @@ async def test_client(actor_pools):
     await caller_ref.call("acc")
     assert await caller_ref.call("get") == 2
     assert await caller_ref.call2(actor_ref.address, actor_ref.uid, "get") == 2
+
+
+@pytest.mark.asyncio
+async def test_actor_ref_with_parameters():
+    # test `create_actor_ref` with parameters actor that use class object and parameters as arguments
+    class ParameterActor(xo.Actor):
+        def __init__(self, val1=0, val2=0, val3=0):
+            super().__init__()
+            self.val1 = val1
+            self.val2 = val2
+
+        def get_values(self):
+            return self.val1, self.val2
+
+        def update_values(self, val1=None, val2=None):
+            if val1 is not None:
+                self.val1 = val1
+            if val2 is not None:
+                self.val2 = val2
+            return self.get_values()
+
+        @classmethod
+        def gen_uid(cls, band_name: str):
+            return f"param_actor_{band_name}"
+
+    start_method = (
+        os.environ.get("POOL_START_METHOD", "forkserver")
+        if sys.platform != "win32"
+        else None
+    )
+    pool = await xo.create_actor_pool(
+        "127.0.0.1",
+        n_process=2,
+        subprocess_start_method=start_method,
+    )
+
+    async with pool:
+        io_addr = pool.external_address
+
+        original_actor_ref = await xo.create_actor(
+            ParameterActor,
+            1,
+            2,
+            address=io_addr,
+            uid=ParameterActor.gen_uid("numa-0"),
+        )
+
+        actor_ref_from_actor_ref_func = await xo.actor_ref(
+            ParameterActor,
+            1,
+            2,
+            address=io_addr,
+            uid=ParameterActor.gen_uid("numa-0"),
+        )
+
+        assert await xo.has_actor(actor_ref_from_actor_ref_func)
+        assert await original_actor_ref.get_values() == (1, 2)
+        assert await actor_ref_from_actor_ref_func.get_values() == (1, 2)
