@@ -135,11 +135,6 @@ jobs:
         # conda install -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
         pip install ucxx-cu12
 
-    - name: Install fury
-      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version == '3.9') }}
-      run: |
-        pip install pyfury
-
     - name: Install on GPU
       if: ${{ matrix.module == 'gpu' }}
       run: |
