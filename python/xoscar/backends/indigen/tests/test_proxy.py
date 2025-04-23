@@ -27,15 +27,9 @@ from ...router import Router
 
 
 async def _run_actor_pool(started, address, proxy_config):
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "spawn")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await xo.create_actor_pool(
         address,
         n_process=2,
-        subprocess_start_method=start_method,
         proxy_conf=proxy_config,
     )
     await pool.start()

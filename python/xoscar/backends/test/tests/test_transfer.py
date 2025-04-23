@@ -100,23 +100,16 @@ class BufferTransferActor(Actor):
 
 
 async def _copy_test(scheme1: Optional[str], scheme2: Optional[str], cpu: bool):
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool: MainActorPool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         external_address_schemes=[None, scheme1, scheme2],
     )
     pool2: MainActorPool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         external_address_schemes=[None, scheme1, scheme2],
     )
 
@@ -255,16 +248,10 @@ class FileobjTransferActor(Actor):
 
 @pytest.mark.asyncio
 async def test_copy_to_file_objects():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
     )
 
     d = tempfile.mkdtemp()

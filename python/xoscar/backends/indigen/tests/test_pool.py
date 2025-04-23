@@ -458,16 +458,10 @@ async def test_main_actor_pool():
 
 @pytest.mark.asyncio
 async def test_create_actor_pool():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
     )
 
     async with pool:
@@ -544,18 +538,12 @@ async def test_create_actor_pool():
 
 @pytest.mark.asyncio
 async def test_create_actor_pool_extra_config():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     # create a actor pool based on socket rather than ucx
     # pass `extra_conf` to check if we can filter out ucx config
     pool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         extra_conf={
             "ucx": {
                 "tcp": None,
@@ -643,17 +631,11 @@ async def test_create_actor_pool_extra_config():
 @pytest.mark.asyncio
 @require_unix
 async def test_create_actor_pool_elastic_ip():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     addr = f"111.111.111.111:{get_next_port()}"
     pool = await create_actor_pool(
         addr,
         pool_cls=MainActorPool,
         n_process=0,
-        subprocess_start_method=start_method,
         extra_conf={"listen_elastic_ip": True},
     )
     async with pool:
@@ -684,18 +666,12 @@ async def test_create_actor_pool_elastic_ip():
 
 @pytest.mark.asyncio
 async def test_create_actor_pool_fix_all_zero_ip():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     port = get_next_port()
     addr = f"0.0.0.0:{port}"
     pool = await create_actor_pool(
         addr,
         pool_cls=MainActorPool,
         n_process=0,
-        subprocess_start_method=start_method,
     )
     async with pool:
         # test global router
@@ -731,18 +707,12 @@ async def test_create_actor_pool_fix_all_zero_ip():
 
 @pytest.mark.asyncio
 async def test_create_actor_pool_ipv6():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     port = get_next_port()
     addr = f":::{port}"
     pool = await create_actor_pool(
         addr,
         pool_cls=MainActorPool,
         n_process=0,
-        subprocess_start_method=start_method,
     )
     async with pool:
         # test global router
@@ -773,11 +743,6 @@ async def test_create_actor_pool_ipv6():
 @pytest.mark.asyncio
 @require_unix
 async def test_create_actor_pool_ipv6_elastic_ip():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     port = get_next_port()
     # ip not exists on local host
     addr = f"FFFF:34::55::1:{port}"
@@ -785,7 +750,6 @@ async def test_create_actor_pool_ipv6_elastic_ip():
         addr,
         pool_cls=MainActorPool,
         n_process=0,
-        subprocess_start_method=start_method,
         extra_conf={"listen_elastic_ip": True},
     )
     async with pool:
@@ -864,16 +828,10 @@ async def test_errors():
 
 @pytest.mark.asyncio
 async def test_server_closed():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         auto_recover=False,
     )
 
@@ -891,14 +849,14 @@ async def test_server_closed():
         # kill subprocess 1
         process = list(pool._sub_processes.values())[0]
         process.kill()
-        process.join()
+        await process.wait()
 
         with pytest.raises(ServerClosed):
             # process already been killed,
             # ServerClosed will be raised
             await task
 
-        assert not process.is_alive()
+        assert process.returncode is not None
 
     with pytest.raises(RuntimeError):
         await pool.start()
@@ -912,11 +870,6 @@ async def test_server_closed():
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="skip under Windows")
 @pytest.mark.parametrize("auto_recover", [False, True, "actor", "process"])
 async def test_auto_recover(auto_recover):
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     recovered = asyncio.Event()
 
     def on_process_recover(*_):
@@ -926,7 +879,6 @@ async def test_auto_recover(auto_recover):
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         auto_recover=auto_recover,
         on_process_recover=on_process_recover,
     )
@@ -978,11 +930,6 @@ async def test_auto_recover(auto_recover):
 )
 @pytest.mark.asyncio
 async def test_monitor_sub_pool_exception(exception_config):
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     recovered = asyncio.Event()
     exception, done = exception_config
 
@@ -994,7 +941,6 @@ async def test_monitor_sub_pool_exception(exception_config):
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         on_process_recover=on_process_recover,
     )
 
@@ -1015,25 +961,17 @@ async def test_monitor_sub_pool_exception(exception_config):
 
 @pytest.mark.asyncio
 async def test_two_pools():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
-
     ctx = get_context()
 
     pool1 = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
     )
     pool2 = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
     )
 
     def is_interprocess_address(addr):
@@ -1091,16 +1029,10 @@ async def test_two_pools():
 
 @pytest.mark.asyncio
 async def test_parallel_allocate_idle_label():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         labels=[None, "my_label", "my_label"],
     )
 
@@ -1169,16 +1101,10 @@ DICT_CONFIG = {
     ],
 )
 async def test_logging_config(logging_conf):
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=1,
-        subprocess_start_method=start_method,
         labels=[None, "my_label"],
         logging_conf=logging_conf,
     )
@@ -1199,16 +1125,10 @@ async def test_logging_config(logging_conf):
 
 @pytest.mark.asyncio
 async def test_ref_sub_pool_actor():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=1,
-        subprocess_start_method=start_method,
     )
 
     async with pool:
@@ -1256,16 +1176,10 @@ class TestUCXActor(Actor):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("enable_internal_addr", [False, True])
 async def test_ucx(enable_internal_addr: bool):
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(  # type: ignore
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         external_address_schemes=["ucx"] * 3,
         enable_internal_addresses=[enable_internal_addr] * 3,
     )
@@ -1291,18 +1205,12 @@ async def test_ucx(enable_internal_addr: bool):
 @require_ucx
 @pytest.mark.asyncio
 async def test_ucx_elastic_ip():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     port = get_next_port()
     addr = f"111.111.111.111:{port}"
     pool = await create_actor_pool(  # type: ignore
         addr,
         pool_cls=MainActorPool,
         n_process=0,
-        subprocess_start_method=start_method,
         external_address_schemes=["ucx"],
         extra_conf={"listen_elastic_ip": True},
     )
@@ -1321,16 +1229,10 @@ async def test_ucx_elastic_ip():
 
 @pytest.mark.asyncio
 async def test_append_sub_pool_multiprocess():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(  # type: ignore
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
     )
 
     async with pool:
@@ -1374,16 +1276,10 @@ async def test_append_sub_pool_multiprocess():
 @pytest.mark.asyncio
 @require_unix
 async def test_append_sub_pool_multi_process_elastic_ip():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(  # type: ignore
         "111.111.111.111",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         extra_conf={"listen_elastic_ip": True},
     )
 
@@ -1428,16 +1324,10 @@ async def test_append_sub_pool_multi_process_elastic_ip():
 @pytest.mark.asyncio
 @require_unix
 async def test_append_sub_pool_single_process_elastic_ip():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(  # type: ignore
         f"111.111.111.111:{get_next_port()}",
         pool_cls=MainActorPool,
         n_process=0,
-        subprocess_start_method=start_method,
         extra_conf={"listen_elastic_ip": True},
     )
 
@@ -1577,16 +1467,10 @@ class _ProcessActor(Actor):
 
 @pytest.mark.asyncio
 async def test_process_in_actor():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(  # type: ignore
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=1,
-        subprocess_start_method=start_method,
     )
 
     async with pool:

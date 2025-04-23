@@ -66,14 +66,7 @@ class DebugActor(mo.Actor):
 
 @pytest.fixture
 async def actor_pool():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
-    pool = await mo.create_actor_pool(
-        "127.0.0.1", n_process=0, subprocess_start_method=start_method
-    )
+    pool = await mo.create_actor_pool("127.0.0.1", n_process=0)
     await pool.start()
     yield pool
     await pool.stop()

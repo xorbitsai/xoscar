@@ -50,12 +50,14 @@ class TestMainActorPool(MainActorPool):
         cls,
         actor_pool_config: ActorPoolConfig,
         process_index: int,
-        start_method: str | None = None,
+        start_python: str | None = None,
     ):
         status_queue: multiprocessing.Queue = multiprocessing.Queue()
         return (
             asyncio.create_task(
-                cls._create_sub_pool(actor_pool_config, process_index, status_queue, 0)
+                cls._create_sub_pool_child(
+                    actor_pool_config, process_index, status_queue, 0
+                )
             ),
             status_queue,
         )
@@ -72,7 +74,7 @@ class TestMainActorPool(MainActorPool):
         return tasks, addresses
 
     @classmethod
-    async def _create_sub_pool(
+    async def _create_sub_pool_child(
         cls,
         actor_config: ActorPoolConfig,
         process_index: int,
@@ -107,7 +109,7 @@ class TestMainActorPool(MainActorPool):
         suspend_sigint: bool | None = None,
         use_uvloop: bool | None = None,
         logging_conf: dict | None = None,
-        start_method: str | None = None,
+        start_python: str | None = None,
         kwargs: dict | None = None,
     ):
         external_address = (

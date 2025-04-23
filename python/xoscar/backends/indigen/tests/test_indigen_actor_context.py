@@ -245,14 +245,7 @@ class PromiseTestActor(mo.Actor):
 @pytest.mark.parametrize(indirect=True)
 @pytest.fixture(params=[False, True])
 async def actor_pool(request):
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
-    pool = await mo.create_actor_pool(
-        "127.0.0.1", n_process=2, subprocess_start_method=start_method
-    )
+    pool = await mo.create_actor_pool("127.0.0.1", n_process=2)
 
     try:
         if request.param:
