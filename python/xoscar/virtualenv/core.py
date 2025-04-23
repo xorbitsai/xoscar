@@ -40,6 +40,10 @@ class VirtualEnvManager(ABC):
         pass
 
     @abstractmethod
+    def get_python_path(self) -> str:
+        pass
+
+    @abstractmethod
     def get_lib_path(self) -> str:
         pass
 
