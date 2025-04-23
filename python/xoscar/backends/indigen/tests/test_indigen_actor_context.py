@@ -15,8 +15,6 @@
 
 import asyncio
 import logging
-import os
-import sys
 import time
 import traceback
 from collections import deque

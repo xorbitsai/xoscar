@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import asyncio
-import multiprocessing as mp
 import os
 
 import numpy as np

@@ -14,8 +14,6 @@
 # limitations under the License.
 import asyncio
 import gc
-import os
-import sys
 import threading
 
 import pytest

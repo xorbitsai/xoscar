@@ -16,7 +16,6 @@
 import asyncio
 import logging
 import os
-import sys
 from contextlib import contextmanager
 from io import StringIO
 from typing import List
