@@ -20,9 +20,9 @@ import time
 import pytest
 
 from ... import Actor, create_actor
-from .. import get_virtual_env_manager
 from ...backends.indigen.pool import MainActorPool
 from ...backends.pool import create_actor_pool
+from .. import get_virtual_env_manager
 from ..uv import UVVirtualEnvManager
 
 
