@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 import asyncio
-import multiprocessing
 from typing import Any, Optional
 
 from ..communication import DummyServer, gen_local_address
@@ -152,11 +151,11 @@ class TestMainActorPool(MainActorPool):
         return addresses[0][0]
 
     async def kill_sub_pool(
-        self, process: multiprocessing.Process, force: bool = False
+        self, process: asyncio.subprocess.Process, force: bool = False
     ):
         pass
 
-    async def is_sub_pool_alive(self, process: multiprocessing.Process):
+    async def is_sub_pool_alive(self, process: asyncio.subprocess.Process):
         return True
 
 
