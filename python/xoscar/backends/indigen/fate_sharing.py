@@ -1,10 +1,9 @@
-import sys
-import subprocess
-import psutil
 import asyncio
-import io
-import signal
 import logging
+import subprocess
+import sys
+
+import psutil
 
 # Linux can bind child processes' lifetimes to that of their parents via prctl.
 # prctl support is detected dynamically once, and assumed thereafter.
