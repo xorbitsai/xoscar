@@ -29,13 +29,12 @@ import struct
 import sys
 import time
 import uuid
-from dataclasses import dataclass
+from enum import IntEnum
 from multiprocessing import shared_memory
-from types import TracebackType
 from typing import List, Optional
 
 from ..._utils import reset_id_random_seed
-from ...utils import dataslots, ensure_coverage
+from ...utils import ensure_coverage
 from ..config import ActorPoolConfig
 from ..message import (
     ControlMessage,
@@ -46,68 +45,33 @@ from ..message import (
 from ..pool import MainActorPoolBase, SubActorPoolBase, _register_message_handler
 from .fate_sharing import create_subprocess_exec
 
+_SUBPROCESS_SHM_SIZE = 10240
 _is_windows: bool = sys.platform.startswith("win")
 
-if sys.version_info[:2] == (3, 9):
-    # fix for Python 3.9, see https://bugs.python.org/issue43517
-    if sys.platform == "win32":
-        from multiprocessing import popen_spawn_win32 as popen_spawn
-
-        popen_forkserver = popen_fork = synchronize = None
-    else:
-        from multiprocessing import popen_fork, popen_forkserver
-        from multiprocessing import popen_spawn_posix as popen_spawn
-        from multiprocessing import synchronize
-    _ = popen_spawn, popen_forkserver, popen_fork, synchronize
-    del _
-elif sys.version_info[:2] == (3, 6):  # pragma: no cover
-    from multiprocessing.process import BaseProcess
-
-    # define kill method for multiprocessing
-    def _mp_kill(self):
-        if not _is_windows:
-            try:
-                os.kill(self.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            except OSError:
-                if self.wait(timeout=0.1) is None:
-                    raise
-        else:
-            self.terminate()
-
-    BaseProcess.kill = _mp_kill
-
 logger = logging.getLogger(__name__)
-SUBPROCESS_SHM_SIZE = 10240
 
 
-def _shm_put_object(seq: int, shm: shared_memory.SharedMemory, o: object):
+class _ShmSeq(IntEnum):
+    INIT_PARAMS = 1
+    INIT_RESULT = 2
+
+
+def _shm_put_object(seq: _ShmSeq, shm: shared_memory.SharedMemory, o: object):
     shm.buf[:4] = struct.pack("<I", seq)
     serialized = pickle.dumps(o)
     assert (
-        len(serialized) < SUBPROCESS_SHM_SIZE - 8
+        len(serialized) < _SUBPROCESS_SHM_SIZE - 8
     ), f"Serialized object {o} is too long."
     shm.buf[4:8] = struct.pack("<I", len(serialized))
     shm.buf[8 : 8 + len(serialized)] = serialized
 
 
-def _shm_get_object(seq: int, shm: shared_memory.SharedMemory):
+def _shm_get_object(seq: _ShmSeq, shm: shared_memory.SharedMemory):
     recv_seq = struct.unpack("<I", shm.buf[:4])[0]
     if recv_seq != seq:
         return
     size = struct.unpack("<I", shm.buf[4:8])[0]
     return pickle.loads(shm.buf[8 : 8 + size])
-
-
-@dataslots
-@dataclass
-class SubpoolStatus:
-    # for status, 0 is succeeded, 1 is failed
-    status: int | None = None
-    external_addresses: List[str] | None = None
-    error: BaseException | None = None
-    traceback: TracebackType | None = None
 
 
 @_register_message_handler
@@ -204,7 +168,7 @@ class MainActorPool(MainActorPoolBase):
 
         shm = shared_memory.SharedMemory(shm_name)
         try:
-            config = _shm_get_object(1, shm)
+            config = _shm_get_object(_ShmSeq.INIT_PARAMS, shm)
             actor_config = config["actor_pool_config"]
             process_index = config["process_index"]
             main_pool_pid = config["main_pool_pid"]
@@ -264,7 +228,7 @@ class MainActorPool(MainActorPoolBase):
             }
         )
         await pool.start()
-        _shm_put_object(2, shm, cur_pool_config["external_address"])
+        _shm_put_object(_ShmSeq.INIT_RESULT, shm, cur_pool_config["external_address"])
         await pool.join()
 
     @staticmethod
@@ -277,10 +241,10 @@ class MainActorPool(MainActorPoolBase):
             start_python = sys.executable
 
         external_addresses: List | None = None
-        shm = shared_memory.SharedMemory(create=True, size=SUBPROCESS_SHM_SIZE)
+        shm = shared_memory.SharedMemory(create=True, size=_SUBPROCESS_SHM_SIZE)
         try:
             _shm_put_object(
-                1,
+                _ShmSeq.INIT_PARAMS,
                 shm,
                 {
                     "actor_pool_config": actor_pool_config,
@@ -299,7 +263,9 @@ class MainActorPool(MainActorPoolBase):
 
             def _get_external_addresses():
                 nonlocal external_addresses
-                while not (external_addresses := _shm_get_object(2, shm)):
+                while not (
+                    external_addresses := _shm_get_object(_ShmSeq.INIT_RESULT, shm)
+                ):
                     time.sleep(0.1)
 
             await asyncio.wait(
