@@ -134,31 +134,6 @@ class SubpoolStatus:
     traceback: TracebackType | None = None
 
 
-_PRE_SET_ENV_LOCK = asyncio.Lock()
-
-
-@contextlib.asynccontextmanager
-async def _pre_set_env_in_main(env: dict[str, str]):
-    # Normally, `env` is set in sub pool,
-    # but something may have happened during initialization,
-    # e.g. CUDA_VISIBLE_DEVICES is too late to set when some actions may have polluted cuda
-    # we have to set environ before new process started
-    # enable this only when XOSCAR_PRE_SET_ENV=1
-    enable_pre_set_env = bool(int(os.getenv("XOSCAR_PRE_SET_ENV", 0)))
-    if not enable_pre_set_env or not env:
-        yield
-        return
-
-    global_environ = os.environ.copy()
-    async with _PRE_SET_ENV_LOCK:
-        try:
-            logger.debug("Updating environment variables in main: %s", env)
-            os.environ.update(env)
-            yield
-        finally:
-            os.environ = global_environ  # type: ignore
-
-
 @_register_message_handler
 class MainActorPool(MainActorPoolBase):
     @classmethod
@@ -248,12 +223,9 @@ class MainActorPool(MainActorPoolBase):
 
         _patch_spawn_get_preparation_data()
         loop = asyncio.get_running_loop()
-        async with _pre_set_env_in_main(
-            actor_pool_config.get_pool_config(process_index)["env"]
-        ):
-            with futures.ThreadPoolExecutor(1) as executor:
-                create_pool_task = loop.run_in_executor(executor, start_pool_in_process)
-                return await create_pool_task
+        with futures.ThreadPoolExecutor(1) as executor:
+            create_pool_task = loop.run_in_executor(executor, start_pool_in_process)
+            return await create_pool_task
 
     @classmethod
     async def wait_sub_pools_ready(cls, create_pool_tasks: List[asyncio.Task]):
@@ -422,10 +394,9 @@ class MainActorPool(MainActorPoolBase):
             return process, process_status
 
         loop = asyncio.get_running_loop()
-        async with _pre_set_env_in_main(env):  # type: ignore
-            with futures.ThreadPoolExecutor(1) as executor:
-                create_pool_task = loop.run_in_executor(executor, start_pool_in_process)
-                process, process_status = await create_pool_task
+        with futures.ThreadPoolExecutor(1) as executor:
+            create_pool_task = loop.run_in_executor(executor, start_pool_in_process)
+            process, process_status = await create_pool_task
 
         self._config.reset_pool_external_address(
             process_index, process_status.external_addresses[0]
