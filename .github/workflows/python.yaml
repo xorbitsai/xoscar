@@ -163,7 +163,9 @@ jobs:
             --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar --capture=no
         else
           source activate ${{ env.CONDA_ENV }}
-          pytest -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar --capture=no
+          pytest --timeout=1500 \
+            -W ignore::PendingDeprecationWarning \
+            --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar --capture=no
         fi
       working-directory: ./python
 
