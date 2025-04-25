@@ -62,16 +62,20 @@ def _shm_put_object(seq: _ShmSeq, shm: shared_memory.SharedMemory, o: object):
     assert (
         len(serialized) < _SUBPROCESS_SHM_SIZE - 8
     ), f"Serialized object {o} is too long."
-    shm.buf[4:8] = struct.pack("<I", len(serialized))
-    shm.buf[8 : 8 + len(serialized)] = serialized
+    shm.buf[4:12] = struct.pack("<II", sys.hexversion, len(serialized))
+    shm.buf[12 : 12 + len(serialized)] = serialized
 
 
 def _shm_get_object(seq: _ShmSeq, shm: shared_memory.SharedMemory):
     recv_seq = struct.unpack("<I", shm.buf[:4])[0]
     if recv_seq != seq:
         return
-    size = struct.unpack("<I", shm.buf[4:8])[0]
-    return pickle.loads(shm.buf[8 : 8 + size])
+    python_version_hex, size = struct.unpack("<II", shm.buf[4:12])
+    if python_version_hex != sys.hexversion:
+        raise RuntimeError(
+            f"Python version mismatch, sender: {python_version_hex}, receiver: {sys.hexversion}"
+        )
+    return pickle.loads(shm.buf[12 : 12 + size])
 
 
 @_register_message_handler
@@ -237,6 +241,8 @@ class MainActorPool(MainActorPoolBase):
         process_index: int,
         start_python: str | None = None,
     ):
+        # We check the Python version in _shm_get_object to make it faster,
+        # as in most cases the Python versions are the same.
         if start_python is None:
             start_python = sys.executable
 
