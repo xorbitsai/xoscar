@@ -72,7 +72,7 @@ async def test_uv_virtialenv_pool():
             manager.create_env()
             assert os.path.exists(path)
             manager.install_packages(
-                ["transformers==4.40.0"],
+                ["xllamacpp==0.1.14"],
                 index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
             )
 
@@ -88,9 +88,9 @@ async def test_uv_virtialenv_pool():
             class DummyActor(Actor):
                 @staticmethod
                 def test():
-                    import transformers
+                    import xllamacpp
 
-                    assert transformers.__version__ == "4.40.0"
+                    assert xllamacpp.__version__ == "0.1.14"
                     return sys.executable
 
             ref = await create_actor(DummyActor, address=sub_external_address)
@@ -99,12 +99,11 @@ async def test_uv_virtialenv_pool():
             assert await ref.test() == manager.get_python_path()
 
             with pytest.raises((ImportError, AssertionError)):
-                import transformers
+                import xllamacpp
 
-                assert transformers.__version__ == "4.40.0"
+                assert xllamacpp.__version__ == "0.1.14"
 
             await pool.remove_sub_pool(sub_external_address)
-            #
             manager.remove_env()
             assert not os.path.exists(path)
         finally:
