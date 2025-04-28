@@ -30,7 +30,6 @@ import sys
 import time
 import uuid
 from enum import IntEnum
-from multiprocessing import shared_memory
 from typing import List, Optional
 
 from ..._utils import reset_id_random_seed
@@ -44,6 +43,7 @@ from ..message import (
 )
 from ..pool import MainActorPoolBase, SubActorPoolBase, _register_message_handler
 from .fate_sharing import create_subprocess_exec
+from . import shared_memory
 
 _SUBPROCESS_SHM_SIZE = 10240
 _is_windows: bool = sys.platform.startswith("win")
@@ -170,7 +170,7 @@ class MainActorPool(MainActorPoolBase):
     ):
         ensure_coverage()
 
-        shm = shared_memory.SharedMemory(shm_name)
+        shm = shared_memory.SharedMemory(shm_name, track=False)
         try:
             config = _shm_get_object(_ShmSeq.INIT_PARAMS, shm)
             actor_config = config["actor_pool_config"]
@@ -247,7 +247,7 @@ class MainActorPool(MainActorPoolBase):
             start_python = sys.executable
 
         external_addresses: List | None = None
-        shm = shared_memory.SharedMemory(create=True, size=_SUBPROCESS_SHM_SIZE)
+        shm = shared_memory.SharedMemory(create=True, size=_SUBPROCESS_SHM_SIZE, track=False)
         try:
             _shm_put_object(
                 _ShmSeq.INIT_PARAMS,
