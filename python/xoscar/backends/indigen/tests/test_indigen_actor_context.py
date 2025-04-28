@@ -240,7 +240,6 @@ class PromiseTestActor(mo.Actor):
         return log
 
 
-@pytest.mark.parametrize(indirect=True)
 @pytest.fixture(params=[False, True])
 async def actor_pool(request):
     pool = await mo.create_actor_pool("127.0.0.1", n_process=2)
