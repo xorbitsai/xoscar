@@ -62,6 +62,7 @@ async def actor_pools():
             s.wait()
 
             ps = psutil.Process(p.pid).children()
+            processes.append(psutil.Process(p.pid))
             processes.extend(ps)
 
         yield addr1, addr3
