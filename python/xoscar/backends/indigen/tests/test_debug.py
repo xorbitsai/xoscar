@@ -67,8 +67,10 @@ class DebugActor(mo.Actor):
 async def actor_pool():
     pool = await mo.create_actor_pool("127.0.0.1", n_process=0)
     await pool.start()
-    yield pool
-    await pool.stop()
+    try:
+        yield pool
+    finally:
+        await pool.stop()
 
 
 @pytest.fixture

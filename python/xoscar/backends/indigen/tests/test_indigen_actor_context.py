@@ -252,8 +252,10 @@ async def actor_pool(request):
             set_debug_options(None)
 
         await pool.start()
-        yield pool
-        await pool.stop()
+        try:
+            yield pool
+        finally:
+            await pool.stop()
     finally:
         set_debug_options(None)
 
