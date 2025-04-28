@@ -178,7 +178,11 @@ class SharedMemory:
                 try:
                     size = _winapi.VirtualQuerySize(p_buf)
                 finally:
-                    _winapi.UnmapViewOfFile(p_buf)
+                    try:
+                        # https://github.com/python/cpython/pull/20684
+                        _winapi.UnmapViewOfFile(p_buf)
+                    except:
+                        pass
                 self._mmap = mmap.mmap(-1, size, tagname=name)
 
         self._size = size
