@@ -42,8 +42,8 @@ from ..message import (
     new_message_id,
 )
 from ..pool import MainActorPoolBase, SubActorPoolBase, _register_message_handler
-from .fate_sharing import create_subprocess_exec
 from . import shared_memory
+from .fate_sharing import create_subprocess_exec
 
 _SUBPROCESS_SHM_SIZE = 10240
 _is_windows: bool = sys.platform.startswith("win")
@@ -247,7 +247,9 @@ class MainActorPool(MainActorPoolBase):
             start_python = sys.executable
 
         external_addresses: List | None = None
-        shm = shared_memory.SharedMemory(create=True, size=_SUBPROCESS_SHM_SIZE, track=False)
+        shm = shared_memory.SharedMemory(
+            create=True, size=_SUBPROCESS_SHM_SIZE, track=False
+        )
         try:
             _shm_put_object(
                 _ShmSeq.INIT_PARAMS,
