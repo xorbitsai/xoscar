@@ -20,7 +20,6 @@ import asyncio.subprocess
 import configparser
 import itertools
 import logging.config
-import multiprocessing
 import os
 import pickle
 import random
@@ -149,7 +148,7 @@ class MainActorPool(MainActorPoolBase):
 
     @classmethod
     async def wait_sub_pools_ready(cls, create_pool_tasks: List[asyncio.Task]):
-        processes: list[multiprocessing.Process] = []
+        processes: list[asyncio.subprocess.Process] = []
         ext_addresses = []
         error = None
         for task in create_pool_tasks:
