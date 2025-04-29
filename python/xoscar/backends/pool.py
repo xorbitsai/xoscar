@@ -1385,16 +1385,21 @@ class MainActorPoolBase(ActorPoolBase):
         self.sub_processes[external_address] = process
 
     async def stop_sub_pools(self):
+        import datetime
+
+        print(f"{datetime.datetime.now()} - stop_sub_pools 000")
         to_stop_processes: dict[str, SubProcessHandle] = dict()  # type: ignore
         for address, process in self.sub_processes.items():
             if not await self.is_sub_pool_alive(process):
                 continue
             to_stop_processes[address] = process
+        print(f"{datetime.datetime.now()} - stop_sub_pools 111")
 
         tasks = []
         for address, process in to_stop_processes.items():
             tasks.append(self.stop_sub_pool(address, process))
         await asyncio.gather(*tasks)
+        print(f"{datetime.datetime.now()} - stop_sub_pools 222")
 
     async def stop_sub_pool(
         self,
@@ -1403,6 +1408,9 @@ class MainActorPoolBase(ActorPoolBase):
         timeout: float | None = None,
         force: bool = False,
     ):
+        import datetime
+
+        print(f"{datetime.datetime.now()} - stop_sub_pool 0000")
         if force:
             await self.kill_sub_pool(process, force=True)
             return
@@ -1429,8 +1437,10 @@ class MainActorPoolBase(ActorPoolBase):
         except (ConnectionError, ServerClosed):  # pragma: no cover
             # process dead maybe, ignore it
             pass
+        print(f"{datetime.datetime.now()} - stop_sub_pool 1111")
         # kill process
         await self.kill_sub_pool(process, force=force)
+        print(f"{datetime.datetime.now()} - stop_sub_pool 2222")
 
     @abstractmethod
     async def kill_sub_pool(self, process: SubProcessHandle, force: bool = False):
