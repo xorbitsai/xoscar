@@ -158,7 +158,7 @@ jobs:
         MODULE: ${{ matrix.module }}
       run: |
         if [[ "$MODULE" == "xoscar" ]]; then
-          pytest -v --timeout=500 \
+          pytest -s -v --timeout=500 \
             -W ignore::PendingDeprecationWarning \
             --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar --capture=no
         else
