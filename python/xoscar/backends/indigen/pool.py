@@ -31,6 +31,8 @@ import uuid
 from enum import IntEnum
 from typing import List, Optional
 
+import psutil
+
 from ..._utils import reset_id_random_seed
 from ...utils import ensure_coverage
 from ..config import ActorPoolConfig
@@ -385,13 +387,14 @@ class MainActorPool(MainActorPoolBase):
             try:
                 process.terminate()  # SIGTERM
             except ProcessLookupError:
-                pass
+                return
 
         while process.returncode is None:
             try:
+                print(psutil.Process(process.pid))
                 process.kill()  # SIGKILL
             except ProcessLookupError:
-                pass
+                return
             time.sleep(0.1)
 
     async def is_sub_pool_alive(self, process: asyncio.subprocess.Process):
