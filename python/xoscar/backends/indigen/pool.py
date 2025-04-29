@@ -57,13 +57,13 @@ class _ShmSeq(IntEnum):
 
 
 def _shm_put_object(seq: _ShmSeq, shm: shared_memory.SharedMemory, o: object):
-    shm.buf[:4] = struct.pack("<I", seq)
     serialized = pickle.dumps(o)
     assert (
         len(serialized) < _SUBPROCESS_SHM_SIZE - 8
     ), f"Serialized object {o} is too long."
     shm.buf[4:12] = struct.pack("<II", sys.hexversion, len(serialized))
     shm.buf[12 : 12 + len(serialized)] = serialized
+    shm.buf[:4] = struct.pack("<I", seq)
 
 
 def _shm_get_object(seq: _ShmSeq, shm: shared_memory.SharedMemory):
