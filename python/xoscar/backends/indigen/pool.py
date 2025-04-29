@@ -361,9 +361,9 @@ class MainActorPool(MainActorPoolBase):
     ):
         process = self.sub_processes[external_address]
         process_index = self._config.get_process_index(external_address)
-        await self.stop_sub_pool(external_address, process, timeout, force)
         del self.sub_processes[external_address]
         self._config.remove_pool_config(process_index)
+        await self.stop_sub_pool(external_address, process, timeout, force)
 
         control_message = ControlMessage(
             message_id=new_message_id(),
