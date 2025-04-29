@@ -386,12 +386,13 @@ class MainActorPool(MainActorPoolBase):
                 process.terminate()  # SIGTERM
             except ProcessLookupError:
                 pass
-        else:
+
+        while process.returncode is None:
             try:
                 process.kill()  # SIGKILL
             except ProcessLookupError:
                 pass
-        # await process.wait()
+            time.sleep(0.1)
 
     async def is_sub_pool_alive(self, process: asyncio.subprocess.Process):
         return process.returncode is None
