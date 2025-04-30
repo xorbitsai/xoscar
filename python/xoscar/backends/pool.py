@@ -1347,9 +1347,6 @@ class MainActorPoolBase(ActorPoolBase):
 
     @implements(AbstractActorPool.stop)
     async def stop(self):
-        import datetime
-
-        print(f"{datetime.datetime.now()} - 00")
         global_router = Router.get_instance()
         if global_router is not None:
             global_router.remove_router(self._router)
@@ -1360,11 +1357,8 @@ class MainActorPoolBase(ActorPoolBase):
         if self._monitor_task and not self._monitor_task.done():
             await self._monitor_task
             self._monitor_task = None
-        print(f"{datetime.datetime.now()} - 11")
         await self.stop_sub_pools()
-        print(f"{datetime.datetime.now()} - 22")
         await super().stop()
-        print(f"{datetime.datetime.now()} - 33")
 
     @classmethod
     @abstractmethod
