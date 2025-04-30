@@ -377,24 +377,23 @@ class MainActorPool(MainActorPoolBase):
     async def kill_sub_pool(
         self, process: asyncio.subprocess.Process, force: bool = False
     ):
-        if not force:  # pragma: no cover
-            # must shutdown gracefully, or subprocess created by model will not exit
-            if not _is_windows:
-                try:
-                    os.kill(process.pid, signal.SIGINT)  # type: ignore
-                except OSError:  # pragma: no cover
-                    pass
-            try:
-                process.terminate()  # SIGTERM
-            except ProcessLookupError:
-                return
+        try:
+            p = psutil.Process(process.pid)
+        except psutil.NoSuchProcess:
+            return
 
-        while process.returncode is None:
+        if not force:  # pragma: no cover
+            p.terminate()
             try:
-                print(psutil.Process(process.pid))
-                process.kill()  # SIGKILL
-            except ProcessLookupError:
+                p.wait(5)
+            except psutil.TimeoutExpired:
+                pass
+
+        while p.is_running():
+            p.kill()
+            if not p.is_running():
                 return
+            logger.info("Sub pool can't be killed: %s", p)
             time.sleep(0.1)
 
     async def is_sub_pool_alive(self, process: asyncio.subprocess.Process):
