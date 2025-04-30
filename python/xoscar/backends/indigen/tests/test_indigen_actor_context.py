@@ -250,21 +250,13 @@ async def actor_pool(request):
         else:
             set_debug_options(None)
 
-        import sys
-
-        if sys.version_info >= (3, 11):
-            from asyncio import timeout
-        else:
-            from async_timeout import timeout
-
-        async with timeout(180):
-            await pool.start()
-            try:
-                yield pool
-            except Exception as e:
-                logger.exception("Pool context error: %s", e)
-            finally:
-                await pool.stop()
+        await pool.start()
+        try:
+            yield pool
+        except Exception as e:
+            logger.exception("Pool context error: %s", e)
+        finally:
+            await pool.stop()
     finally:
         set_debug_options(None)
 
