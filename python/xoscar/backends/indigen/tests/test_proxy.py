@@ -177,15 +177,9 @@ async def test_actor_ref_with_parameters():
         def gen_uid(cls, band_name: str):
             return f"param_actor_{band_name}"
 
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await xo.create_actor_pool(
         "127.0.0.1",
         n_process=2,
-        subprocess_start_method=start_method,
     )
 
     async with pool:
