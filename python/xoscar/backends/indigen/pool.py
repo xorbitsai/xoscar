@@ -26,6 +26,7 @@ import random
 import signal
 import struct
 import sys
+import threading
 import time
 import uuid
 from enum import IntEnum
@@ -177,6 +178,19 @@ class MainActorPool(MainActorPoolBase):
             actor_config = config["actor_pool_config"]
             process_index = config["process_index"]
             main_pool_pid = config["main_pool_pid"]
+
+            def _check_ppid():
+                while True:
+                    try:
+                        if os.getppid() != main_pool_pid:
+                            logger.info("Exit due to parent %s exit.", main_pool_pid)
+                            os._exit(0)
+                        time.sleep(2)
+                    except Exception as e:
+                        logger.exception("Check ppid failed: %s", e)
+
+            t = threading.Thread(target=_check_ppid, daemon=True)
+            t.start()
 
             # make sure enough randomness for every sub pool
             random.seed(uuid.uuid1().bytes)
