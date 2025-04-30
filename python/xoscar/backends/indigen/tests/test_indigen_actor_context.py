@@ -250,7 +250,6 @@ async def actor_pool(request):
         else:
             set_debug_options(None)
 
-        import datetime
         import sys
 
         if sys.version_info >= (3, 11):
@@ -259,17 +258,13 @@ async def actor_pool(request):
             from async_timeout import timeout
 
         async with timeout(180):
-            print(f"{datetime.datetime.now()} - 0")
             await pool.start()
-            print(f"{datetime.datetime.now()} - 1")
             try:
                 yield pool
             except Exception as e:
                 logger.exception("Pool context error: %s", e)
             finally:
-                print(f"{datetime.datetime.now()} - 2")
                 await pool.stop()
-                print(f"{datetime.datetime.now()} - 3")
     finally:
         set_debug_options(None)
 
