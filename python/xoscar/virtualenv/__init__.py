@@ -1,4 +1,4 @@
-# Copyright 2022-2023 XProbe Inc.
+# Copyright 2022-2025 XProbe Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
+from __future__ import annotations
+
 from pathlib import Path
 
-XOSCAR_TEMP_DIR = Path(os.getenv("XOSCAR_DIR", Path.home())) / ".xoscar"
+from .core import VirtualEnvManager
+from .uv import UVVirtualEnvManager
 
-# unix socket.
-XOSCAR_UNIX_SOCKET_DIR = XOSCAR_TEMP_DIR / "socket"
+_name_to_managers = {"uv": UVVirtualEnvManager}
 
-XOSCAR_CONNECT_TIMEOUT = 8
+
+def get_virtual_env_manager(env_name: str, env_path: str | Path) -> VirtualEnvManager:
+    try:
+        manager_cls = _name_to_managers[env_name]
+    except KeyError:
+        raise ValueError(
+            f"Unknown virtualenv manager {env_name}, available: {list(_name_to_managers)}"
+        )
+
+    path = Path(env_path)
+    return manager_cls(path)

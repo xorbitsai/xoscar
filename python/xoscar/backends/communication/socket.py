@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures as futures
+import logging
 import os
 import socket
 import sys
@@ -28,14 +29,18 @@ from typing import Any, Callable, Coroutine, Dict, Type
 from urllib.parse import urlparse
 
 from ..._utils import to_binary
-from ...constants import XOSCAR_UNIX_SOCKET_DIR
+from ...constants import XOSCAR_CONNECT_TIMEOUT, XOSCAR_UNIX_SOCKET_DIR
 from ...serialization import AioDeserializer, AioSerializer, deserialize
-from ...utils import classproperty, implements
+from ...utils import classproperty, implements, is_py_312, is_v6_ip
 from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server
+from .errors import ChannelClosed
 from .utils import read_buffers, write_buffers
 
 _is_windows: bool = sys.platform.startswith("win")
+
+
+logger = logging.getLogger(__name__)
 
 
 class SocketChannel(Channel):
@@ -76,12 +81,19 @@ class SocketChannel(Channel):
         serializer = AioSerializer(message, compress=compress)
         buffers = await serializer.run()
 
-        # write buffers
-        write_buffers(self.writer, buffers)
-        async with self._send_lock:
-            # add lock, or when parallel send,
-            # assertion error may be raised
-            await self.writer.drain()
+        try:
+            # write buffers
+            write_buffers(self.writer, buffers)
+            async with self._send_lock:
+                # add lock, or when parallel send,
+                # assertion error may be raised
+                await self.writer.drain()
+        except RuntimeError as e:
+            if self.writer.is_closing():
+                raise ChannelClosed(
+                    "Channel already closed, cannot write message"
+                ) from e
+            raise e
 
     @implements(Channel.recv)
     async def recv(self):
@@ -109,7 +121,7 @@ class SocketChannel(Channel):
 class _BaseSocketServer(Server, metaclass=ABCMeta):
     __slots__ = "_aio_server", "_channels"
 
-    _channels: list[ChannelType]
+    _channels: set[Channel]
 
     def __init__(
         self,
@@ -120,7 +132,7 @@ class _BaseSocketServer(Server, metaclass=ABCMeta):
         super().__init__(address, channel_handler)
         # asyncio.Server
         self._aio_server = aio_server
-        self._channels = []
+        self._channels = set()
 
     @implements(Server.start)
     async def start(self):
@@ -131,11 +143,23 @@ class _BaseSocketServer(Server, metaclass=ABCMeta):
         if timeout is None:
             await self._aio_server.serve_forever()
         else:
-            future = asyncio.create_task(self._aio_server.serve_forever())
-            try:
-                await asyncio.wait_for(future, timeout=timeout)
-            except (futures.TimeoutError, asyncio.TimeoutError):
-                future.cancel()
+            if is_py_312():
+                # For python 3.12, there's a bug for `serve_forever`:
+                # https://github.com/python/cpython/issues/123720,
+                # which is unable to be cancelled.
+                # Here is really a simulation of `wait_for`
+                task = asyncio.create_task(self._aio_server.serve_forever())
+                await asyncio.sleep(timeout)
+                if task.done():
+                    logger.warning(f"`serve_forever` should never be done.")
+                else:
+                    task.cancel()
+            else:
+                future = asyncio.create_task(self._aio_server.serve_forever())
+                try:
+                    await asyncio.wait_for(future, timeout=timeout)
+                except (futures.TimeoutError, asyncio.TimeoutError, TimeoutError):
+                    future.cancel()
 
     @implements(Server.on_connected)
     async def on_connected(self, *args, **kwargs):
@@ -154,18 +178,29 @@ class _BaseSocketServer(Server, metaclass=ABCMeta):
             dest_address=dest_address,
             channel_type=self.channel_type,
         )
-        self._channels.append(channel)
+        self._channels.add(channel)
         # handle over channel to some handlers
-        await self.channel_handler(channel)
+        try:
+            await self.channel_handler(channel)
+        finally:
+            if not channel.closed:
+                await channel.close()
+            # Remove channel if channel exit
+            self._channels.discard(channel)
+            logger.debug("Channel exit: %s", channel.info)
 
     @implements(Server.stop)
     async def stop(self):
         self._aio_server.close()
-        await self._aio_server.wait_closed()
+        # Python 3.12: # https://github.com/python/cpython/issues/104344
+        # `wait_closed` leads to hang
+        if not is_py_312():
+            await self._aio_server.wait_closed()
         # close all channels
         await asyncio.gather(
             *(channel.close() for channel in self._channels if not channel.closed)
         )
+        self._channels.clear()
 
     @property
     @implements(Server.stopped)
@@ -201,17 +236,37 @@ class SocketServer(_BaseSocketServer):
     def channel_type(self) -> int:
         return ChannelType.remote
 
+    @classmethod
+    def parse_config(cls, config: dict) -> dict:
+        if config is None or not config:
+            return dict()
+        # we only need the following config
+        keys = ["listen_elastic_ip"]
+        parsed_config = {key: config[key] for key in keys if key in config}
+
+        return parsed_config
+
     @staticmethod
     @implements(Server.create)
     async def create(config: Dict) -> "Server":
         config = config.copy()
         if "address" in config:
             address = config.pop("address")
-            host, port = address.split(":", 1)
+            host, port = address.rsplit(":", 1)
             port = int(port)
         else:
             host = config.pop("host")
             port = int(config.pop("port"))
+        _host = host
+        if config.pop("listen_elastic_ip", False):
+            # The Actor.address will be announce to client, and is not on our host,
+            # cannot actually listen on it,
+            # so we have to keep SocketServer.host untouched to make sure Actor.address not changed
+            if is_v6_ip(host):
+                _host = "::"
+            else:
+                _host = "0.0.0.0"
+
         handle_channel = config.pop("handle_channel")
         if "start_serving" not in config:
             config["start_serving"] = False
@@ -224,7 +279,7 @@ class SocketServer(_BaseSocketServer):
 
         port = port if port != 0 else None
         aio_server = await asyncio.start_server(
-            handle_connection, host=host, port=port, **config
+            handle_connection, host=_host, port=port, **config
         )
 
         # get port of the socket if not specified
@@ -250,11 +305,21 @@ class SocketClient(Client):
     async def connect(
         dest_address: str, local_address: str | None = None, **kwargs
     ) -> "Client":
-        host, port_str = dest_address.split(":", 1)
+        host, port_str = dest_address.rsplit(":", 1)
         port = int(port_str)
-        (reader, writer) = await asyncio.open_connection(host=host, port=port, **kwargs)
+        config = kwargs.get("config", {})
+        connect_timeout = config.get("connect_timeout", XOSCAR_CONNECT_TIMEOUT)
+        fut = asyncio.open_connection(host=host, port=port)
+        try:
+            reader, writer = await asyncio.wait_for(fut, timeout=connect_timeout)
+        except asyncio.TimeoutError:
+            raise ConnectionError("connect timeout")
         channel = SocketChannel(
-            reader, writer, local_address=local_address, dest_address=dest_address
+            reader,
+            writer,
+            local_address=local_address,
+            dest_address=dest_address,
+            channel_type=ChannelType.remote,
         )
         return SocketClient(local_address, dest_address, channel)
 
@@ -370,6 +435,10 @@ class UnixSocketClient(Client):
                 "Cannot connect unix socket due to file not exists"
             )
         channel = SocketChannel(
-            reader, writer, local_address=local_address, dest_address=dest_address
+            reader,
+            writer,
+            local_address=local_address,
+            dest_address=dest_address,
+            channel_type=ChannelType.ipc,
         )
         return UnixSocketClient(local_address, dest_address, channel)

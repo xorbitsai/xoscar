@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: recursive
@@ -40,6 +40,7 @@ jobs:
         with:
           src: "python/xoscar"
           options: "--check"
+          version: "24.10.0"
       - uses: isort/isort-action@master
         with:
           sortPaths: "python/xoscar"
@@ -70,44 +71,53 @@ jobs:
     needs: lint
     env:
       CONDA_ENV: xoscar-test
+      SELF_HOST_PYTHON: /root/miniconda3/envs/xoscar-test/bin/python
+      SELF_HOST_CONDA: /root/miniconda3/condabin/conda
     defaults:
       run:
         shell: bash -l {0}
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        os: ["ubuntu-latest", "macos-13", "windows-latest"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
         module: ["xoscar"]
         exclude:
-          - { os: macos-latest, python-version: 3.9}
-          - { os: macos-latest, python-version: 3.10}
-          - { os: windows-latest, python-version: 3.9}
+          - { os: macos-13, python-version: 3.10}
+          - { os: macos-13, python-version: 3.11}
           - { os: windows-latest, python-version: 3.10}
+          - { os: windows-latest, python-version: 3.11}
         include:
-          - { os: self-hosted, module: gpu, python-version: 3.9}
+          - { os: self-hosted, module: gpu, python-version: 3.11}
+          - { os: ubuntu-20.04, module: doc-build, python-version: 3.9}
 
     steps:
     - name: Check out code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
         submodules: recursive
     - name: Add msbuild to PATH
       if: ${{ matrix.os == 'windows-latest'}}
-      uses: microsoft/setup-msbuild@v1.1
+      uses: microsoft/setup-msbuild@v1.3.1
     - name: Set up conda ${{ matrix.python-version }}
-      uses: conda-incubator/setup-miniconda@v2
+      uses: conda-incubator/setup-miniconda@v3
       if: ${{ matrix.module != 'gpu' }}
       with:
         python-version: ${{ matrix.python-version }}
         activate-environment: ${{ env.CONDA_ENV }}
 
-    # Fix "version `GLIBCXX_3.4.30' not found (required by xoscar_store.cpython-311-x86_64-linux-gnu.so)" issue in Python 3.11
-    - name: Install libstdcxx-ng for Python 3.11
-      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version == '3.11') }}
+    # Fix "version `GLIBCXX_3.4.30' not found (required by xoscar_store.cpython-311-x86_64-linux-gnu.so)" issue
+    - name: Install libstdcxx-ng
+      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') }}
       run: |
         conda install -c conda-forge libstdcxx-ng
+
+    # Important for python == 3.12
+    - name: Update pip and setuptools
+      if: ${{ matrix.python-version == '3.12' }}
+      run: |
+        python -m pip install -U pip setuptools
 
     - name: Install dependencies
       env:
@@ -119,36 +129,46 @@ jobs:
       working-directory: ./python
 
     - name: Install ucx dependencies
-      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version != '3.11') }}
+      if: ${{ matrix.os == 'ubuntu-latest' }}
       run: |
-        conda install -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
-
-    - name: Install fury
-      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') && (matrix.python-version == '3.9') }}
-      run: |
-        pip install pyfury
+        # ucx-py move to ucxx and ucxx-cu12 can be run on CPU
+        # conda install -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
+        pip install ucxx-cu12
 
     - name: Install on GPU
       if: ${{ matrix.module == 'gpu' }}
       run: |
-        python setup.py build_ext -i
+        source activate ${{ env.CONDA_ENV }}
+        conda install -y conda-forge::nccl=2.22.3
+        pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
+        pip install ucxx-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky
+        python setup.py clean --all
+        pip install -e ./
       working-directory: ./python
 
+    - name: Build doc
+      if: ${{ matrix.module == 'doc-build' }}
+      run: |
+        make html
+      working-directory: ./doc
+
     - name: Test with pytest
+      if: ${{ matrix.module != 'doc-build'}}
       env:
         MODULE: ${{ matrix.module }}
       run: |
         if [[ "$MODULE" == "xoscar" ]]; then
-          pytest --timeout=1500 \
+          pytest -s -v --timeout=500 \
             -W ignore::PendingDeprecationWarning \
             --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar --capture=no
         else
-          pytest -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar --capture=no
+          source activate ${{ env.CONDA_ENV }}
+          pytest -v -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar --capture=no
         fi
       working-directory: ./python
 
     - name: Report coverage data
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         working-directory: ./python
         flags: unittests

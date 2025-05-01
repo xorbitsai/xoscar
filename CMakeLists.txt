@@ -16,6 +16,11 @@ else()
   option(USE_LIBUV "Build libuv transport on others" ON)
 endif()
 
+if(MSVC)
+  add_compile_options(/utf-8)
+  message(STATUS "Done setting /utf-8 for MSVC")
+endif()
+
 include_directories(${CMAKE_SOURCE_DIR})
 #find python3 include dir
 execute_process(COMMAND python -c "import sysconfig; print(sysconfig.get_path('include'))"
@@ -29,8 +34,9 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     execute_process(
       COMMAND
         cmd /c
-        "cd ..\\..\\..\\..\\..\\third_party\\libuv&&mkdir build&&cd build && mkdir uvlib&&cmake .. -DCMAKE_INSTALL_PREFIX=uvlib&&msbuild.exe INSTALL.vcxproj"
+        "echo %cd% && cd ..\\..\\..\\..\\..\\third_party\\libuv && mkdir build && cd build && mkdir uvlib && cmake .. -DCMAKE_INSTALL_PREFIX=uvlib -DCMAKE_POLICY_VERSION_MINIMUM=3.10 && msbuild.exe INSTALL.vcxproj"
     )
+    message(STATUS "Done creating libuv_dir = ${libuv_dir}")
   endif()
   set(libuv_ROOT ${CMAKE_SOURCE_DIR}/third_party/libuv/build/uvlib)
   set(uv_HEADER_PATH ${CMAKE_SOURCE_DIR}/third_party/libuv/include)

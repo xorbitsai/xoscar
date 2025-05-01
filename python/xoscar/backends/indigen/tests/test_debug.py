@@ -16,7 +16,6 @@
 import asyncio
 import logging
 import os
-import sys
 from contextlib import contextmanager
 from io import StringIO
 from typing import List
@@ -66,17 +65,12 @@ class DebugActor(mo.Actor):
 
 @pytest.fixture
 async def actor_pool():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
-    pool = await mo.create_actor_pool(
-        "127.0.0.1", n_process=0, subprocess_start_method=start_method
-    )
+    pool = await mo.create_actor_pool("127.0.0.1", n_process=0)
     await pool.start()
-    yield pool
-    await pool.stop()
+    try:
+        yield pool
+    finally:
+        await pool.stop()
 
 
 @pytest.fixture

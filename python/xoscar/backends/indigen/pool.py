@@ -16,24 +16,26 @@
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures as futures
+import asyncio.subprocess
 import configparser
-import contextlib
 import itertools
 import logging.config
-import multiprocessing
 import os
+import pickle
 import random
 import signal
+import struct
 import sys
 import threading
+import time
 import uuid
-from dataclasses import dataclass
-from types import TracebackType
+from enum import IntEnum
 from typing import List, Optional
 
+import psutil
+
 from ..._utils import reset_id_random_seed
-from ...utils import dataslots, ensure_coverage
+from ...utils import ensure_coverage
 from ..config import ActorPoolConfig
 from ..message import (
     ControlMessage,
@@ -42,81 +44,40 @@ from ..message import (
     new_message_id,
 )
 from ..pool import MainActorPoolBase, SubActorPoolBase, _register_message_handler
+from . import shared_memory
+from .fate_sharing import create_subprocess_exec
 
+_SUBPROCESS_SHM_SIZE = 10240
 _is_windows: bool = sys.platform.startswith("win")
 
-if sys.version_info[:2] == (3, 9):
-    # fix for Python 3.9, see https://bugs.python.org/issue43517
-    if sys.platform == "win32":
-        from multiprocessing import popen_spawn_win32 as popen_spawn
-
-        popen_forkserver = popen_fork = synchronize = None
-    else:
-        from multiprocessing import popen_fork, popen_forkserver
-        from multiprocessing import popen_spawn_posix as popen_spawn
-        from multiprocessing import synchronize
-    _ = popen_spawn, popen_forkserver, popen_fork, synchronize
-    del _
-elif sys.version_info[:2] == (3, 6):  # pragma: no cover
-    from multiprocessing.process import BaseProcess
-
-    # define kill method for multiprocessing
-    def _mp_kill(self):
-        if not _is_windows:
-            try:
-                os.kill(self.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            except OSError:
-                if self.wait(timeout=0.1) is None:
-                    raise
-        else:
-            self.terminate()
-
-    BaseProcess.kill = _mp_kill
-
 logger = logging.getLogger(__name__)
-_init_main_suspended_local = threading.local()
 
 
-def _patch_spawn_get_preparation_data():
-    try:
-        from multiprocessing import spawn as mp_spawn
-
-        _raw_get_preparation_data = mp_spawn.get_preparation_data
-
-        def _patched_get_preparation_data(*args, **kw):
-            ret = _raw_get_preparation_data(*args, **kw)
-            if getattr(_init_main_suspended_local, "value", False):
-                # make sure user module is not imported when start cluster
-                ret.pop("init_main_from_name", None)
-                ret.pop("init_main_from_path", None)
-            return ret
-
-        _patched_get_preparation_data._indigen_patched = True
-        if not getattr(mp_spawn.get_preparation_data, "_indigen_patched", False):
-            mp_spawn.get_preparation_data = _patched_get_preparation_data
-    except (ImportError, AttributeError):  # pragma: no cover
-        pass
+class _ShmSeq(IntEnum):
+    INIT_PARAMS = 1
+    INIT_RESULT = 2
 
 
-@contextlib.contextmanager
-def _suspend_init_main():
-    try:
-        _init_main_suspended_local.value = True
-        yield
-    finally:
-        _init_main_suspended_local.value = False
+def _shm_put_object(seq: _ShmSeq, shm: shared_memory.SharedMemory, o: object):
+    serialized = pickle.dumps(o)
+    assert (
+        len(serialized) < _SUBPROCESS_SHM_SIZE - 8
+    ), f"Serialized object {o} is too long."
+    shm.buf[4:12] = struct.pack("<II", sys.hexversion, len(serialized))
+    shm.buf[12 : 12 + len(serialized)] = serialized
+    shm.buf[:4] = struct.pack("<I", seq)
 
 
-@dataslots
-@dataclass
-class SubpoolStatus:
-    # for status, 0 is succeeded, 1 is failed
-    status: int | None = None
-    external_addresses: List[str] | None = None
-    error: BaseException | None = None
-    traceback: TracebackType | None = None
+def _shm_get_object(seq: _ShmSeq, shm: shared_memory.SharedMemory):
+    recv_seq = struct.unpack("<I", shm.buf[:4])[0]
+    if recv_seq != seq:
+        return
+    python_version_hex, size = struct.unpack("<II", shm.buf[4:12])
+    if python_version_hex != sys.hexversion:
+        raise RuntimeError(
+            f"Python version mismatch, sender: {python_version_hex}, receiver: {sys.hexversion}"
+        )
+    return pickle.loads(shm.buf[12 : 12 + size])
 
 
 @_register_message_handler
@@ -132,7 +93,7 @@ class MainActorPool(MainActorPoolBase):
         """Get external address for every process"""
         assert n_process is not None
         if ":" in address:
-            host, port_str = address.split(":", 1)
+            host, port_str = address.rsplit(":", 1)
             port = int(port_str)
             if ports:
                 if len(ports) != n_process:
@@ -182,114 +143,167 @@ class MainActorPool(MainActorPoolBase):
         cls,
         actor_pool_config: ActorPoolConfig,
         process_index: int,
-        start_method: str | None = None,
+        start_python: str | None = None,
     ):
-        def start_pool_in_process():
-            ctx = multiprocessing.get_context(method=start_method)
-            status_queue = ctx.Queue()
-
-            with _suspend_init_main():
-                process = ctx.Process(
-                    target=cls._start_sub_pool,
-                    args=(actor_pool_config, process_index, status_queue),
-                    name=f"IndigenActorPool{process_index}",
-                )
-                process.daemon = True
-                process.start()
-
-            # wait for sub actor pool to finish starting
-            process_status = status_queue.get()
-            return process, process_status
-
-        _patch_spawn_get_preparation_data()
-        loop = asyncio.get_running_loop()
-        with futures.ThreadPoolExecutor(1) as executor:
-            create_pool_task = loop.run_in_executor(executor, start_pool_in_process)
-            return await create_pool_task
+        return await cls._create_sub_pool_from_parent(
+            actor_pool_config, process_index, start_python
+        )
 
     @classmethod
     async def wait_sub_pools_ready(cls, create_pool_tasks: List[asyncio.Task]):
-        processes = []
+        processes: list[asyncio.subprocess.Process] = []
         ext_addresses = []
+        error = None
         for task in create_pool_tasks:
-            process, status = await task
-            if status.status == 1:
-                # start sub pool failed
-                raise status.error.with_traceback(status.traceback)
+            process, address = await task
             processes.append(process)
-            ext_addresses.append(status.external_addresses)
+            ext_addresses.append(address)
+        if error:
+            for p in processes:
+                # error happens, kill all subprocesses
+                p.kill()
+            raise error
         return processes, ext_addresses
 
     @classmethod
-    def _start_sub_pool(
+    def _start_sub_pool_in_child(
         cls,
-        actor_config: ActorPoolConfig,
-        process_index: int,
-        status_queue: multiprocessing.Queue,
+        shm_name: str,
     ):
         ensure_coverage()
 
-        # make sure enough randomness for every sub pool
-        random.seed(uuid.uuid1().bytes)
-        reset_id_random_seed()
+        shm = shared_memory.SharedMemory(shm_name, track=False)
+        try:
+            config = _shm_get_object(_ShmSeq.INIT_PARAMS, shm)
+            actor_config = config["actor_pool_config"]
+            process_index = config["process_index"]
+            main_pool_pid = config["main_pool_pid"]
 
-        conf = actor_config.get_pool_config(process_index)
-        suspend_sigint = conf["suspend_sigint"]
-        if suspend_sigint:
-            signal.signal(signal.SIGINT, lambda *_: None)
+            def _check_ppid():
+                while True:
+                    try:
+                        if os.getppid() != main_pool_pid:
+                            logger.info("Exit due to parent %s exit.", main_pool_pid)
+                            os._exit(0)
+                        time.sleep(2)
+                    except Exception as e:
+                        logger.exception("Check ppid failed: %s", e)
 
-        logging_conf = conf["logging_conf"] or {}
-        if isinstance(logging_conf, configparser.RawConfigParser):
-            logging.config.fileConfig(logging_conf)
-        elif logging_conf.get("dict"):
-            logging.config.dictConfig(logging_conf["dict"])
-        elif logging_conf.get("file"):
-            logging.config.fileConfig(logging_conf["file"])
-        elif logging_conf.get("level"):
-            logging.getLogger("__main__").setLevel(logging_conf["level"])
-            logging.getLogger("xoscar").setLevel(logging_conf["level"])
-            if logging_conf.get("format"):
-                logging.basicConfig(format=logging_conf["format"])
+            t = threading.Thread(target=_check_ppid, daemon=True)
+            t.start()
 
-        use_uvloop = conf["use_uvloop"]
-        if use_uvloop:
-            import uvloop
+            # make sure enough randomness for every sub pool
+            random.seed(uuid.uuid1().bytes)
+            reset_id_random_seed()
 
-            asyncio.set_event_loop(uvloop.new_event_loop())
-        else:
-            asyncio.set_event_loop(asyncio.new_event_loop())
+            conf = actor_config.get_pool_config(process_index)
+            suspend_sigint = conf["suspend_sigint"]
+            if suspend_sigint:
+                signal.signal(signal.SIGINT, lambda *_: None)
 
-        coro = cls._create_sub_pool(actor_config, process_index, status_queue)
-        asyncio.run(coro)
+            logging_conf = conf["logging_conf"] or {}
+            if isinstance(logging_conf, configparser.RawConfigParser):
+                logging.config.fileConfig(logging_conf)
+            elif logging_conf.get("dict"):
+                logging.config.dictConfig(logging_conf["dict"])
+            elif logging_conf.get("file"):
+                logging.config.fileConfig(logging_conf["file"])
+            elif logging_conf.get("level"):
+                logging.getLogger("__main__").setLevel(logging_conf["level"])
+                logging.getLogger("xoscar").setLevel(logging_conf["level"])
+                if logging_conf.get("format"):
+                    logging.basicConfig(format=logging_conf["format"])
+
+            use_uvloop = conf["use_uvloop"]
+            if use_uvloop:
+                import uvloop
+
+                asyncio.set_event_loop(uvloop.new_event_loop())
+            else:
+                asyncio.set_event_loop(asyncio.new_event_loop())
+
+            coro = cls._create_sub_pool(actor_config, process_index, main_pool_pid, shm)
+            asyncio.run(coro)
+        finally:
+            shm.close()
 
     @classmethod
     async def _create_sub_pool(
         cls,
         actor_config: ActorPoolConfig,
         process_index: int,
-        status_queue: multiprocessing.Queue,
+        main_pool_pid: int,
+        shm: shared_memory.SharedMemory,
     ):
-        process_status = None
-        try:
-            cur_pool_config = actor_config.get_pool_config(process_index)
-            env = cur_pool_config["env"]
-            if env:
-                os.environ.update(env)
-            pool = await SubActorPool.create(
-                {"actor_pool_config": actor_config, "process_index": process_index}
-            )
-            external_addresses = cur_pool_config["external_address"]
-            process_status = SubpoolStatus(
-                status=0, external_addresses=external_addresses
-            )
-            await pool.start()
-        except:  # noqa: E722  # nosec  # pylint: disable=bare-except
-            _, error, tb = sys.exc_info()
-            process_status = SubpoolStatus(status=1, error=error, traceback=tb)
-            raise
-        finally:
-            status_queue.put(process_status)
+        cur_pool_config = actor_config.get_pool_config(process_index)
+        env = cur_pool_config["env"]
+        if env:
+            os.environ.update(env)
+        pool = await SubActorPool.create(
+            {
+                "actor_pool_config": actor_config,
+                "process_index": process_index,
+                "main_pool_pid": main_pool_pid,
+            }
+        )
+        await pool.start()
+        _shm_put_object(_ShmSeq.INIT_RESULT, shm, cur_pool_config["external_address"])
         await pool.join()
+
+    @staticmethod
+    async def _create_sub_pool_from_parent(
+        actor_pool_config: ActorPoolConfig,
+        process_index: int,
+        start_python: str | None = None,
+    ):
+        # We check the Python version in _shm_get_object to make it faster,
+        # as in most cases the Python versions are the same.
+        if start_python is None:
+            start_python = sys.executable
+
+        external_addresses: List | None = None
+        shm = shared_memory.SharedMemory(
+            create=True, size=_SUBPROCESS_SHM_SIZE, track=False
+        )
+        try:
+            _shm_put_object(
+                _ShmSeq.INIT_PARAMS,
+                shm,
+                {
+                    "actor_pool_config": actor_pool_config,
+                    "process_index": process_index,
+                    "main_pool_pid": os.getpid(),
+                },
+            )
+            process = await create_subprocess_exec(
+                start_python,
+                "-m",
+                "xoscar.backends.indigen",
+                "start_sub_pool",
+                "-sn",
+                shm.name,
+            )
+
+            def _get_external_addresses():
+                nonlocal external_addresses
+                while not (
+                    external_addresses := _shm_get_object(_ShmSeq.INIT_RESULT, shm)
+                ):
+                    time.sleep(0.1)
+
+            await asyncio.wait(
+                [
+                    asyncio.create_task(process.wait()),
+                    asyncio.create_task(asyncio.to_thread(_get_external_addresses)),
+                ],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+        finally:
+            shm.close()
+            shm.unlink()
+        if external_addresses is None:
+            raise OSError("Start sub pool failed.")
+        return process, external_addresses
 
     async def append_sub_pool(
         self,
@@ -301,9 +315,10 @@ class MainActorPool(MainActorPoolBase):
         suspend_sigint: bool | None = None,
         use_uvloop: bool | None = None,
         logging_conf: dict | None = None,
-        start_method: str | None = None,
+        start_python: str | None = None,
         kwargs: dict | None = None,
     ):
+        # external_address has port 0, subprocess will bind random port.
         external_address = (
             external_address
             or MainActorPool.get_external_addresses(self.external_address, n_process=1)[
@@ -339,32 +354,12 @@ class MainActorPool(MainActorPoolBase):
             kwargs,
         )
 
-        def start_pool_in_process():
-            ctx = multiprocessing.get_context(method=start_method)
-            status_queue = ctx.Queue()
-
-            with _suspend_init_main():
-                process = ctx.Process(
-                    target=self._start_sub_pool,
-                    args=(self._config, process_index, status_queue),
-                    name=f"IndigenActorPool{process_index}",
-                )
-                process.daemon = True
-                process.start()
-
-            # wait for sub actor pool to finish starting
-            process_status = status_queue.get()
-            return process, process_status
-
-        loop = asyncio.get_running_loop()
-        with futures.ThreadPoolExecutor(1) as executor:
-            create_pool_task = loop.run_in_executor(executor, start_pool_in_process)
-            process, process_status = await create_pool_task
-
-        self._config.reset_pool_external_address(
-            process_index, process_status.external_addresses[0]
+        process, external_addresses = await self._create_sub_pool_from_parent(
+            self._config, process_index, start_python
         )
-        self.attach_sub_process(process_status.external_addresses[0], process)
+
+        self._config.reset_pool_external_address(process_index, external_addresses[0])
+        self.attach_sub_process(external_addresses[0], process)
 
         control_message = ControlMessage(
             message_id=new_message_id(),
@@ -373,17 +368,17 @@ class MainActorPool(MainActorPoolBase):
             content=self._config,
         )
         await self.handle_control_command(control_message)
-
-        return process_status.external_addresses[0]
+        # The actual port will return in process_status.
+        return external_addresses[0]
 
     async def remove_sub_pool(
         self, external_address: str, timeout: float | None = None, force: bool = False
     ):
         process = self.sub_processes[external_address]
         process_index = self._config.get_process_index(external_address)
-        await self.stop_sub_pool(external_address, process, timeout, force)
         del self.sub_processes[external_address]
         self._config.remove_pool_config(process_index)
+        await self.stop_sub_pool(external_address, process, timeout, force)
 
         control_message = ControlMessage(
             message_id=new_message_id(),
@@ -394,43 +389,35 @@ class MainActorPool(MainActorPoolBase):
         await self.handle_control_command(control_message)
 
     async def kill_sub_pool(
-        self, process: multiprocessing.Process, force: bool = False
+        self, process: asyncio.subprocess.Process, force: bool = False
     ):
-        if (
-            "COV_CORE_SOURCE" in os.environ and not force and not _is_windows
-        ):  # pragma: no cover
-            # must shutdown gracefully, or coverage info lost
-            try:
-                os.kill(process.pid, signal.SIGINT)  # type: ignore
-            except OSError:  # pragma: no cover
-                pass
-            process.terminate()
-            wait_pool = futures.ThreadPoolExecutor(1)
-            try:
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(wait_pool, process.join, 3)
-            finally:
-                wait_pool.shutdown(False)
-        process.kill()
-        await asyncio.to_thread(process.join, 5)
-
-    async def is_sub_pool_alive(self, process: multiprocessing.Process):
         try:
-            return await asyncio.to_thread(process.is_alive)
-        except RuntimeError as ex:  # pragma: no cover
-            if "cannot schedule new futures" not in str(ex):
-                # when atexit is triggered, the default pool might be shutdown
-                # and to_thread will fail
-                raise
-            return process.is_alive()
+            p = psutil.Process(process.pid)
+        except psutil.NoSuchProcess:
+            return
+
+        if not force:  # pragma: no cover
+            p.terminate()
+            try:
+                p.wait(5)
+            except psutil.TimeoutExpired:
+                pass
+
+        while p.is_running():
+            p.kill()
+            if not p.is_running():
+                return
+            logger.info("Sub pool can't be killed: %s", p)
+            time.sleep(0.1)
+
+    async def is_sub_pool_alive(self, process: asyncio.subprocess.Process):
+        return process.returncode is None
 
     async def recover_sub_pool(self, address: str):
         process_index = self._config.get_process_index(address)
         # process dead, restart it
         # remember always use spawn to recover sub pool
-        task = asyncio.create_task(
-            self.start_sub_pool(self._config, process_index, "spawn")
-        )
+        task = asyncio.create_task(self.start_sub_pool(self._config, process_index))
         self.sub_processes[address] = (await self.wait_sub_pools_ready([task]))[0][0]
 
         if self._auto_recover == "actor":

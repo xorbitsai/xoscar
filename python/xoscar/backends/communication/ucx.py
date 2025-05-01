@@ -28,13 +28,13 @@ import numpy as np
 from ...nvutils import get_cuda_context, get_index_and_uuid
 from ...serialization import deserialize
 from ...serialization.aio import BUFFER_SIZES_NAME, AioSerializer, get_header_length
-from ...utils import classproperty, implements, is_cuda_buffer, lazy_import
+from ...utils import classproperty, implements, is_cuda_buffer, is_v6_ip, lazy_import
 from ..message import _MessageBase
 from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server
 from .errors import ChannelClosed
 
-ucp = lazy_import("ucp")
+ucp = lazy_import("ucxx")
 numba_cuda = lazy_import("numba.cuda")
 rmm = lazy_import("rmm")
 
@@ -86,7 +86,7 @@ class UCXInitializer:
                 tls += ",cuda_copy"
 
             if ucx_config.get("infiniband"):  # pragma: no cover
-                tls = "rc," + tls
+                tls = "ib," + tls
             if ucx_config.get("nvlink"):  # pragma: no cover
                 tls += ",cuda_ipc"
 
@@ -177,7 +177,8 @@ class UCXInitializer:
         new_environ.update(envs)
         os.environ = new_environ  # type: ignore
         try:
-            ucp.init(options=options, env_takes_precedence=True)
+            # let UCX determine the appropriate transports
+            ucp.init()
         finally:
             os.environ = original_environ
 
@@ -313,7 +314,7 @@ class UCXChannel(Channel):
                         await self.ucp_endpoint.send(buf)
                 for buffer in buffers:
                     await self.ucp_endpoint.send(buffer)
-        except ucp.exceptions.UCXBaseException:  # pragma: no cover
+        except ucp.exceptions.UCXError:  # pragma: no cover
             self.abort()
             raise ChannelClosed("While writing, the connection was closed")
 
@@ -367,7 +368,7 @@ class UCXServer(Server):
     scheme = "ucx"
 
     _ucp_listener: "ucp.Listener"  # type: ignore
-    _channels: List[UCXChannel]
+    _channels: set[UCXChannel]
 
     def __init__(
         self,
@@ -380,7 +381,7 @@ class UCXServer(Server):
         self.host = host
         self.port = port
         self._ucp_listener = ucp_listener
-        self._channels = []
+        self._channels = set()
         self._closed = asyncio.Event()
 
     @classproperty
@@ -401,11 +402,21 @@ class UCXServer(Server):
             prefix = f"{UCXServer.scheme}://"
             if address.startswith(prefix):
                 address = address[len(prefix) :]
-            host, port = address.split(":", 1)
+            host, port = address.rsplit(":", 1)
             port = int(port)
         else:
             host = config.pop("host")
             port = int(config.pop("port"))
+        _host = host
+        if config.pop("listen_elastic_ip", False):
+            # The Actor.address will be announce to client, and is not on our host,
+            # cannot actually listen on it,
+            # so we have to keep SocketServer.host untouched to make sure Actor.address not changed
+            if is_v6_ip(host):
+                _host = "::"
+            else:
+                _host = "0.0.0.0"
+
         handle_channel = config.pop("handle_channel")
 
         # init
@@ -414,7 +425,7 @@ class UCXServer(Server):
         async def serve_forever(client_ucp_endpoint: "ucp.Endpoint"):  # type: ignore
             try:
                 await server.on_connected(
-                    client_ucp_endpoint, local_address=server.address
+                    client_ucp_endpoint, local_address="%s:%d" % (_host, port)
                 )
             except ChannelClosed:  # pragma: no cover
                 logger.exception("Connection closed before handshake completed")
@@ -458,9 +469,16 @@ class UCXServer(Server):
         channel = UCXChannel(
             ucp_endpoint, local_address=local_address, dest_address=dest_address
         )
-        self._channels.append(channel)
+        self._channels.add(channel)
         # handle over channel to some handlers
-        await self.channel_handler(channel)
+        try:
+            await self.channel_handler(channel)
+        finally:
+            if not channel.closed:
+                await channel.close()
+            # Remove channel if channel exit
+            self._channels.discard(channel)
+            logger.debug("Channel exit: %s", channel.info)
 
     @implements(Server.stop)
     async def stop(self):
@@ -469,7 +487,7 @@ class UCXServer(Server):
         await asyncio.gather(
             *(channel.close() for channel in self._channels if not channel.closed)
         )
-        self._channels = []
+        self._channels.clear()
         self._ucp_listener = None
         self._closed.set()
 
@@ -498,7 +516,7 @@ class UCXClient(Client):
         prefix = f"{UCXClient.scheme}://"
         if dest_address.startswith(prefix):
             dest_address = dest_address[len(prefix) :]
-        host, port_str = dest_address.split(":", 1)
+        host, port_str = dest_address.rsplit(":", 1)
         port = int(port_str)
         kwargs = kwargs.copy()
         ucx_config = kwargs.pop("config", dict()).get("ucx", dict())
@@ -506,7 +524,7 @@ class UCXClient(Client):
 
         try:
             ucp_endpoint = await ucp.create_endpoint(host, port)
-        except ucp.exceptions.UCXBaseException as e:  # pragma: no cover
+        except ucp.exceptions.UCXError as e:  # pragma: no cover
             raise ChannelClosed(
                 f"Connection closed before handshake completed, "
                 f"local address: {local_address}, dest address: {dest_address}"

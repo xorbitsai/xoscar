@@ -55,7 +55,6 @@ from .pyfury import get_fury, register_class_to_fury
 
 BUFFER_PICKLE_PROTOCOL = max(pickle.DEFAULT_PROTOCOL, 5)
 cdef bint HAS_PICKLE_BUFFER = pickle.HIGHEST_PROTOCOL >= 5
-cdef bint _PANDAS_HAS_MGR = hasattr(pd.Series([0]), "_mgr")
 
 cdef TypeDispatcher _serial_dispatcher = TypeDispatcher()
 cdef dict _deserializers = dict()
@@ -277,16 +276,7 @@ def fury_deserialize_buffers(list buffers):
         raise Exception("fury is not installed.")
     result = fury.deserialize(buffers[0], buffers[1:])
 
-    # as pandas prior to 1.1.0 use _data instead of _mgr to hold BlockManager,
-    # deserializing from high versions may produce mal-functioned pandas objects,
-    # thus the patch is needed
-    if _PANDAS_HAS_MGR:
-        return result
-    else:  # pragma: no cover
-        if hasattr(result, "_mgr") and isinstance(result, (pd.DataFrame, pd.Series)):
-            result._data = getattr(result, "_mgr")
-            delattr(result, "_mgr")
-        return result
+    return result
 
 
 cdef class PickleSerializer(Serializer):

@@ -19,17 +19,18 @@ import asyncio
 import dataclasses
 import functools
 import importlib
+import importlib.util as importlib_utils
 import inspect
 import io
 import logging
 import os
-import pkgutil
 import random
 import socket
 import sys
 import time
 import uuid
 from abc import ABC
+from functools import lru_cache
 from types import TracebackType
 from typing import Callable, Type, Union
 
@@ -266,7 +267,7 @@ def lazy_import(
             self._on_loads.append(func)
             return func
 
-    if pkgutil.find_loader(prefix_name) is not None:
+    if importlib_utils.find_spec(prefix_name) is not None:
         return LazyModule()
     elif placeholder:
         return ModulePlaceholder(prefix_name)
@@ -462,3 +463,55 @@ def is_windows():
 
 def is_linux():
     return sys.platform.startswith("linux")
+
+
+@lru_cache
+def is_py_312():
+    return sys.version_info[:2] == (3, 12)
+
+
+def is_v4_zero_ip(ip_port_addr: str) -> bool:
+    return ip_port_addr.split("://")[-1].startswith("0.0.0.0:")
+
+
+def is_v6_zero_ip(ip_port_addr: str) -> bool:
+    # tcp6 addr ":::123", ":: means all zero"
+    arr = ip_port_addr.split("://")[-1].split(":")
+    if len(arr) <= 2:  # Not tcp6 or udp6
+        return False
+    for part in arr[0:-1]:
+        if part != "":
+            if int(part, 16) != 0:
+                return False
+    return True
+
+
+def is_zero_ip(ip_port_addr: str) -> bool:
+    return is_v4_zero_ip(ip_port_addr) or is_v6_zero_ip(ip_port_addr)
+
+
+def is_v6_ip(ip_port_addr: str) -> bool:
+    arr = ip_port_addr.split("://", 1)[-1].split(":")
+    return len(arr) > 1
+
+
+def fix_all_zero_ip(remote_addr: str, connect_addr: str) -> str:
+    """
+    Use connect_addr to fix ActorRef.address return by remote server.
+    When remote server listen on "0.0.0.0:port" or ":::port", it will return ActorRef.address set to listening addr,
+    it cannot be use by client for the following interaction unless we fix it.
+    (client will treat 0.0.0.0 as 127.0.0.1)
+
+    NOTE: Server might return a different addr from a pool for load-balance purpose.
+    """
+    if remote_addr == connect_addr:
+        return remote_addr
+    if not is_v4_zero_ip(remote_addr) and not is_v6_zero_ip(remote_addr):
+        # Remote server returns on non-zero ip
+        return remote_addr
+    if is_v4_zero_ip(connect_addr) or is_v6_zero_ip(connect_addr):
+        # Client connect to local server
+        return remote_addr
+    remote_port = remote_addr.split(":")[-1]
+    connect_ip = ":".join(connect_addr.split(":")[0:-1])  # Remote the port
+    return f"{connect_ip}:{remote_port}"

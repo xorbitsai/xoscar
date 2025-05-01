@@ -208,28 +208,33 @@ def create_actor_ref(*args, **kwargs):
 
     address = to_str(kwargs.pop('address', None))
     uid = kwargs.pop('uid', None)
+    proxy_addresses = kwargs.pop("proxy_addresses", None)
 
     if kwargs:
         raise ValueError('Only `address` or `uid` keywords are supported')
 
-    if len(args) == 2:
+    # args: [address, uid], or [address, uid, proxy_addresses]
+    if 2 <= len(args) <= 3 and isinstance(args[0], (str, bytes)):
         if address:
             raise ValueError('address has been specified')
         address = to_str(args[0])
         uid = args[1]
+        if len(args) == 3:
+            proxy_addresses = args[2]
     elif len(args) == 1:
         tp0 = type(args[0])
         if tp0 is ActorRef or tp0 is LocalActorRef:
             existing_ref = <ActorRef>(args[0])
             uid = existing_ref.uid
             address = to_str(address or existing_ref.address)
+            proxy_addresses = existing_ref.proxy_addresses
         else:
             uid = args[0]
 
     if uid is None:
         raise ValueError('Actor uid should be provided')
 
-    return ActorRef(address, uid)
+    return ActorRef(address, uid, proxy_addresses=proxy_addresses)
 
 
 cdef class Timer:

@@ -1,14 +1,28 @@
 [build-system]
 requires = [
-    "setuptools<64",
+    "setuptools<64; python_version<'3.12'",
+    "setuptools>=75; python_version>='3.12'",
+    "packaging",
     "wheel",
     "oldest-supported-numpy",
-    "pandas>=1.0.4",
-    "scipy==1.4.1; python_version<'3.9' and platform_machine!='aarch64'",
+    "scipy==1.4.1; python_version<'3.9' and platform_machine!='aarch64' and platform_machine!='arm64'",
+    "scipy==1.7.3; python_version<'3.9' and platform_machine=='arm64'",
     "scipy==1.5.3; python_version<'3.9' and platform_machine=='aarch64'",
-    "scipy==1.5.4; python_version>='3.9' and python_version<'3.10' and sys_platform=='win32'",
-    "scipy>=1.4.1; python_version>='3.9' and python_version<'3.10' and sys_platform!='win32'",
-    "scipy>=1.4.1; python_version>='3.10'",
+    "scipy==1.5.4; python_version>='3.9' and python_version<'3.10' and platform_machine!='arm64'",
+    "scipy==1.7.2; python_version>='3.10' and python_version<'3.11' and platform_machine!='arm64'",
+    "scipy==1.7.3; python_version>='3.10' and python_version<'3.11' and platform_machine=='arm64'",
+    "scipy==1.9.2; python_version>='3.11' and python_version<'3.12'",
+    "scipy>=1.11.2; python_version>'3.11'",
+    "pandas==1.0.4; python_version<'3.9' and platform_machine!='aarch64' and platform_machine!='arm64'",
+    "pandas==1.1.3; python_version<'3.9' and platform_machine=='aarch64'",
+    "pandas==1.4.0; python_version<'3.9' and platform_machine=='arm64'",
+    "pandas==1.2.2; python_version>='3.9' and python_version<'3.10' and platform_machine!='arm64'",
+    "pandas==1.4.0; python_version>='3.9' and python_version<'3.10' and platform_machine=='arm64'",
+    "pandas==1.3.4; python_version>='3.10' and python_version<'3.11' and platform_machine!='arm64'",
+    "pandas==1.4.0; python_version>='3.10' and python_version<'3.11' and platform_machine=='arm64'",
+    "pandas==1.5.1; python_version>='3.11' and python_version<'3.12'",
+    "pandas>=2.1.1; python_version>'3.11'",
+    "numpy",
     "cython>=0.29.33",
     "requests>=2.4.0",
     "cloudpickle>=2.2.1; python_version>='3.11'",
@@ -18,17 +32,21 @@ build-backend = "setuptools.build_meta"
 
 [tool.black]
 include = '\.pyi?$'
-extend-exclude = '''
-^/xoscar/(_version.py)
+force-exclude = '''
+(
+  ^/xoscar/(_version.py)
+| shared_memory.py
+)
 '''
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope="function"
 markers = [
     "cuda: mark a test as a cuda case.",
 ]
 
 [tool.cibuildwheel]
-build = ["cp38-*", "cp39-*", "cp310-*", "cp311-*"]
-skip = "pp* *musllinux* *i686 cp36* cp38-win32 cp39-win32 cp310-win32 cp311-win32"
+build = ["cp39-*", "cp310-*", "cp311-*", "cp312-*"]
+skip = "pp* *musllinux* *i686 cp36* cp38-win32 cp39-win32 cp310-win32 cp311-win32 cp312-win32"
 manylinux-x86_64-image = "manylinux2014"

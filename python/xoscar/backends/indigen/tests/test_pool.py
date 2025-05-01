@@ -17,18 +17,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import multiprocessing
 import os
 import re
 import sys
 import time
 from unittest import mock
 
+import psutil
 import pytest
 
 from .... import Actor, create_actor, create_actor_ref, get_pool_config, kill_actor
 from ....context import get_context
 from ....errors import ActorNotExist, NoIdleSlot, SendMessageFailed, ServerClosed
-from ....tests.core import require_ucx
+from ....tests.core import require_ucx, require_unix
 from ....utils import get_next_port
 from ...allocate_strategy import (
     AddressSpecified,
@@ -456,16 +458,10 @@ async def test_main_actor_pool():
 
 @pytest.mark.asyncio
 async def test_create_actor_pool():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
     )
 
     async with pool:
@@ -541,6 +537,254 @@ async def test_create_actor_pool():
 
 
 @pytest.mark.asyncio
+async def test_create_actor_pool_extra_config():
+    # create a actor pool based on socket rather than ucx
+    # pass `extra_conf` to check if we can filter out ucx config
+    pool = await create_actor_pool(
+        "127.0.0.1",
+        pool_cls=MainActorPool,
+        n_process=2,
+        extra_conf={
+            "ucx": {
+                "tcp": None,
+                "nvlink": None,
+                "infiniband": None,
+                "rdmacm": None,
+                "cuda-copy": None,
+                "create-cuda-contex": None,
+            }
+        },
+    )
+
+    async with pool:
+        # test global router
+        global_router = Router.get_instance()
+        # global router should not be the identical one with pool's router
+        assert global_router is not pool.router
+        assert pool.external_address in global_router._curr_external_addresses
+        assert pool.external_address in global_router._mapping
+
+        ctx = get_context()
+
+        # actor on main pool
+        actor_ref = await ctx.create_actor(
+            TestActor, uid="test-1", address=pool.external_address
+        )
+        assert await actor_ref.add(3) == 3
+        assert await actor_ref.add(1) == 4
+        assert (await ctx.has_actor(actor_ref)) is True
+        assert (await ctx.actor_ref(actor_ref)) == actor_ref
+        # test cancel
+        task = asyncio.create_task(actor_ref.sleep(20))
+        await asyncio.sleep(0)
+        task.cancel()
+        assert await task == 5
+        await ctx.destroy_actor(actor_ref)
+        assert (await ctx.has_actor(actor_ref)) is False
+        for f in actor_ref.add, ctx.actor_ref, ctx.destroy_actor:
+            with pytest.raises(ActorNotExist):
+                await f(actor_ref)
+
+        # actor on sub pool
+        actor_ref1 = await ctx.create_actor(
+            TestActor, uid="test-main", address=pool.external_address
+        )
+        actor_ref2 = await ctx.create_actor(
+            TestActor,
+            uid="test-2",
+            address=pool.external_address,
+            allocate_strategy=RandomSubPool(),
+        )
+        assert (
+            await ctx.actor_ref(uid="test-2", address=actor_ref2.address)
+        ) == actor_ref2
+        main_ref = await ctx.actor_ref(uid="test-main", address=actor_ref2.address)
+        assert main_ref.address == pool.external_address
+        main_ref = await ctx.actor_ref(actor_ref1)
+        assert main_ref.address == pool.external_address
+        assert actor_ref2.address != actor_ref.address
+        assert await actor_ref2.add(3) == 3
+        assert await actor_ref2.add(1) == 4
+        with pytest.raises(RuntimeError):
+            await actor_ref2.return_cannot_unpickle()
+        with pytest.raises(SendMessageFailed):
+            await actor_ref2.raise_cannot_pickle()
+        assert (await ctx.has_actor(actor_ref2)) is True
+        assert (await ctx.actor_ref(actor_ref2)) == actor_ref2
+        # test cancel
+        task = asyncio.create_task(actor_ref2.sleep(20))
+        start = time.time()
+        await asyncio.sleep(0)
+        task.cancel()
+        assert await task == 5
+        assert time.time() - start < 3
+        await ctx.destroy_actor(actor_ref2)
+        assert (await ctx.has_actor(actor_ref2)) is False
+
+    assert pool.stopped
+    # after pool shutdown, global router must has been cleaned
+    global_router = Router.get_instance()
+    assert len(global_router._curr_external_addresses) == 0
+    assert len(global_router._mapping) == 0
+
+
+@pytest.mark.asyncio
+@require_unix
+async def test_create_actor_pool_elastic_ip():
+    addr = f"111.111.111.111:{get_next_port()}"
+    pool = await create_actor_pool(
+        addr,
+        pool_cls=MainActorPool,
+        n_process=0,
+        extra_conf={"listen_elastic_ip": True},
+    )
+    async with pool:
+        # test global router
+        global_router = Router.get_instance()
+        # global router should not be the identical one with pool's router
+        assert global_router is not pool.router
+        assert pool.external_address in global_router._curr_external_addresses
+        assert pool.external_address in global_router._mapping
+        assert pool.external_address == addr
+
+        ctx = get_context()
+
+        # actor on main pool
+        actor_ref = await ctx.create_actor(
+            TestActor, uid="test-1", address=pool.external_address
+        )
+        assert await actor_ref.add(3) == 3
+        await ctx.destroy_actor(actor_ref)
+        assert (await ctx.has_actor(actor_ref)) is False
+
+    assert pool.stopped
+    # after pool shutdown, global router must has been cleaned
+    global_router = Router.get_instance()
+    assert len(global_router._curr_external_addresses) == 0
+    assert len(global_router._mapping) == 0
+
+
+@pytest.mark.asyncio
+async def test_create_actor_pool_fix_all_zero_ip():
+    port = get_next_port()
+    addr = f"0.0.0.0:{port}"
+    pool = await create_actor_pool(
+        addr,
+        pool_cls=MainActorPool,
+        n_process=0,
+    )
+    async with pool:
+        # test global router
+        global_router = Router.get_instance()
+        # global router should not be the identical one with pool's router
+        assert global_router is not pool.router
+        assert pool.external_address in global_router._curr_external_addresses
+        assert pool.external_address in global_router._mapping
+        assert pool.external_address == addr
+
+        ctx = get_context()
+
+        # actor on main pool
+        actor_ref = await ctx.create_actor(
+            TestActor, uid="test-1", address=pool.external_address
+        )
+        assert await actor_ref.add(3) == 3
+        connect_addr = f"127.0.0.1:{port}"
+        actor_ref2 = await ctx.actor_ref(address=connect_addr, uid="test-1")
+        # test fix_all_zero_ip, the result is not 0.0.0.0
+        assert actor_ref2.address == connect_addr
+        assert await actor_ref.add(3) == 6
+
+        await ctx.destroy_actor(actor_ref)
+        assert (await ctx.has_actor(actor_ref)) is False
+
+    assert pool.stopped
+    # after pool shutdown, global router must has been cleaned
+    global_router = Router.get_instance()
+    assert len(global_router._curr_external_addresses) == 0
+    assert len(global_router._mapping) == 0
+
+
+@pytest.mark.asyncio
+async def test_create_actor_pool_ipv6():
+    port = get_next_port()
+    addr = f":::{port}"
+    pool = await create_actor_pool(
+        addr,
+        pool_cls=MainActorPool,
+        n_process=0,
+    )
+    async with pool:
+        # test global router
+        global_router = Router.get_instance()
+        # global router should not be the identical one with pool's router
+        assert global_router is not pool.router
+        assert pool.external_address in global_router._curr_external_addresses
+        assert pool.external_address in global_router._mapping
+        assert pool.external_address == addr
+
+        ctx = get_context()
+
+        # actor on main pool
+        actor_ref = await ctx.create_actor(
+            TestActor, uid="test-1", address=pool.external_address
+        )
+        assert await actor_ref.add(3) == 3
+        await ctx.destroy_actor(actor_ref)
+        assert (await ctx.has_actor(actor_ref)) is False
+
+    assert pool.stopped
+    # after pool shutdown, global router must has been cleaned
+    global_router = Router.get_instance()
+    assert len(global_router._curr_external_addresses) == 0
+    assert len(global_router._mapping) == 0
+
+
+@pytest.mark.asyncio
+@require_unix
+async def test_create_actor_pool_ipv6_elastic_ip():
+    port = get_next_port()
+    # ip not exists on local host
+    addr = f"FFFF:34::55::1:{port}"
+    pool = await create_actor_pool(
+        addr,
+        pool_cls=MainActorPool,
+        n_process=0,
+        extra_conf={"listen_elastic_ip": True},
+    )
+    async with pool:
+        # test global router
+        global_router = Router.get_instance()
+        # global router should not be the identical one with pool's router
+        assert global_router is not pool.router
+        assert pool.external_address in global_router._curr_external_addresses
+        assert pool.external_address in global_router._mapping
+        assert pool.external_address == addr
+
+        ctx = get_context()
+        # actor on main pool
+        actor_ref = await ctx.create_actor(
+            TestActor, uid="test-1", address=pool.external_address
+        )
+        # test fix_all_zero_ip, the result is not :::port
+        assert actor_ref.address == addr
+        assert await actor_ref.add(3) == 3
+        connect_addr = f"::1:{port}"
+        actor_ref2 = await ctx.actor_ref(address=connect_addr, uid="test-1")
+        assert await actor_ref2.add(4) == 7
+        assert actor_ref2.address == addr
+
+        await ctx.destroy_actor(actor_ref)
+        assert (await ctx.has_actor(actor_ref)) is False
+
+    assert pool.stopped
+    # after pool shutdown, global router must has been cleaned
+    global_router = Router.get_instance()
+    assert len(global_router._curr_external_addresses) == 0
+    assert len(global_router._mapping) == 0
+
+
+@pytest.mark.asyncio
 async def test_errors():
     with pytest.raises(ValueError):
         _ = await create_actor_pool(
@@ -584,16 +828,10 @@ async def test_errors():
 
 @pytest.mark.asyncio
 async def test_server_closed():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         auto_recover=False,
     )
 
@@ -606,19 +844,19 @@ async def test_server_closed():
 
         # check if error raised normally when subprocess killed
         task = asyncio.create_task(actor_ref.sleep(10))
-        await asyncio.sleep(0)
+        await asyncio.sleep(0.1)
 
         # kill subprocess 1
         process = list(pool._sub_processes.values())[0]
         process.kill()
-        process.join()
+        await process.wait()
 
         with pytest.raises(ServerClosed):
             # process already been killed,
             # ServerClosed will be raised
             await task
 
-        assert not process.is_alive()
+        assert process.returncode is not None
 
     with pytest.raises(RuntimeError):
         await pool.start()
@@ -632,11 +870,6 @@ async def test_server_closed():
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="skip under Windows")
 @pytest.mark.parametrize("auto_recover", [False, True, "actor", "process"])
 async def test_auto_recover(auto_recover):
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     recovered = asyncio.Event()
 
     def on_process_recover(*_):
@@ -646,7 +879,6 @@ async def test_auto_recover(auto_recover):
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         auto_recover=auto_recover,
         on_process_recover=on_process_recover,
     )
@@ -698,11 +930,6 @@ async def test_auto_recover(auto_recover):
 )
 @pytest.mark.asyncio
 async def test_monitor_sub_pool_exception(exception_config):
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     recovered = asyncio.Event()
     exception, done = exception_config
 
@@ -714,7 +941,6 @@ async def test_monitor_sub_pool_exception(exception_config):
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         on_process_recover=on_process_recover,
     )
 
@@ -735,25 +961,17 @@ async def test_monitor_sub_pool_exception(exception_config):
 
 @pytest.mark.asyncio
 async def test_two_pools():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
-
     ctx = get_context()
 
     pool1 = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
     )
     pool2 = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
     )
 
     def is_interprocess_address(addr):
@@ -811,16 +1029,10 @@ async def test_two_pools():
 
 @pytest.mark.asyncio
 async def test_parallel_allocate_idle_label():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         labels=[None, "my_label", "my_label"],
     )
 
@@ -889,16 +1101,10 @@ DICT_CONFIG = {
     ],
 )
 async def test_logging_config(logging_conf):
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=1,
-        subprocess_start_method=start_method,
         labels=[None, "my_label"],
         logging_conf=logging_conf,
     )
@@ -919,16 +1125,10 @@ async def test_logging_config(logging_conf):
 
 @pytest.mark.asyncio
 async def test_ref_sub_pool_actor():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=1,
-        subprocess_start_method=start_method,
     )
 
     async with pool:
@@ -976,16 +1176,10 @@ class TestUCXActor(Actor):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("enable_internal_addr", [False, True])
 async def test_ucx(enable_internal_addr: bool):
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
     pool = await create_actor_pool(  # type: ignore
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
         external_address_schemes=["ucx"] * 3,
         enable_internal_addresses=[enable_internal_addr] * 3,
     )
@@ -1008,18 +1202,37 @@ async def test_ucx(enable_internal_addr: bool):
         assert await ref1.foo(ref2, 3) == 6
 
 
+@require_ucx
 @pytest.mark.asyncio
-async def test_append_sub_pool():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
+async def test_ucx_elastic_ip():
+    port = get_next_port()
+    addr = f"111.111.111.111:{port}"
+    pool = await create_actor_pool(  # type: ignore
+        addr,
+        pool_cls=MainActorPool,
+        n_process=0,
+        external_address_schemes=["ucx"],
+        extra_conf={"listen_elastic_ip": True},
     )
+
+    async with pool:
+        ctx = get_context()
+        ref1 = await ctx.create_actor(
+            TestUCXActor, init_val=0, address=pool.external_address, uid="test-ucx"
+        )
+        assert ref1.address == "ucx://" + addr
+        ref2 = await ctx.actor_ref(address=f"ucx://127.0.0.1:{port}", uid="test-ucx")
+        assert await ref2.add(1) == 1
+        assert await ref1.add(2) == 2
+        assert ref2.address == "ucx://" + addr
+
+
+@pytest.mark.asyncio
+async def test_append_sub_pool_multiprocess():
     pool = await create_actor_pool(  # type: ignore
         "127.0.0.1",
         pool_cls=MainActorPool,
         n_process=2,
-        subprocess_start_method=start_method,
     )
 
     async with pool:
@@ -1029,6 +1242,7 @@ async def test_append_sub_pool():
         # test add a new sub pool
         sub_external_address = await pool.append_sub_pool(env={"foo": "bar"})
         assert sub_external_address is not None
+        assert sub_external_address.startswith("127.0.0.1:")
 
         config = await get_pool_config(pool.external_address)
         assert len(config.get_process_indexes()) == 4
@@ -1052,6 +1266,102 @@ async def test_append_sub_pool():
         await pool.remove_sub_pool(sub_external_address)
         config = await get_pool_config(pool.external_address)
         assert len(config.get_process_indexes()) == 3
+        assert process_index not in config.get_process_indexes()
+        with pytest.raises(KeyError):
+            config.get_pool_config(process_index)
+        with pytest.raises(Exception):
+            await ref.test()
+
+
+@pytest.mark.asyncio
+@require_unix
+async def test_append_sub_pool_multi_process_elastic_ip():
+    pool = await create_actor_pool(  # type: ignore
+        "111.111.111.111",
+        pool_cls=MainActorPool,
+        n_process=2,
+        extra_conf={"listen_elastic_ip": True},
+    )
+
+    async with pool:
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 3
+
+        # test add a new sub pool
+        sub_external_address = await pool.append_sub_pool(env={"foo": "bar"})
+        assert sub_external_address is not None
+        assert sub_external_address.startswith("111.111.111.111:")
+
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 4
+        process_index = config.get_process_indexes()[-1]
+        sub_config = config.get_pool_config(process_index)
+        assert sub_config["external_address"][0] == sub_external_address
+        assert sub_config["env"] is not None
+        assert sub_config["env"].get("foo", None) == "bar"
+
+        class DummyActor(Actor):
+            @staticmethod
+            def test():
+                return "this is dummy!"
+
+        ref = await create_actor(DummyActor, address=sub_external_address)
+        assert ref is not None
+        assert ref.address == sub_external_address
+        assert await ref.test() == "this is dummy!"
+
+        # test remove
+        await pool.remove_sub_pool(sub_external_address)
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 3
+        assert process_index not in config.get_process_indexes()
+        with pytest.raises(KeyError):
+            config.get_pool_config(process_index)
+        with pytest.raises(Exception):
+            await ref.test()
+
+
+@pytest.mark.asyncio
+@require_unix
+async def test_append_sub_pool_single_process_elastic_ip():
+    pool = await create_actor_pool(  # type: ignore
+        f"111.111.111.111:{get_next_port()}",
+        pool_cls=MainActorPool,
+        n_process=0,
+        extra_conf={"listen_elastic_ip": True},
+    )
+
+    async with pool:
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 1
+
+        # test add a new sub pool
+        sub_external_address = await pool.append_sub_pool(env={"foo": "bar"})
+        assert sub_external_address is not None
+        assert sub_external_address.startswith("111.111.111.111:")
+
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 2
+        process_index = config.get_process_indexes()[-1]
+        sub_config = config.get_pool_config(process_index)
+        assert sub_config["external_address"][0] == sub_external_address
+        assert sub_config["env"] is not None
+        assert sub_config["env"].get("foo", None) == "bar"
+
+        class DummyActor(Actor):
+            @staticmethod
+            def test():
+                return "this is dummy!"
+
+        ref = await create_actor(DummyActor, address=sub_external_address)
+        assert ref is not None
+        assert ref.address == sub_external_address
+        assert await ref.test() == "this is dummy!"
+
+        # test remove
+        await pool.remove_sub_pool(sub_external_address)
+        config = await get_pool_config(pool.external_address)
+        assert len(config.get_process_indexes()) == 1
         assert process_index not in config.get_process_indexes()
         with pytest.raises(KeyError):
             config.get_pool_config(process_index)
@@ -1099,3 +1409,74 @@ async def test_test_pool_append_sub_pool():
         assert process_index not in config.get_process_indexes()
         with pytest.raises(KeyError):
             config.get_pool_config(process_index)
+
+
+async def _run(started: multiprocessing.Event):  # type: ignore
+    pool = await create_actor_pool(  # type: ignore
+        "127.0.0.1", pool_cls=MainActorPool, n_process=1
+    )
+
+    class DummyActor(Actor):
+        @staticmethod
+        def test():
+            return "this is dummy!"
+
+    ref = await create_actor(
+        DummyActor, address=pool.external_address, allocate_strategy=RandomSubPool()
+    )
+    assert ref is not None
+
+    started.set()  # type: ignore
+    await pool.join()
+
+
+def _run_in_process(started: multiprocessing.Event):  # type: ignore
+    asyncio.run(_run(started))
+
+
+@pytest.mark.asyncio
+async def test_sub_pool_quit_with_main_pool():
+    s = multiprocessing.Event()
+    p = multiprocessing.Process(target=_run_in_process, args=(s,))
+    p.start()
+    s.wait()
+
+    processes = psutil.Process(p.pid).children()
+    assert len(processes) == 1
+
+    # kill main process
+    p.kill()
+    p.join()
+    await asyncio.sleep(1)
+
+    # subprocess should have died
+    assert not psutil.pid_exists(processes[0].pid)
+
+
+def _add(x: int) -> int:
+    return x + 1
+
+
+class _ProcessActor(Actor):
+    def run(self, x: int):
+        p = multiprocessing.Process(target=_add, args=(x,))
+        p.start()
+        p.join()
+        return x + 1
+
+
+@pytest.mark.asyncio
+async def test_process_in_actor():
+    pool = await create_actor_pool(  # type: ignore
+        "127.0.0.1",
+        pool_cls=MainActorPool,
+        n_process=1,
+    )
+
+    async with pool:
+        ref = await create_actor(
+            _ProcessActor,
+            address=pool.external_address,
+            allocate_strategy=RandomSubPool(),
+        )
+        assert 2 == await ref.run(1)

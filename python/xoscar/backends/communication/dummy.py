@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures as futures
+import logging
 import weakref
-from typing import Any, Callable, Coroutine, Dict, Type
+from typing import Any, Callable, Coroutine, Dict, Optional, Type
 from urllib.parse import urlparse
 
 from ...errors import ServerClosed
@@ -29,13 +30,15 @@ from .errors import ChannelClosed
 
 DEFAULT_DUMMY_ADDRESS = "dummy://0"
 
+logger = logging.getLogger(__name__)
+
 
 class DummyChannel(Channel):
     """
     Channel for communications in same process.
     """
 
-    __slots__ = "_in_queue", "_out_queue", "_closed"
+    __slots__ = "__weakref__", "_in_queue", "_out_queue", "_closed"
 
     name = "dummy"
 
@@ -97,11 +100,11 @@ class DummyServer(Server):
         else tuple()
     )
 
-    _address_to_instances: weakref.WeakValueDictionary[
-        str, "DummyServer"
-    ] = weakref.WeakValueDictionary()
-    _channels: list[ChannelType]
-    _tasks: list[asyncio.Task]
+    _address_to_instances: weakref.WeakValueDictionary[str, "DummyServer"] = (
+        weakref.WeakValueDictionary()
+    )
+    _channels: weakref.WeakSet[Channel]
+    _tasks: set[asyncio.Task]
     scheme: str | None = "dummy"
 
     def __init__(
@@ -111,8 +114,8 @@ class DummyServer(Server):
     ):
         super().__init__(address, channel_handler)
         self._closed = asyncio.Event()
-        self._channels = []
-        self._tasks = []
+        self._channels = weakref.WeakSet()
+        self._tasks = set()
 
     @classmethod
     def get_instance(cls, address: str):
@@ -178,7 +181,7 @@ class DummyServer(Server):
                 f"{type(self).__name__} got unexpected "
                 f'arguments: {",".join(kwargs)}'
             )
-        self._channels.append(channel)
+        self._channels.add(channel)
         await self.channel_handler(channel)
 
     @implements(Server.stop)
@@ -203,6 +206,7 @@ class DummyClient(Client):
         self, local_address: str | None, dest_address: str | None, channel: Channel
     ):
         super().__init__(local_address, dest_address, channel)
+        self._task: Optional[asyncio.Task] = None
 
     @staticmethod
     @implements(Client.connect)
@@ -232,11 +236,18 @@ class DummyClient(Client):
         task = asyncio.create_task(conn_coro)
         client = DummyClient(local_address, dest_address, client_channel)
         client._task = task
-        server._tasks.append(task)
+        server._tasks.add(task)
+
+        def _discard(t):
+            server._tasks.discard(t)
+            logger.info("Channel exit: %s", server_channel.info)
+
+        task.add_done_callback(_discard)
         return client
 
     @implements(Client.close)
     async def close(self):
         await super().close()
-        self._task.cancel()
-        self._task = None
+        if self._task is not None:
+            self._task.cancel()
+            self._task = None

@@ -57,7 +57,7 @@ class WorkerActor(Actor):
             await init_process_group(self._rank, self._world)
 
     async def test_params(self):
-        rank_ref: ActorRefType[RankActor] = await actor_ref(
+        rank_ref: ActorRefType[RankActor] = await actor_ref(  # type: ignore
             address=self.address, uid="RankActor"
         )
         uid = rank_ref.uid
@@ -72,7 +72,7 @@ class WorkerActor(Actor):
         backend = await rank_ref.backend()
         assert backend == "gloo"
 
-        pg: ProcessGroup = await rank_ref.process_group("default")
+        pg: ProcessGroup = await rank_ref.process_group("default")  # type: ignore
         assert pg is not None
 
         assert pg.rank == self._rank
