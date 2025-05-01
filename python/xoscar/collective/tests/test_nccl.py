@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import asyncio
-import multiprocessing as mp
 import os
 
 import numpy as np
@@ -207,7 +206,6 @@ class NcclWorkerActor(Actor):
 @require_cupy
 @pytest.mark.skip(reason="There is only a GPU on CI, but this UT is required 2 GPU!")
 async def test_collective():
-    mp.set_start_method("spawn", force=True)
     pool = await create_actor_pool(
         "127.0.0.1",
         n_process=2,

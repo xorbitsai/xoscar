@@ -14,8 +14,6 @@
 # limitations under the License.
 import asyncio
 import gc
-import os
-import sys
 import threading
 
 import pytest
@@ -43,14 +41,7 @@ class DummyActor(mo.Actor):
 
 @pytest.fixture
 async def actor_pool_context():
-    start_method = (
-        os.environ.get("POOL_START_METHOD", "forkserver")
-        if sys.platform != "win32"
-        else None
-    )
-    pool = await mo.create_actor_pool(
-        "test://127.0.0.1", n_process=2, subprocess_start_method=start_method
-    )
+    pool = await mo.create_actor_pool("test://127.0.0.1", n_process=2)
     async with pool:
         yield pool
 

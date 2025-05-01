@@ -16,12 +16,11 @@
 from __future__ import annotations
 
 import asyncio
-import multiprocessing
 from typing import Any, Optional
 
 from ..communication import DummyServer, gen_local_address
 from ..config import ActorPoolConfig
-from ..indigen.pool import MainActorPool, SubActorPool, SubpoolStatus
+from ..indigen.pool import MainActorPool, SubActorPool
 from ..message import ControlMessage, ControlMessageType, new_message_id
 from ..pool import ActorPoolType
 
@@ -50,33 +49,25 @@ class TestMainActorPool(MainActorPool):
         cls,
         actor_pool_config: ActorPoolConfig,
         process_index: int,
-        start_method: str | None = None,
+        start_python: str | None = None,
     ):
-        status_queue: multiprocessing.Queue = multiprocessing.Queue()
-        return (
-            asyncio.create_task(
-                cls._create_sub_pool(actor_pool_config, process_index, status_queue, 0)
-            ),
-            status_queue,
-        )
+        return await cls._create_sub_pool_test(actor_pool_config, process_index, 0)
 
     @classmethod
     async def wait_sub_pools_ready(cls, create_pool_tasks: list[asyncio.Task]):
         addresses = []
         tasks = []
         for t in create_pool_tasks:
-            pool_task, queue = await t
+            pool_task, external_addresses = await t
             tasks.append(pool_task)
-            status = await asyncio.to_thread(queue.get)
-            addresses.append(status.external_addresses)
+            addresses.append(external_addresses)
         return tasks, addresses
 
     @classmethod
-    async def _create_sub_pool(
+    async def _create_sub_pool_test(
         cls,
         actor_config: ActorPoolConfig,
         process_index: int,
-        status_queue: multiprocessing.Queue,
         main_pool_pid: int,
     ):
         pool: TestSubActorPool = await TestSubActorPool.create(
@@ -87,11 +78,9 @@ class TestMainActorPool(MainActorPool):
             }
         )
         await pool.start()
-        status_queue.put(
-            SubpoolStatus(status=0, external_addresses=[pool.external_address])
-        )
         actor_config.reset_pool_external_address(process_index, [pool.external_address])
-        await pool.join()
+        cur_pool_config = actor_config.get_pool_config(process_index)
+        return None, cur_pool_config["external_address"]
 
     def _sync_pool_config(self, actor_pool_config: ActorPoolConfig):
         # test pool does not create routers, thus can skip this step
@@ -107,7 +96,7 @@ class TestMainActorPool(MainActorPool):
         suspend_sigint: bool | None = None,
         use_uvloop: bool | None = None,
         logging_conf: dict | None = None,
-        start_method: str | None = None,
+        start_python: str | None = None,
         kwargs: dict | None = None,
     ):
         external_address = (
@@ -162,12 +151,12 @@ class TestMainActorPool(MainActorPool):
         return addresses[0][0]
 
     async def kill_sub_pool(
-        self, process: multiprocessing.Process, force: bool = False
+        self, process: asyncio.subprocess.Process, force: bool = False
     ):
-        process.cancel()  # type: ignore
+        pass
 
-    async def is_sub_pool_alive(self, process: multiprocessing.Process):
-        return not process.cancelled()  # type: ignore
+    async def is_sub_pool_alive(self, process: asyncio.subprocess.Process):
+        return True
 
 
 class TestSubActorPool(SubActorPool):

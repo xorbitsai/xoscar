@@ -33,7 +33,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
         return shutil.which("uv") is not None
 
     def create_env(self, python_path: Path | None = None) -> None:
-        cmd = ["uv", "venv", str(self.env_path)]
+        cmd = ["uv", "venv", str(self.env_path), "--system-site-packages"]
         if python_path:
             cmd += ["--python", str(python_path)]
         subprocess.run(cmd, check=True)
@@ -70,6 +70,9 @@ class UVVirtualEnvManager(VirtualEnvManager):
         if self._install_process and self._install_process.poll() is None:
             self._install_process.terminate()
             self._install_process.wait()
+
+    def get_python_path(self) -> str:
+        return str(self.env_path.joinpath("bin/python"))
 
     def get_lib_path(self) -> str:
         return sysconfig.get_path("purelib", vars={"base": str(self.env_path)})

@@ -32,12 +32,16 @@ build-backend = "setuptools.build_meta"
 
 [tool.black]
 include = '\.pyi?$'
-extend-exclude = '''
-^/xoscar/(_version.py)
+force-exclude = '''
+(
+  ^/xoscar/(_version.py)
+| shared_memory.py
+)
 '''
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope="function"
 markers = [
     "cuda: mark a test as a cuda case.",
 ]

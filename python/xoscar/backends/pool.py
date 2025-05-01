@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import asyncio.subprocess
 import concurrent.futures as futures
 import contextlib
 import itertools
@@ -853,7 +854,7 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
 
 ActorPoolType = TypeVar("ActorPoolType", bound=AbstractActorPool)
 MainActorPoolType = TypeVar("MainActorPoolType", bound="MainActorPoolBase")
-SubProcessHandle = multiprocessing.Process
+SubProcessHandle = asyncio.subprocess.Process
 
 
 class SubActorPoolBase(ActorPoolBase):
@@ -977,7 +978,6 @@ class SubActorPoolBase(ActorPoolBase):
 
 class MainActorPoolBase(ActorPoolBase):
     __slots__ = (
-        "_subprocess_start_method",
         "_allocated_actors",
         "sub_actor_pool_manager",
         "_auto_recover",
@@ -999,7 +999,6 @@ class MainActorPoolBase(ActorPoolBase):
         router: Router,
         config: ActorPoolConfig,
         servers: list[Server],
-        subprocess_start_method: str | None = None,
         auto_recover: str | bool = "actor",
         on_process_down: Callable[[MainActorPoolType, str], None] | None = None,
         on_process_recover: Callable[[MainActorPoolType, str], None] | None = None,
@@ -1014,7 +1013,6 @@ class MainActorPoolBase(ActorPoolBase):
             config,
             servers,
         )
-        self._subprocess_start_method = subprocess_start_method
 
         # auto recovering
         self._auto_recover = auto_recover
@@ -1280,7 +1278,6 @@ class MainActorPoolBase(ActorPoolBase):
 
     @staticmethod
     def _parse_config(config: dict, kw: dict) -> dict:
-        kw["subprocess_start_method"] = config.pop("start_method", None)
         kw["auto_recover"] = config.pop("auto_recover", "actor")
         kw["on_process_down"] = config.pop("on_process_down", None)
         kw["on_process_recover"] = config.pop("on_process_recover", None)
@@ -1292,7 +1289,6 @@ class MainActorPoolBase(ActorPoolBase):
     async def create(cls, config: dict) -> MainActorPoolType:
         config = config.copy()
         actor_pool_config: ActorPoolConfig = config.get("actor_pool_config")  # type: ignore
-        start_method = config.get("start_method", None)
         if "process_index" not in config:
             config["process_index"] = actor_pool_config.get_process_indexes()[0]
         curr_process_index = config.get("process_index")
@@ -1308,7 +1304,7 @@ class MainActorPoolBase(ActorPoolBase):
                 if process_index == curr_process_index:
                     continue
                 create_pool_task = asyncio.create_task(
-                    cls.start_sub_pool(actor_pool_config, process_index, start_method)
+                    cls.start_sub_pool(actor_pool_config, process_index)
                 )
                 await asyncio.sleep(0)
                 # await create_pool_task
@@ -1370,7 +1366,7 @@ class MainActorPoolBase(ActorPoolBase):
         cls,
         actor_pool_config: ActorPoolConfig,
         process_index: int,
-        start_method: str | None = None,
+        start_python: str | None = None,
     ):
         """Start a sub actor pool"""
 
@@ -1525,7 +1521,6 @@ async def create_actor_pool(
     envs: list[dict] | None = None,
     external_address_schemes: list[Optional[str]] | None = None,
     enable_internal_addresses: list[bool] | None = None,
-    subprocess_start_method: str | None = None,
     auto_recover: str | bool = "actor",
     modules: list[str] | None = None,
     suspend_sigint: bool | None = None,
@@ -1625,7 +1620,6 @@ async def create_actor_pool(
         {
             "actor_pool_config": actor_pool_config,
             "process_index": main_process_index,
-            "start_method": subprocess_start_method,
             "auto_recover": auto_recover,
             "on_process_down": on_process_down,
             "on_process_recover": on_process_recover,

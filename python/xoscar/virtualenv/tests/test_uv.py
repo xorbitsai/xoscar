@@ -19,6 +19,9 @@ import time
 
 import pytest
 
+from ... import Actor, create_actor
+from ...backends.indigen.pool import MainActorPool
+from ...backends.pool import create_actor_pool
 from .. import get_virtual_env_manager
 from ..uv import UVVirtualEnvManager
 
@@ -48,6 +51,59 @@ def test_uv_virtialenv_manager():
 
             assert transformers.__version__ == "4.40.0"
 
+            manager.remove_env()
+            assert not os.path.exists(path)
+        finally:
+            sys.path = raw_sys_path
+
+
+@pytest.mark.skipif(not UVVirtualEnvManager.is_available(), reason="uv not installed")
+@pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="skip windows because some files cannot be deleted",
+)
+async def test_uv_virtialenv_pool():
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, ".env")
+        manager = get_virtual_env_manager("uv", path)
+
+        raw_sys_path = sys.path
+        try:
+            manager.create_env()
+            assert os.path.exists(path)
+            manager.install_packages(
+                ["xllamacpp==0.1.14"],
+                index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+            )
+
+            pool = await create_actor_pool(
+                "127.0.0.1",
+                pool_cls=MainActorPool,
+                n_process=0,
+            )
+            sub_external_address = await pool.append_sub_pool(
+                start_python=manager.get_python_path()
+            )
+
+            class DummyActor(Actor):
+                @staticmethod
+                def test():
+                    import xllamacpp
+
+                    assert xllamacpp.__version__ == "0.1.14"
+                    return sys.executable
+
+            ref = await create_actor(DummyActor, address=sub_external_address)
+            assert ref is not None
+            assert ref.address == sub_external_address
+            assert await ref.test() == manager.get_python_path()
+
+            with pytest.raises((ImportError, AssertionError)):
+                import xllamacpp
+
+                assert xllamacpp.__version__ == "0.1.14"
+
+            await pool.remove_sub_pool(sub_external_address)
             manager.remove_env()
             assert not os.path.exists(path)
         finally:
