@@ -285,19 +285,30 @@ class MainActorPool(MainActorPoolBase):
             )
 
             def _get_external_addresses():
-                nonlocal external_addresses
-                while not (
-                    external_addresses := _shm_get_object(_ShmSeq.INIT_RESULT, shm)
-                ):
-                    time.sleep(0.1)
+                try:
+                    nonlocal external_addresses
+                    while (
+                        shm
+                        and shm.buf is not None
+                        and not (
+                            external_addresses := _shm_get_object(
+                                _ShmSeq.INIT_RESULT, shm
+                            )
+                        )
+                    ):
+                        time.sleep(0.1)
+                except asyncio.CancelledError:
+                    pass
 
-            await asyncio.wait(
+            _, unfinished = await asyncio.wait(
                 [
                     asyncio.create_task(process.wait()),
                     asyncio.create_task(asyncio.to_thread(_get_external_addresses)),
                 ],
                 return_when=asyncio.FIRST_COMPLETED,
             )
+            for t in unfinished:
+                t.cancel()
         finally:
             shm.close()
             shm.unlink()
