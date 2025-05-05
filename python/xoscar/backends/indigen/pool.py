@@ -315,6 +315,10 @@ class MainActorPool(MainActorPoolBase):
             )
             for t in unfinished:
                 t.cancel()
+            print("11111")
+            print(process)
+            print(process.returncode)
+            print("22222")
         finally:
             shm.close()
             shm.unlink()
