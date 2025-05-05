@@ -210,11 +210,14 @@ async def create_subprocess_exec(*args, **kwargs):
         creationflags=creationflags,
     )
     if win32:
+        print("aaaaa", process)
         proc = process._transport._proc
+        print("bbbbb", proc)
         try:
             set_kill_child_on_death_win32(proc)
             psutil.Process(process.pid).resume()
         except (psutil.Error, OSError):
+            print("Error>>>>>>>>>>>>>.")
             process.kill()
             raise
     return process

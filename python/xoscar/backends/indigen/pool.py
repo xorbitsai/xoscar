@@ -256,6 +256,12 @@ class MainActorPool(MainActorPoolBase):
         process_index: int,
         start_python: str | None = None,
     ):
+        print(
+            "_create_sub_pool_from_parent",
+            actor_pool_config,
+            process_index,
+            start_python,
+        )
         # We check the Python version in _shm_get_object to make it faster,
         # as in most cases the Python versions are the same.
         if start_python is None:

@@ -826,9 +826,6 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
         with _disable_log_temporally():
             TypeDispatcher.reload_all_lazy_handlers()
 
-        if "PYTHONPATH" in os.environ:
-            sys.path.insert(0, os.environ["PYTHONPATH"])
-
         def handle_channel(channel):
             return pool.on_new_channel(channel)
 
@@ -1288,6 +1285,9 @@ class MainActorPoolBase(ActorPoolBase):
     @implements(AbstractActorPool.create)
     async def create(cls, config: dict) -> MainActorPoolType:
         config = config.copy()
+        import pprint
+
+        pprint.pprint(config)
         actor_pool_config: ActorPoolConfig = config.get("actor_pool_config")  # type: ignore
         if "process_index" not in config:
             config["process_index"] = actor_pool_config.get_process_indexes()[0]
@@ -1303,6 +1303,7 @@ class MainActorPoolBase(ActorPoolBase):
             for process_index in process_indexes:
                 if process_index == curr_process_index:
                     continue
+                print("actor_pool_config", actor_pool_config, process_index)
                 create_pool_task = asyncio.create_task(
                     cls.start_sub_pool(actor_pool_config, process_index)
                 )
