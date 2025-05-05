@@ -170,6 +170,7 @@ class MainActorPool(MainActorPoolBase):
         cls,
         shm_name: str,
     ):
+        print("_start_sub_pool_in_child", shm_name)
         ensure_coverage()
 
         shm = shared_memory.SharedMemory(shm_name, track=False)
@@ -183,6 +184,9 @@ class MainActorPool(MainActorPoolBase):
                 while True:
                     try:
                         if os.getppid() != main_pool_pid:
+                            print(
+                                f">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> {os.getppid()} {main_pool_pid}"
+                            )
                             logger.info("Exit due to parent %s exit.", main_pool_pid)
                             os._exit(0)
                         time.sleep(2)
