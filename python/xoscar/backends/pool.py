@@ -1285,9 +1285,6 @@ class MainActorPoolBase(ActorPoolBase):
     @implements(AbstractActorPool.create)
     async def create(cls, config: dict) -> MainActorPoolType:
         config = config.copy()
-        import pprint
-
-        pprint.pprint(config)
         actor_pool_config: ActorPoolConfig = config.get("actor_pool_config")  # type: ignore
         if "process_index" not in config:
             config["process_index"] = actor_pool_config.get_process_indexes()[0]
