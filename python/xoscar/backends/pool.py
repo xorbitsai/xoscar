@@ -23,7 +23,6 @@ import itertools
 import logging
 import multiprocessing
 import os
-import sys
 import threading
 import traceback
 from abc import ABC, ABCMeta, abstractmethod
