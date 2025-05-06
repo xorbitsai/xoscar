@@ -215,6 +215,7 @@ async def create_subprocess_exec(*args, **kwargs):
             set_kill_child_on_death_win32(proc)
             psutil.Process(process.pid).resume()
         except (psutil.Error, OSError):
+            logger.exception("Resume process failed, kill %s.", process.pid)
             process.kill()
             raise
     return process

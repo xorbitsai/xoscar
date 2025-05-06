@@ -182,12 +182,15 @@ class MainActorPool(MainActorPoolBase):
             def _check_ppid():
                 while True:
                     try:
-                        if os.getppid() != main_pool_pid:
-                            logger.info("Exit due to parent %s exit.", main_pool_pid)
-                            os._exit(0)
-                        time.sleep(2)
+                        # We can't simply check if the os.getppid() equals with main_pool_pid,
+                        # as the double fork may result in a new process as the parent.
+                        psutil.Process(main_pool_pid)
+                    except psutil.NoSuchProcess:
+                        logger.info("Exit due to main pool %s exit.", main_pool_pid)
+                        os._exit(0)
                     except Exception as e:
                         logger.exception("Check ppid failed: %s", e)
+                    time.sleep(10)
 
             t = threading.Thread(target=_check_ppid, daemon=True)
             t.start()

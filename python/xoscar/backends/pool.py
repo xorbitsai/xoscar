@@ -23,7 +23,6 @@ import itertools
 import logging
 import multiprocessing
 import os
-import sys
 import threading
 import traceback
 from abc import ABC, ABCMeta, abstractmethod
@@ -825,9 +824,6 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
         # make sure all lazy imports loaded
         with _disable_log_temporally():
             TypeDispatcher.reload_all_lazy_handlers()
-
-        if "PYTHONPATH" in os.environ:
-            sys.path.insert(0, os.environ["PYTHONPATH"])
 
         def handle_channel(channel):
             return pool.on_new_channel(channel)
