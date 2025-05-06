@@ -170,7 +170,6 @@ class MainActorPool(MainActorPoolBase):
         cls,
         shm_name: str,
     ):
-        print("_start_sub_pool_in_child", shm_name)
         ensure_coverage()
 
         shm = shared_memory.SharedMemory(shm_name, track=False)
@@ -180,20 +179,16 @@ class MainActorPool(MainActorPoolBase):
             process_index = config["process_index"]
             main_pool_pid = config["main_pool_pid"]
 
-            print(f"fffffff {os.getppid()} != {main_pool_pid}, {os.getpid()}")
-
             def _check_ppid():
                 while True:
                     try:
-                        if os.getppid() != main_pool_pid:
-                            print(
-                                f">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> {os.getppid()} {main_pool_pid}"
-                            )
-                            logger.info("Exit due to parent %s exit.", main_pool_pid)
-                            # os._exit(0)
-                        time.sleep(2)
+                        psutil.Process(main_pool_pid)
+                    except psutil.NoSuchProcess:
+                        logger.info("Exit due to parent %s exit.", main_pool_pid)
+                        os._exit(0)
                     except Exception as e:
                         logger.exception("Check ppid failed: %s", e)
+                    time.sleep(10)
 
             t = threading.Thread(target=_check_ppid, daemon=True)
             t.start()
@@ -262,12 +257,6 @@ class MainActorPool(MainActorPoolBase):
         process_index: int,
         start_python: str | None = None,
     ):
-        print(
-            "_create_sub_pool_from_parent",
-            actor_pool_config,
-            process_index,
-            start_python,
-        )
         # We check the Python version in _shm_get_object to make it faster,
         # as in most cases the Python versions are the same.
         if start_python is None:
@@ -287,7 +276,6 @@ class MainActorPool(MainActorPoolBase):
                     "main_pool_pid": os.getpid(),
                 },
             )
-            print(f"parent {os.getpid()}")
             process = await create_subprocess_exec(
                 start_python,
                 "-m",
@@ -322,10 +310,6 @@ class MainActorPool(MainActorPoolBase):
             )
             for t in unfinished:
                 t.cancel()
-            print("11111")
-            print(process)
-            print(process.returncode)
-            print("22222")
         finally:
             shm.close()
             shm.unlink()

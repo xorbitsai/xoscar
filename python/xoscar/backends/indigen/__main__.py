@@ -12,7 +12,6 @@ if __name__ == "__main__":
     @main.command("start_sub_pool", help="Start a sub pool.")
     @click.option("shm_name", "-sn", type=str, help="Shared memory name.")
     def start_sub_pool(shm_name):
-        print("start_sub_pool", shm_name)
         from xoscar.backends.indigen.pool import MainActorPool
 
         MainActorPool._start_sub_pool_in_child(shm_name)
