@@ -180,6 +180,8 @@ class MainActorPool(MainActorPoolBase):
             process_index = config["process_index"]
             main_pool_pid = config["main_pool_pid"]
 
+            print(f"fffffff {os.getppid()} != {main_pool_pid}, {os.getpid()}")
+
             def _check_ppid():
                 while True:
                     try:
@@ -285,6 +287,7 @@ class MainActorPool(MainActorPoolBase):
                     "main_pool_pid": os.getpid(),
                 },
             )
+            print(f"parent {os.getpid()}")
             process = await create_subprocess_exec(
                 start_python,
                 "-m",
