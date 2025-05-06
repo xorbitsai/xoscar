@@ -1300,7 +1300,6 @@ class MainActorPoolBase(ActorPoolBase):
             for process_index in process_indexes:
                 if process_index == curr_process_index:
                     continue
-                print("actor_pool_config", actor_pool_config, process_index)
                 create_pool_task = asyncio.create_task(
                     cls.start_sub_pool(actor_pool_config, process_index)
                 )
