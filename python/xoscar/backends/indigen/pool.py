@@ -188,7 +188,7 @@ class MainActorPool(MainActorPoolBase):
                                 f">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> {os.getppid()} {main_pool_pid}"
                             )
                             logger.info("Exit due to parent %s exit.", main_pool_pid)
-                            os._exit(0)
+                            # os._exit(0)
                         time.sleep(2)
                     except Exception as e:
                         logger.exception("Check ppid failed: %s", e)
