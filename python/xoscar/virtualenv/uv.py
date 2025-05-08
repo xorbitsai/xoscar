@@ -51,12 +51,19 @@ class UVVirtualEnvManager(VirtualEnvManager):
         # Handle known pip-related kwargs
         if "index_url" in kwargs and kwargs["index_url"]:
             cmd += ["-i", kwargs["index_url"]]
-        if "extra_index_url" in kwargs and kwargs["extra_index_url"]:
-            cmd += ["--extra-index-url", kwargs["extra_index_url"]]
-        if "find_links" in kwargs and kwargs["find_links"]:
-            cmd += ["-f", kwargs["find_links"]]
-        if "trusted_host" in kwargs and kwargs["trusted_host"]:
-            cmd += ["--trusted-host", kwargs["trusted_host"]]
+        param_and_option = [
+            ("extra_index_url", "--extra-index-url"),
+            ("find_links", "-f"),
+            ("trusted_host", "--trusted-host"),
+        ]
+        for param, option in param_and_option:
+            if param in kwargs and kwargs[param]:
+                param_value = kwargs[param]
+                if isinstance(param_value, list):
+                    for it in param_value:
+                        cmd += [option, it]
+                else:
+                    cmd += [option, param_value]
 
         self._install_process = process = subprocess.Popen(cmd)
         returncode = process.wait()
@@ -71,8 +78,10 @@ class UVVirtualEnvManager(VirtualEnvManager):
             self._install_process.terminate()
             self._install_process.wait()
 
-    def get_python_path(self) -> str:
-        return str(self.env_path.joinpath("bin/python"))
+    def get_python_path(self) -> str | None:
+        if self.env_path.exists():
+            return str(self.env_path.joinpath("bin/python"))
+        return None
 
     def get_lib_path(self) -> str:
         return sysconfig.get_path("purelib", vars={"base": str(self.env_path)})

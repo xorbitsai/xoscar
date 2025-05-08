@@ -89,7 +89,7 @@ def wrap_exception(
 ) -> BaseException:
     """Generate an exception wraps the cause exception."""
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         pass
 
     def __getattr__(self, item):
