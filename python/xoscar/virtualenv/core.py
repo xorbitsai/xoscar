@@ -40,7 +40,7 @@ class VirtualEnvManager(ABC):
         pass
 
     @abstractmethod
-    def get_python_path(self) -> str:
+    def get_python_path(self) -> str | None:
         pass
 
     @abstractmethod
