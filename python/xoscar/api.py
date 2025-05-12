@@ -183,6 +183,11 @@ async def create_actor_pool(
 
 
 async def wait_for(fut: Awaitable[Any], timeout: int | float | None = None) -> Any:
+    # asyncio.wait_for() on Xoscar actor call cannot work as expected,
+    # because when time out, the future will be cancelled, but an actor call will catch this error,
+    # and send a CancelMessage to the dest pool, if the CancelMessage cannot be processed correctly(e.g. the dest pool hangs),
+    # the time out will never happen. Thus this PR added a new API so that no matter the CancelMessage delivered or not,
+    # the timeout will happen as expected.
     loop = asyncio.get_running_loop()
     new_fut = loop.create_future()
     task = asyncio.ensure_future(fut)
