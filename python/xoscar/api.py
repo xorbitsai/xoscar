@@ -26,6 +26,7 @@ from numbers import Number
 from typing import (
     TYPE_CHECKING,
     Any,
+    Awaitable,
     Dict,
     Generic,
     List,
@@ -179,6 +180,39 @@ async def create_actor_pool(
     return await get_backend(scheme).create_actor_pool(
         address, n_process=n_process, **kwargs
     )
+
+
+async def wait_for(fut: Awaitable[Any], timeout: int | float | None = None) -> Any:
+    # asyncio.wait_for() on Xoscar actor call cannot work as expected,
+    # because when time out, the future will be cancelled, but an actor call will catch this error,
+    # and send a CancelMessage to the dest pool, if the CancelMessage cannot be processed correctly(e.g. the dest pool hangs),
+    # the time out will never happen. Thus this PR added a new API so that no matter the CancelMessage delivered or not,
+    # the timeout will happen as expected.
+    loop = asyncio.get_running_loop()
+    new_fut = loop.create_future()
+    task = asyncio.ensure_future(fut)
+
+    def on_done(f: asyncio.Future):
+        if new_fut.done():
+            return
+        if f.cancelled():
+            new_fut.cancel()
+        elif f.exception():
+            new_fut.set_exception(f.exception())  # type: ignore
+        else:
+            new_fut.set_result(f.result())
+
+    task.add_done_callback(on_done)
+
+    try:
+        return await asyncio.wait_for(new_fut, timeout)
+    except asyncio.TimeoutError:
+        if not task.done():
+            try:
+                task.cancel()  # Try to cancel without waiting
+            except Exception:
+                logger.warning("Failed to cancel task", exc_info=True)
+        raise
 
 
 def buffer_ref(address: str, buffer: Any) -> BufferRef:

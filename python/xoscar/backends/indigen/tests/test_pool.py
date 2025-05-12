@@ -27,7 +27,16 @@ from unittest import mock
 import psutil
 import pytest
 
-from .... import Actor, create_actor, create_actor_ref, get_pool_config, kill_actor
+import xoscar
+
+from .... import (
+    Actor,
+    create_actor,
+    create_actor_ref,
+    get_pool_config,
+    kill_actor,
+    wait_for,
+)
 from ....context import get_context
 from ....errors import ActorNotExist, NoIdleSlot, SendMessageFailed, ServerClosed
 from ....tests.core import require_ucx, require_unix
@@ -1480,3 +1489,43 @@ async def test_process_in_actor():
             allocate_strategy=RandomSubPool(),
         )
         assert 2 == await ref.run(1)
+
+
+class AActor(Actor):
+    async def call_destroy(self, ref):
+        coro = xoscar.destroy_actor(ref)
+        start = time.time()
+        with pytest.raises(asyncio.TimeoutError):
+            await wait_for(coro, timeout=1)
+        return time.time() - start
+
+
+class BActor(Actor):
+    async def __pre_destroy__(self):
+        time.sleep(20)
+
+
+@pytest.mark.asyncio
+async def test_pre_destroy_stuck():
+    pool = await create_actor_pool(  # type: ignore
+        "127.0.0.1", pool_cls=MainActorPool, n_process=2
+    )
+
+    async with pool:
+        a = await xoscar.create_actor(
+            AActor,
+            address=pool.external_address,
+            uid="a",
+            allocate_strategy=xoscar.allocate_strategy.ProcessIndex(1),
+        )
+        b = await xoscar.create_actor(
+            BActor,
+            address=pool.external_address,
+            uid="b",
+            allocate_strategy=xoscar.allocate_strategy.ProcessIndex(2),
+        )
+
+        duration = await a.call_destroy(b)
+        assert duration < 5
+
+        await pool.kill_sub_pool(list(pool._sub_processes.values())[1])
