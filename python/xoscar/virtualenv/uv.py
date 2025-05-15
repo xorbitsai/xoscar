@@ -46,6 +46,10 @@ class UVVirtualEnvManager(VirtualEnvManager):
         if not packages:
             return
 
+        # extend the ability of pip
+        # maybe replace #system_torch# to the real version
+        packages = self.process_packages(packages)
+
         cmd = ["uv", "pip", "install", "-p", str(self.env_path)] + packages
 
         # Handle known pip-related kwargs
