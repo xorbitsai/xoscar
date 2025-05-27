@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sysconfig
@@ -21,6 +22,8 @@ from pathlib import Path
 from typing import Optional
 
 from .core import VirtualEnvManager
+
+UV_PATH = os.getenv("XOSCAR_UV_PATH")
 
 
 class UVVirtualEnvManager(VirtualEnvManager):
@@ -30,10 +33,14 @@ class UVVirtualEnvManager(VirtualEnvManager):
 
     @classmethod
     def is_available(cls):
+        if UV_PATH is not None:
+            # user specified uv, just treat it as existed
+            return True
         return shutil.which("uv") is not None
 
     def create_env(self, python_path: Path | None = None) -> None:
-        cmd = ["uv", "venv", str(self.env_path), "--system-site-packages"]
+        uv_path = UV_PATH or "uv"
+        cmd = [uv_path, "venv", str(self.env_path), "--system-site-packages"]
         if python_path:
             cmd += ["--python", str(python_path)]
         subprocess.run(cmd, check=True)
@@ -50,7 +57,8 @@ class UVVirtualEnvManager(VirtualEnvManager):
         # maybe replace #system_torch# to the real version
         packages = self.process_packages(packages)
 
-        cmd = ["uv", "pip", "install", "-p", str(self.env_path)] + packages
+        uv_path = UV_PATH or "uv"
+        cmd = [uv_path, "pip", "install", "-p", str(self.env_path)] + packages
 
         # Handle known pip-related kwargs
         if "index_url" in kwargs and kwargs["index_url"]:
