@@ -263,7 +263,6 @@ class MainActorPool(MainActorPoolBase):
         # as in most cases the Python versions are the same.
         if start_python is None:
             start_python = sys.executable
-        logger.info("Creating sub pool using python: %s", start_python)
 
         external_addresses: List | None = None
         shm = shared_memory.SharedMemory(
@@ -279,14 +278,16 @@ class MainActorPool(MainActorPoolBase):
                     "main_pool_pid": os.getpid(),
                 },
             )
-            process = await create_subprocess_exec(
+            cmd = [
                 start_python,
                 "-m",
                 "xoscar.backends.indigen",
                 "start_sub_pool",
                 "-sn",
                 shm.name,
-            )
+            ]
+            logger.info("Creating sub pool via command: %s", cmd)
+            process = await create_subprocess_exec(*cmd)
 
             def _get_external_addresses():
                 try:
