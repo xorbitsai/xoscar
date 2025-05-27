@@ -263,6 +263,7 @@ class MainActorPool(MainActorPoolBase):
         # as in most cases the Python versions are the same.
         if start_python is None:
             start_python = sys.executable
+        logger.info("Creating sub pool using python: %s", start_python)
 
         external_addresses: List | None = None
         shm = shared_memory.SharedMemory(
@@ -316,7 +317,7 @@ class MainActorPool(MainActorPoolBase):
             shm.close()
             shm.unlink()
         if external_addresses is None:
-            raise OSError("Start sub pool failed.")
+            raise OSError(f"Start sub pool failed, returncode: {process.returncode}")
         return process, external_addresses
 
     async def append_sub_pool(

@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -25,6 +26,7 @@ from typing import Optional
 from .core import VirtualEnvManager
 
 UV_PATH = os.getenv("XOSCAR_UV_PATH")
+logger = logging.getLogger(__name__)
 
 
 def _is_in_pyinstaller():
@@ -53,6 +55,8 @@ class UVVirtualEnvManager(VirtualEnvManager):
             # in this case we'd better specify the same python version
             python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
             cmd += ["--python", python_version]
+
+        logger.info("Creating virtualenv via command: %s", cmd)
         subprocess.run(cmd, check=True)
 
     def install_packages(self, packages: list[str], **kwargs):
@@ -87,6 +91,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
                 else:
                     cmd += [option, param_value]
 
+        logger.info("Installing packages via command: %s", cmd)
         self._install_process = process = subprocess.Popen(cmd)
         returncode = process.wait()
 
