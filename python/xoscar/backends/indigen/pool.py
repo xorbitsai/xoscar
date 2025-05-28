@@ -286,8 +286,9 @@ class MainActorPool(MainActorPoolBase):
                 "-sn",
                 shm.name,
             ]
-            logger.info("Creating sub pool via command: %s", cmd)
-            process = await create_subprocess_exec(*cmd)
+            env = actor_pool_config.get_pool_config(process_index).get("env")
+            logger.info("Creating sub pool via command: %s, env: %s", cmd, env)
+            process = await create_subprocess_exec(*cmd, env=env)
 
             def _get_external_addresses():
                 try:
