@@ -187,7 +187,7 @@ class MainActorPool(MainActorPoolBase):
                         psutil.Process(main_pool_pid)
                     except psutil.NoSuchProcess:
                         logger.error("Exit due to main pool %s exit.", main_pool_pid)
-                        os._exit(233)  # Special exit code for debug.
+                        os._exit(233)  # Special exit code for debugging.
                     except Exception as e:
                         logger.exception("Check ppid failed: %s", e)
                     time.sleep(10)
@@ -286,6 +286,7 @@ class MainActorPool(MainActorPoolBase):
                 "-sn",
                 shm.name,
             ]
+            # We need to inherit the parent environment to ensure the subprocess works correctly on Windows.
             new_env = dict(os.environ)
             env = actor_pool_config.get_pool_config(process_index).get("env") or {}
             new_env.update(env)
