@@ -186,8 +186,8 @@ class MainActorPool(MainActorPoolBase):
                         # as the double fork may result in a new process as the parent.
                         psutil.Process(main_pool_pid)
                     except psutil.NoSuchProcess:
-                        logger.info("Exit due to main pool %s exit.", main_pool_pid)
-                        os._exit(0)
+                        logger.error("Exit due to main pool %s exit.", main_pool_pid)
+                        os._exit(233)  # Special exit code for debug.
                     except Exception as e:
                         logger.exception("Check ppid failed: %s", e)
                     time.sleep(10)

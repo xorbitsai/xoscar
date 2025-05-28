@@ -160,10 +160,10 @@ jobs:
         if [[ "$MODULE" == "xoscar" ]]; then
           pytest -s -v --timeout=500 \
             -W ignore::PendingDeprecationWarning \
-            --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar --capture=no
+            --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar
         else
           source activate ${{ env.CONDA_ENV }}
-          pytest -v -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar --capture=no
+          pytest -s -v -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar
         fi
       working-directory: ./python
 
