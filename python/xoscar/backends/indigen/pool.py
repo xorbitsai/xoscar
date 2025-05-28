@@ -287,7 +287,7 @@ class MainActorPool(MainActorPoolBase):
                 "-sn",
                 shm.name,
             ]
-            parent_env = dict(os.getenv())
+            parent_env = dict(os.environ)
             env = actor_pool_config.get_pool_config(process_index).get("env") or {}
             parent_env.update(env)
             logger.info(
