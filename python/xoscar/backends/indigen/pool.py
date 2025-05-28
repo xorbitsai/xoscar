@@ -22,7 +22,6 @@ import itertools
 import logging.config
 import os
 import pickle
-import pprint
 import random
 import signal
 import struct
@@ -290,11 +289,7 @@ class MainActorPool(MainActorPoolBase):
             new_env = dict(os.environ)
             env = actor_pool_config.get_pool_config(process_index).get("env") or {}
             new_env.update(env)
-            logger.info(
-                "Creating sub pool via command: %s, env: %s",
-                cmd,
-                pprint.pformat(new_env),
-            )
+            logger.info("Creating sub pool via command: %s", cmd)
             process = await create_subprocess_exec(*cmd, env=new_env)
 
             def _get_external_addresses():
