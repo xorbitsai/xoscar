@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import os.path
 import sys
 import tempfile
@@ -156,5 +157,51 @@ def test_uv_virtualenv_manager_with_cancel():
             manager.remove_env()
             assert not os.path.exists(path)
 
+        finally:
+            sys.path = raw_sys_path
+
+
+@pytest.mark.skipif(not UVVirtualEnvManager.is_available(), reason="uv not installed")
+@pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="skip windows because some files cannot be deleted",
+)
+def test_uv_virtualenv_manager_with_log(caplog):
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, ".env")
+        manager = get_virtual_env_manager("uv", path)
+
+        raw_sys_path = sys.path
+        try:
+            # Create the virtual environment
+            manager.create_env()
+            assert os.path.exists(path)
+
+            # Start logging
+            caplog.set_level(logging.INFO)
+
+            # Install package with log enabled
+            manager.install_packages(
+                ["packaging==24.0"],
+                index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+                log=True,
+            )
+
+            if "packaging" in sys.modules:
+                del sys.modules["packaging"]
+
+            # Verify it's installed
+            sys.path.insert(0, manager.get_lib_path())
+            import packaging
+
+            assert packaging.__version__ == "24.0"
+
+            # Check that logs are indeed captured
+            assert any(
+                "Installed 1 package in" in record.message for record in caplog.records
+            )
+
+            manager.remove_env()
+            assert not os.path.exists(path)
         finally:
             sys.path = raw_sys_path
