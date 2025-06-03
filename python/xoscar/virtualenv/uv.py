@@ -47,7 +47,14 @@ class UVVirtualEnvManager(VirtualEnvManager):
         return shutil.which("uv") is not None
 
     def create_env(self, python_path: Path | None = None) -> None:
-        uv_path = UV_PATH or "uv"
+        if (uv_path := UV_PATH) is None:
+            try:
+                from uv import find_uv_bin
+
+                uv_path = find_uv_bin()
+            except (ImportError, FileNotFoundError):
+                logger.warning("Fail to find uv bin, use system one")
+                uv_path = "uv"
         cmd = [uv_path, "venv", str(self.env_path), "--system-site-packages"]
         if python_path:
             cmd += ["--python", str(python_path)]
