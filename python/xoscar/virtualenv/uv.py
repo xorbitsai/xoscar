@@ -14,13 +14,24 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import shutil
 import subprocess
+import sys
 import sysconfig
 from pathlib import Path
 from typing import Optional
 
 from .core import VirtualEnvManager
+from .utils import run_subprocess_with_logger
+
+UV_PATH = os.getenv("XOSCAR_UV_PATH")
+logger = logging.getLogger(__name__)
+
+
+def _is_in_pyinstaller():
+    return hasattr(sys, "_MEIPASS")
 
 
 class UVVirtualEnvManager(VirtualEnvManager):
@@ -30,12 +41,30 @@ class UVVirtualEnvManager(VirtualEnvManager):
 
     @classmethod
     def is_available(cls):
+        if UV_PATH is not None:
+            # user specified uv, just treat it as existed
+            return True
         return shutil.which("uv") is not None
 
     def create_env(self, python_path: Path | None = None) -> None:
-        cmd = ["uv", "venv", str(self.env_path), "--system-site-packages"]
+        if (uv_path := UV_PATH) is None:
+            try:
+                from uv import find_uv_bin
+
+                uv_path = find_uv_bin()
+            except (ImportError, FileNotFoundError):
+                logger.warning("Fail to find uv bin, use system one")
+                uv_path = "uv"
+        cmd = [uv_path, "venv", str(self.env_path), "--system-site-packages"]
         if python_path:
             cmd += ["--python", str(python_path)]
+        elif _is_in_pyinstaller():
+            # in pyinstaller, uv would find the system python
+            # in this case we'd better specify the same python version
+            python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+            cmd += ["--python", python_version]
+
+        logger.info("Creating virtualenv via command: %s", cmd)
         subprocess.run(cmd, check=True)
 
     def install_packages(self, packages: list[str], **kwargs):
@@ -46,20 +75,46 @@ class UVVirtualEnvManager(VirtualEnvManager):
         if not packages:
             return
 
-        cmd = ["uv", "pip", "install", "-p", str(self.env_path)] + packages
+        # extend the ability of pip
+        # maybe replace #system_torch# to the real version
+        packages = self.process_packages(packages)
+        log = kwargs.pop("log", False)
+
+        uv_path = UV_PATH or "uv"
+        cmd = [
+            uv_path,
+            "pip",
+            "install",
+            "-p",
+            str(self.env_path),
+            "--color=always",
+        ] + packages
 
         # Handle known pip-related kwargs
         if "index_url" in kwargs and kwargs["index_url"]:
             cmd += ["-i", kwargs["index_url"]]
-        if "extra_index_url" in kwargs and kwargs["extra_index_url"]:
-            cmd += ["--extra-index-url", kwargs["extra_index_url"]]
-        if "find_links" in kwargs and kwargs["find_links"]:
-            cmd += ["-f", kwargs["find_links"]]
-        if "trusted_host" in kwargs and kwargs["trusted_host"]:
-            cmd += ["--trusted-host", kwargs["trusted_host"]]
+        param_and_option = [
+            ("extra_index_url", "--extra-index-url"),
+            ("find_links", "-f"),
+            ("trusted_host", "--trusted-host"),
+        ]
+        for param, option in param_and_option:
+            if param in kwargs and kwargs[param]:
+                param_value = kwargs[param]
+                if isinstance(param_value, list):
+                    for it in param_value:
+                        cmd += [option, it]
+                else:
+                    cmd += [option, param_value]
 
-        self._install_process = process = subprocess.Popen(cmd)
-        returncode = process.wait()
+        logger.info("Installing packages via command: %s", cmd)
+        if not log:
+            self._install_process = process = subprocess.Popen(cmd)
+            returncode = process.wait()
+        else:
+            with run_subprocess_with_logger(cmd) as process:
+                self._install_process = process
+            returncode = process.returncode
 
         self._install_process = None  # install finished, clear reference
 
@@ -71,8 +126,10 @@ class UVVirtualEnvManager(VirtualEnvManager):
             self._install_process.terminate()
             self._install_process.wait()
 
-    def get_python_path(self) -> str:
-        return str(self.env_path.joinpath("bin/python"))
+    def get_python_path(self) -> str | None:
+        if self.env_path.exists():
+            return str(self.env_path.joinpath("bin/python"))
+        return None
 
     def get_lib_path(self) -> str:
         return sysconfig.get_path("purelib", vars={"base": str(self.env_path)})

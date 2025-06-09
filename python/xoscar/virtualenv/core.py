@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import importlib
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -35,12 +36,49 @@ class VirtualEnvManager(ABC):
     def install_packages(self, packages: list[str], **kwargs):
         pass
 
+    @staticmethod
+    def process_packages(packages: list[str]) -> list[str]:
+        """
+        Process a list of package names, replacing placeholders like #system_<package>#
+        with the installed version of the corresponding package from the system environment.
+
+        Example:
+            "#system_torch#" -> "torch==2.1.0" (if torch 2.1.0 is installed)
+
+        Args:
+            packages (list[str]): A list of package names, which may include placeholders.
+
+        Returns:
+            list[str]: A new list with resolved package names and versions.
+
+        Raises:
+            RuntimeError: If a specified system package is not found in the environment.
+        """
+        processed = []
+
+        for pkg in packages:
+            if pkg.startswith("#system_") and pkg.endswith("#"):
+                real_pkg = pkg[
+                    len("#system_") : -1
+                ]  # Extract actual package name, e.g., "torch"
+                try:
+                    version = importlib.metadata.version(real_pkg)
+                except importlib.metadata.PackageNotFoundError:
+                    raise RuntimeError(
+                        f"System package '{real_pkg}' not found. Cannot resolve '{pkg}'."
+                    )
+                processed.append(f"{real_pkg}=={version}")
+            else:
+                processed.append(pkg)
+
+        return processed
+
     @abstractmethod
     def cancel_install(self):
         pass
 
     @abstractmethod
-    def get_python_path(self) -> str:
+    def get_python_path(self) -> str | None:
         pass
 
     @abstractmethod

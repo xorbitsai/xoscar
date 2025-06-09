@@ -182,12 +182,15 @@ class MainActorPool(MainActorPoolBase):
             def _check_ppid():
                 while True:
                     try:
-                        if os.getppid() != main_pool_pid:
-                            logger.info("Exit due to parent %s exit.", main_pool_pid)
-                            os._exit(0)
-                        time.sleep(2)
+                        # We can't simply check if the os.getppid() equals with main_pool_pid,
+                        # as the double fork may result in a new process as the parent.
+                        psutil.Process(main_pool_pid)
+                    except psutil.NoSuchProcess:
+                        logger.error("Exit due to main pool %s exit.", main_pool_pid)
+                        os._exit(233)  # Special exit code for debugging.
                     except Exception as e:
                         logger.exception("Check ppid failed: %s", e)
+                    time.sleep(10)
 
             t = threading.Thread(target=_check_ppid, daemon=True)
             t.start()
@@ -275,34 +278,51 @@ class MainActorPool(MainActorPoolBase):
                     "main_pool_pid": os.getpid(),
                 },
             )
-            process = await create_subprocess_exec(
+            cmd = [
                 start_python,
                 "-m",
                 "xoscar.backends.indigen",
                 "start_sub_pool",
                 "-sn",
                 shm.name,
-            )
+            ]
+            # We need to inherit the parent environment to ensure the subprocess works correctly on Windows.
+            new_env = dict(os.environ)
+            env = actor_pool_config.get_pool_config(process_index).get("env") or {}
+            new_env.update(env)
+            logger.info("Creating sub pool via command: %s", cmd)
+            process = await create_subprocess_exec(*cmd, env=new_env)
 
             def _get_external_addresses():
-                nonlocal external_addresses
-                while not (
-                    external_addresses := _shm_get_object(_ShmSeq.INIT_RESULT, shm)
-                ):
-                    time.sleep(0.1)
+                try:
+                    nonlocal external_addresses
+                    while (
+                        shm
+                        and shm.buf is not None
+                        and not (
+                            external_addresses := _shm_get_object(
+                                _ShmSeq.INIT_RESULT, shm
+                            )
+                        )
+                    ):
+                        time.sleep(0.1)
+                except asyncio.CancelledError:
+                    pass
 
-            await asyncio.wait(
+            _, unfinished = await asyncio.wait(
                 [
                     asyncio.create_task(process.wait()),
                     asyncio.create_task(asyncio.to_thread(_get_external_addresses)),
                 ],
                 return_when=asyncio.FIRST_COMPLETED,
             )
+            for t in unfinished:
+                t.cancel()
         finally:
             shm.close()
             shm.unlink()
         if external_addresses is None:
-            raise OSError("Start sub pool failed.")
+            raise OSError(f"Start sub pool failed, returncode: {process.returncode}")
         return process, external_addresses
 
     async def append_sub_pool(
@@ -403,7 +423,9 @@ class MainActorPool(MainActorPoolBase):
             except psutil.TimeoutExpired:
                 pass
 
-        while p.is_running():
+        count = 0
+        while p.is_running() and count < 3:
+            count += 1
             p.kill()
             if not p.is_running():
                 return
