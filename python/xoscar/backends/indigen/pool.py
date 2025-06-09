@@ -423,7 +423,9 @@ class MainActorPool(MainActorPoolBase):
             except psutil.TimeoutExpired:
                 pass
 
-        while p.is_running():
+        count = 0
+        while p.is_running() and count < 3:
+            count += 1
             p.kill()
             if not p.is_running():
                 return
