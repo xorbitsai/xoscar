@@ -63,8 +63,8 @@ def _shm_put_object(seq: _ShmSeq, shm: shared_memory.SharedMemory, o: object):
     assert (
         len(serialized) < _SUBPROCESS_SHM_SIZE - 8
     ), f"Serialized object {o} is too long."
-    shm.buf[4:12] = struct.pack("<II", sys.hexversion, len(serialized))
-    shm.buf[12 : 12 + len(serialized)] = serialized
+    shm.buf[4:8] = struct.pack("<I", len(serialized))
+    shm.buf[8 : 8 + len(serialized)] = serialized
     shm.buf[:4] = struct.pack("<I", seq)
 
 
@@ -72,12 +72,8 @@ def _shm_get_object(seq: _ShmSeq, shm: shared_memory.SharedMemory):
     recv_seq = struct.unpack("<I", shm.buf[:4])[0]
     if recv_seq != seq:
         return
-    python_version_hex, size = struct.unpack("<II", shm.buf[4:12])
-    if python_version_hex != sys.hexversion:
-        raise RuntimeError(
-            f"Python version mismatch, sender: {python_version_hex}, receiver: {sys.hexversion}"
-        )
-    return pickle.loads(shm.buf[12 : 12 + size])
+    size = struct.unpack("<I", shm.buf[4:8])[0]
+    return pickle.loads(shm.buf[8 : 8 + size])
 
 
 @_register_message_handler
@@ -175,6 +171,16 @@ class MainActorPool(MainActorPoolBase):
         shm = shared_memory.SharedMemory(shm_name, track=False)
         try:
             config = _shm_get_object(_ShmSeq.INIT_PARAMS, shm)
+            # Check Python version once.
+            sub_pool_python_version = config.pop("python_version", None)
+            if (
+                sub_pool_python_version is not None
+                and sub_pool_python_version != sys.hexversion
+            ):
+                logger.warning(
+                    f"The sub pool is using a different Python version, you may encounter serialization issues."
+                    f" sub pool: {sub_pool_python_version}, main pool: {sys.hexversion}"
+                )
             actor_config = config["actor_pool_config"]
             process_index = config["process_index"]
             main_pool_pid = config["main_pool_pid"]
@@ -276,6 +282,7 @@ class MainActorPool(MainActorPoolBase):
                     "actor_pool_config": actor_pool_config,
                     "process_index": process_index,
                     "main_pool_pid": os.getpid(),
+                    "python_version": sys.hexversion,
                 },
             )
             cmd = [
