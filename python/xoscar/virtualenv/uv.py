@@ -106,6 +106,8 @@ class UVVirtualEnvManager(VirtualEnvManager):
                         cmd += [option, it]
                 else:
                     cmd += [option, param_value]
+        if kwargs.get("no_build_isolation", False):
+            cmd += ["--no-build-isolation"]
 
         logger.info("Installing packages via command: %s", cmd)
         if not log:
