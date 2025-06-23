@@ -63,6 +63,8 @@ class VirtualEnvManager(ABC):
                 ]  # Extract actual package name, e.g., "torch"
                 try:
                     version = importlib.metadata.version(real_pkg)
+                    # Strip build metadata like "+cpu"
+                    version = version.split("+")[0]
                 except importlib.metadata.PackageNotFoundError:
                     raise RuntimeError(
                         f"System package '{real_pkg}' not found. Cannot resolve '{pkg}'."

@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Optional
 
 from .core import VirtualEnvManager
+from .utils import run_subprocess_with_logger
 
 UV_PATH = os.getenv("XOSCAR_UV_PATH")
 logger = logging.getLogger(__name__)
@@ -46,7 +47,14 @@ class UVVirtualEnvManager(VirtualEnvManager):
         return shutil.which("uv") is not None
 
     def create_env(self, python_path: Path | None = None) -> None:
-        uv_path = UV_PATH or "uv"
+        if (uv_path := UV_PATH) is None:
+            try:
+                from uv import find_uv_bin
+
+                uv_path = find_uv_bin()
+            except (ImportError, FileNotFoundError):
+                logger.warning("Fail to find uv bin, use system one")
+                uv_path = "uv"
         cmd = [uv_path, "venv", str(self.env_path), "--system-site-packages"]
         if python_path:
             cmd += ["--python", str(python_path)]
@@ -70,9 +78,17 @@ class UVVirtualEnvManager(VirtualEnvManager):
         # extend the ability of pip
         # maybe replace #system_torch# to the real version
         packages = self.process_packages(packages)
+        log = kwargs.pop("log", False)
 
         uv_path = UV_PATH or "uv"
-        cmd = [uv_path, "pip", "install", "-p", str(self.env_path)] + packages
+        cmd = [
+            uv_path,
+            "pip",
+            "install",
+            "-p",
+            str(self.env_path),
+            "--color=always",
+        ] + packages
 
         # Handle known pip-related kwargs
         if "index_url" in kwargs and kwargs["index_url"]:
@@ -94,8 +110,13 @@ class UVVirtualEnvManager(VirtualEnvManager):
             cmd += ["--no-build-isolation"]
 
         logger.info("Installing packages via command: %s", cmd)
-        self._install_process = process = subprocess.Popen(cmd)
-        returncode = process.wait()
+        if not log:
+            self._install_process = process = subprocess.Popen(cmd)
+            returncode = process.wait()
+        else:
+            with run_subprocess_with_logger(cmd) as process:
+                self._install_process = process
+            returncode = process.returncode
 
         self._install_process = None  # install finished, clear reference
 

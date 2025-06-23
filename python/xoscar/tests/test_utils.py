@@ -171,15 +171,15 @@ def test_fix_all_zero_ip():
     assert utils.is_v6_zero_ip("ucx://:::1234") == True
     assert utils.is_v6_zero_ip("::FFFF:1234") == False
     assert utils.is_v6_zero_ip("ucx://::FFFF:1234") == False
-    return utils.is_v6_zero_ip("0000:0000:0000:0000:0000:0000:0000:0000:1234") == True
-    return (
+    assert utils.is_v6_zero_ip("0000:0000:0000:0000:0000:0000:0000:0000:1234") == True
+    assert (
         utils.is_v6_zero_ip("ucx://0000:0000:0000:0000:0000:0000:0000:0000:1234")
         == True
     )
-    return utils.is_v6_zero_ip("0:0:0:0:0:0:0:0:1234") == True
-    return utils.is_v6_zero_ip("ucx://0:0:0:0:0:0:0:0:1234") == True
-    return utils.is_v6_zero_ip("0:0:0:0:0:1234") == True
-    return utils.is_v6_zero_ip("ucx://0:0:0:0:0:1234") == True
+    assert utils.is_v6_zero_ip("0:0:0:0:0:0:0:0:1234") == True
+    assert utils.is_v6_zero_ip("ucx://0:0:0:0:0:0:0:0:1234") == True
+    assert utils.is_v6_zero_ip("0:0:0:0:0:1234") == True
+    assert utils.is_v6_zero_ip("ucx://0:0:0:0:0:1234") == True
     assert utils.is_v6_zero_ip("2001:db8:3333:4444:5555:6666:7777:8888:1234") == False
     assert (
         utils.is_v6_zero_ip("ucx://2001:db8:3333:4444:5555:6666:7777:8888:1234")
