@@ -41,8 +41,10 @@ class MLXSerislizer(Serializer):
     @buffered
     def serial(self, obj: "mx.array", context: dict):  # type: ignore
         mv = memoryview(obj)
-        header = dict(shape=mv.shape, format=mv.format)
-        if not mv.c_contiguous:
+        header = dict(shape=obj.shape, format=mv.format)
+        # If the memoryview is a multi-dimension view, then there could
+        # trigger a bug of asyncio write: https://github.com/python/cpython/issues/135862
+        if mv.ndim > 1 or not mv.c_contiguous:
             mv = memoryview(bytes(mv))
         return (header,), [mv], True
 
