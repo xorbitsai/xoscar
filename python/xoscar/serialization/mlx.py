@@ -40,25 +40,25 @@ dtype_map = {
 class MLXSerislizer(Serializer):
     @buffered
     def serial(self, obj: "mx.array", context: dict):  # type: ignore
-        mv = memoryview(obj)
-        header = dict(shape=obj.shape, format=mv.format)
-        # If the memoryview is a multi-dimension view, then there could
-        # trigger a bug of asyncio write: https://github.com/python/cpython/issues/135862
-        if mv.ndim > 1 or not mv.c_contiguous:
+        ravel_obj = obj.reshape(-1).view(mx.uint8)
+        mv = memoryview(ravel_obj)
+        header = dict(
+            shape=obj.shape, format=mv.format, dtype=str(obj.dtype).rsplit(".", 1)[-1]
+        )
+        if not mv.c_contiguous:
             mv = memoryview(bytes(mv))
         return (header,), [mv], True
 
     def deserial(self, serialized: tuple, context: dict, subs: List[Any]):
         header = serialized[0]
-        shape, format = header["shape"], header["format"]
+        shape, format, dtype = header["shape"], header["format"], header["dtype"]
         mv = memoryview(subs[0])
         if mv.format != format:
             dtype = dtype_map.get(format, np.uint8)
             np_arr = np.frombuffer(mv, dtype=dtype).reshape(shape)  # parse
             mv = memoryview(np_arr)  # recreate memoryview
-        elif mv.shape != shape:
-            mv = mv.cast(format, shape)  # cast directly
-        return mx.array(mv)
+        ravel_array = mx.array(mv)
+        return ravel_array.view(getattr(mx, dtype)).reshape(shape)
 
 
 if mx is not None:

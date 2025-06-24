@@ -268,7 +268,7 @@ async def test_serial_deserial_mlx():
             await f.write(b)
         await f.seek(0)
         val2 = await AioDeserializer(f).run()
-        np.testing.assert_array_equal(np.asarray(data), np.asarray(val2))
+        assert mx.array_equal(data, val2)
 
     val = mx.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=mx.float16)
     await _test(val)
@@ -282,6 +282,10 @@ async def test_serial_deserial_mlx():
     val4 = val.transpose()
     assert memoryview(val4).f_contiguous
     await _test(val4)
+
+    # test bfloat16
+    val = mx.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=mx.bfloat16)
+    await _test(val)
 
 
 class MockSerializerForErrors(ListSerializer):
