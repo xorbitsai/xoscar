@@ -46,6 +46,8 @@ class MLXSerislizer(Serializer):
             shape=obj.shape, format=mv.format, dtype=str(obj.dtype).rsplit(".", 1)[-1]
         )
         if not mv.c_contiguous:
+            # NOTE: we only consider c contiguous here,
+            # MLX has no way to create f contiguous arrays.
             mv = memoryview(bytes(mv))
         return (header,), [mv], True
 
