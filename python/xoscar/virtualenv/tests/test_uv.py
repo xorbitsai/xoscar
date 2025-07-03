@@ -196,8 +196,8 @@ def test_uv_virtualenv_manager_with_log(caplog):
 
             assert packaging.__version__ == "24.0"
 
-            assert not manager._get_all_install_packages(["packaging"])
-            assert manager._get_all_install_packages(["packaging==25.0"]) == [
+            assert not manager._resolve_install_plan(["packaging"], {})
+            assert manager._resolve_install_plan(["packaging==25.0"], {}) == [
                 "packaging==25.0"
             ]
 
@@ -218,9 +218,9 @@ def test_uv_virtualenv_manager_with_log(caplog):
     reason="skip windows because some files cannot be deleted",
 )
 def test_uv_virtualenv_manager_skip_system_package(caplog):
-    import torch
+    import numpy
 
-    system_torch_version = torch.__version__
+    system_numpy_version = numpy.__version__
 
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, ".env")
@@ -244,17 +244,17 @@ def test_uv_virtualenv_manager_skip_system_package(caplog):
             sys.path.insert(0, manager.get_lib_path())
 
             # Import and verify versions of transformers and torch
-            import torch as torch_in_env
+            import numpy as numpy_in_env
             import transformers
 
             assert transformers.__version__ == "4.40.0"
-            assert torch_in_env.__version__ == system_torch_version
+            assert numpy_in_env.__version__ == system_numpy_version
 
             caplog.clear()
 
             # Confirm torch is skipped (no installation needed)
             manager.install_packages(
-                ["transformers>=4.40.0", "#system_torch#"],
+                ["transformers>=4.40.0", "#system_numpy#"],
                 index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
                 skip_installed=True,
                 log=True,
