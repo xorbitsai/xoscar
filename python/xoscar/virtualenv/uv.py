@@ -21,9 +21,13 @@ import shutil
 import subprocess
 import sys
 import sysconfig
+import tempfile
 from importlib.metadata import distributions
 from pathlib import Path
 from typing import Optional
+
+from packaging.requirements import Requirement
+from packaging.version import Version
 
 from .core import VirtualEnvManager
 from .utils import run_subprocess_with_logger
@@ -75,49 +79,105 @@ class UVVirtualEnvManager(VirtualEnvManager):
         logger.info("Creating virtualenv via command: %s", cmd)
         subprocess.run(cmd, check=True)
 
-    def _get_all_install_packages(self, packages: list[str]) -> list[str]:
+    def _resolve_install_plan(
+        self, specs: list[str], pinned: dict[str, str]
+    ) -> list[str]:
         """
-        Get the full list of packages (with versions) that would be installed for the given packages.
-
-        This uses `uv pip install --dry-run` to simulate installation and parse the output.
-
-        Args:
-            packages: List of top-level packages to install (e.g., ['transformers']).
-
-        Returns:
-            A list of package specifications in the form ['transformers==4.53.0', 'numpy==2.3.1', ...].
+        Run uv --dry-run with pinned constraints and return
+        a list like ['package==version', ...].
         """
-        cmd = ["uv", "pip", "install", *packages, "--dry-run", "-p", str(self.env_path)]
-        result = subprocess.run(cmd, check=True, text=True, capture_output=True)
-        deps = []
-        for line in result.stderr.splitlines():
-            line = line.strip()
-            match = re.match(r"^\+ (\S+)==(\S+)$", line)
-            if match:
-                name, version = match.groups()
-                deps.append(f"{name}=={version}")
+        with tempfile.NamedTemporaryFile("w+", delete=True) as f:
+            for name, ver in pinned.items():
+                f.write(f"{name}=={ver}\n")
+            f.flush()  # make sure content is on disk
+
+            cmd = [
+                self._get_uv_path(),
+                "pip",
+                "install",
+                "-p",
+                str(self.env_path),
+                "--dry-run",
+                "--constraint",
+                f.name,
+                *specs,
+            ]
+            result = subprocess.run(cmd, check=True, text=True, capture_output=True)
+
+        # the temp file is automatically deleted here
+        deps = [
+            f"{m.group(1)}=={m.group(2)}"
+            for line in result.stderr.splitlines()
+            if (m := re.match(r"^\+ (\S+)==(\S+)$", line.strip()))
+        ]
         return deps
+
+    @staticmethod
+    def _split_specs(
+        specs: list[str], installed: dict[str, str]
+    ) -> tuple[list[str], dict[str, str]]:
+        """
+        Split the given requirement specs into:
+        - to_resolve: specs that need to be passed to the resolver (unsatisfied ones)
+        - pinned: already satisfied specs, used for constraint to lock their versions
+        """
+        to_resolve: list[str] = []
+        pinned: dict[str, str] = {}
+
+        for spec_str in specs:
+            req = Requirement(spec_str)
+            name = req.name.lower()
+            cur_ver = installed.get(name)
+
+            if cur_ver is None:
+                # Package not installed, needs resolution
+                to_resolve.append(spec_str)
+                continue
+
+            if not req.specifier:
+                # No version constraint, already satisfied
+                pinned[name] = cur_ver
+                continue
+
+            try:
+                if Version(cur_ver) in req.specifier:
+                    # Version satisfies the specifier, pin it
+                    pinned[name] = cur_ver
+                else:
+                    # Version does not satisfy, needs resolution
+                    to_resolve.append(spec_str)
+            except Exception:
+                # Parsing error, be conservative and resolve it
+                to_resolve.append(spec_str)
+
+        return to_resolve, pinned
 
     def _filter_packages_not_installed(self, packages: list[str]) -> list[str]:
         """
         Filter out packages that are already installed with the same version.
         """
-        to_install = self._get_all_install_packages(packages)
-        logger.debug(f"Resolved install list: {to_install}")
 
-        if not to_install:
-            # no packages to install
-            return []
-
+        # all the installed packages in system site packages
         installed = {
             dist.metadata["Name"].lower(): dist.version
             for dist in distributions()
             if dist.metadata and "Name" in dist.metadata
         }
-        logger.debug(f"Currently installed packages: {installed}")
+
+        # exclude those packages that satisfied in system site packages
+        to_resolve, pinned = self._split_specs(packages, installed)
+        if not to_resolve:
+            logger.debug("All requirement specifiers satisfied by system packages.")
+            return []
+
+        resolved = self._resolve_install_plan(to_resolve, pinned)
+        logger.debug(f"Resolved install list: {resolved}")
+        if not resolved:
+            # no packages to install
+            return []
 
         final = []
-        for item in to_install:
+        for item in resolved:
             name, version = item.split("==")
             key = name.lower()
             if key not in installed or installed[key] != version:

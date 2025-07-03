@@ -250,20 +250,19 @@ def test_uv_virtualenv_manager_skip_system_package(caplog):
             assert transformers.__version__ == "4.40.0"
             assert torch_in_env.__version__ == system_torch_version
 
-            # Confirm torch is skipped (no installation needed)
-            installed = manager._filter_packages_not_installed(
-                manager.process_packages(["#system_torch#"])
-            )
-            assert not [
-                p for p in installed if "torch" in p.lower()
-            ]  # torch should not require installation
+            caplog.clear()
 
-            # Check logs to ensure torch install was not triggered
-            caplog_lines = [r.message for r in caplog.records]
-            torch_lines = [line for line in caplog_lines if "torch" in line.lower()]
-            assert not any(
-                "Installing torch" in line or "torch==" in line for line in torch_lines
+            # Confirm torch is skipped (no installation needed)
+            manager.install_packages(
+                ["transformers>=4.40.0", "#system_torch#"],
+                index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+                skip_installed=True,
+                log=True,
             )
+
+            caplog_lines = [r.message for r in caplog.records]
+            # should be no logs since no packages to install
+            assert caplog_lines == ["All required packages are already installed."]
 
         finally:
             sys.path = raw_sys_path
