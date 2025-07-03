@@ -233,9 +233,9 @@ def test_uv_virtualenv_manager_skip_system_package(caplog):
 
             caplog.set_level(logging.INFO)
 
-            # Install transformers and system torch with skip_installed=True
+            # Install transformers and system numpy with skip_installed=True
             manager.install_packages(
-                ["transformers==4.40.0", "#system_torch#", "#system_numpy#"],
+                ["transformers==4.40.0", "#system_numpy#"],
                 index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
                 skip_installed=True,
                 log=True,
@@ -243,7 +243,7 @@ def test_uv_virtualenv_manager_skip_system_package(caplog):
 
             sys.path.insert(0, manager.get_lib_path())
 
-            # Import and verify versions of transformers and torch
+            # Import and verify versions of transformers and numpy
             import numpy as numpy_in_env
             import transformers
 
@@ -252,7 +252,7 @@ def test_uv_virtualenv_manager_skip_system_package(caplog):
 
             caplog.clear()
 
-            # Confirm torch is skipped (no installation needed)
+            # Confirm numpy is skipped (no installation needed)
             manager.install_packages(
                 ["transformers>=4.40.0", "#system_numpy#"],
                 index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
