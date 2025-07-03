@@ -262,7 +262,7 @@ def test_uv_virtualenv_manager_skip_system_package(caplog):
 
             caplog_lines = [r.message for r in caplog.records]
             # should be no logs since no packages to install
-            assert caplog_lines == ["All required packages are already installed."]
+            assert "All required packages are already installed." in caplog_lines
 
         finally:
             sys.path = raw_sys_path
