@@ -266,3 +266,43 @@ def test_uv_virtualenv_manager_skip_system_package(caplog):
 
         finally:
             sys.path = raw_sys_path
+
+
+@pytest.mark.skipif(not UVVirtualEnvManager.is_available(), reason="uv not installed")
+@pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="skip windows because some files cannot be deleted",
+)
+def test_uv_virtualenv_exists_env():
+    """Test exists_env method and create_env with exists parameter."""
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, ".env")
+        manager = get_virtual_env_manager("uv", path)
+
+        # Initially environment should not exist
+        assert not manager.exists_env()
+
+        # Create environment
+        manager.create_env()
+        assert manager.exists_env()
+        assert os.path.exists(path)
+
+        # Test exists="error" - should raise FileExistsError
+        with pytest.raises(FileExistsError, match="Virtual environment already exists"):
+            manager.create_env(exists="error")
+
+        # Test default behavior (exists="ignore") - should skip creation
+        manager.create_env()
+        assert manager.exists_env()
+
+        # Test exists="clear" - should recreate environment
+        manager.create_env(exists="clear")
+        assert manager.exists_env()
+
+        # Test invalid exists parameter
+        with pytest.raises(ValueError, match="Invalid exists option"):
+            manager.create_env(exists="invalid")
+
+        manager.remove_env()
+        assert not manager.exists_env()
+        assert not os.path.exists(path)

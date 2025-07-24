@@ -65,9 +65,44 @@ class UVVirtualEnvManager(VirtualEnvManager):
                 uv_path = "uv"
         return uv_path
 
-    def create_env(self, python_path: Path | None = None) -> None:
+    def exists_env(self) -> bool:
+        """Check if virtual environment already exists."""
+        return self.env_path.exists() and (self.env_path / "pyvenv.cfg").exists()
+
+    def create_env(
+        self, python_path: Path | None = None, exists: str = "ignore"
+    ) -> None:
+        """
+        Create virtual environment.
+
+        Args:
+            python_path: Path to Python interpreter to use
+            exists: How to handle existing environment:
+                - "ignore": Skip creation if environment already exists (default)
+                - "error": Raise error if environment exists
+                - "clear": Remove existing environment and create new one
+        """
+        if self.exists_env():
+            if exists == "error":
+                raise FileExistsError(
+                    f"Virtual environment already exists at {self.env_path}"
+                )
+            elif exists == "ignore":
+                logger.info(
+                    f"Virtual environment already exists at {self.env_path}, skipping creation"
+                )
+                return
+            elif exists == "clear":
+                logger.info(f"Removing existing virtual environment at {self.env_path}")
+                self.remove_env()
+            else:
+                raise ValueError(
+                    f"Invalid exists option: {exists}. Must be one of: error, clear, ignore"
+                )
+
         uv_path = self._get_uv_path()
         cmd = [uv_path, "venv", str(self.env_path), "--system-site-packages"]
+
         if python_path:
             cmd += ["--python", str(python_path)]
         elif _is_in_pyinstaller():
