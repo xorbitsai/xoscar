@@ -29,7 +29,13 @@ class VirtualEnvManager(ABC):
         self.env_path = env_path.resolve()
 
     @abstractmethod
-    def create_env(self, python_path: Path | None = None) -> None:
+    def exists_env(self) -> bool:
+        pass
+
+    @abstractmethod
+    def create_env(
+        self, python_path: Path | None = None, exists: str = "ignore"
+    ) -> None:
         pass
 
     @abstractmethod
