@@ -150,16 +150,25 @@ class UVVirtualEnvManager(VirtualEnvManager):
     @staticmethod
     def _split_specs(
         specs: list[str], installed: dict[str, str]
-    ) -> tuple[list[str], dict[str, str]]:
+    ) -> tuple[list[str], list[str], dict[str, str]]:
         """
         Split the given requirement specs into:
+        - keep： specs that need to be kept, e.g. git+github://xxx
         - to_resolve: specs that need to be passed to the resolver (unsatisfied ones)
         - pinned: already satisfied specs, used for constraint to lock their versions
         """
+        keep: list[str] = []
         to_resolve: list[str] = []
         pinned: dict[str, str] = {}
 
         for spec_str in specs:
+            # skip git+xxx
+            if spec_str.startswith(
+                ("git+", "http://", "https://", "svn+", "hg+", "bzr+")
+            ):
+                keep.append(spec_str)
+                continue
+
             req = Requirement(spec_str)
             name = req.name.lower()
             cur_ver = installed.get(name)
@@ -185,7 +194,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
                 # Parsing error, be conservative and resolve it
                 to_resolve.append(spec_str)
 
-        return to_resolve, pinned
+        return keep, to_resolve, pinned
 
     def _filter_packages_not_installed(self, packages: list[str]) -> list[str]:
         """
@@ -200,18 +209,21 @@ class UVVirtualEnvManager(VirtualEnvManager):
         }
 
         # exclude those packages that satisfied in system site packages
-        to_resolve, pinned = self._split_specs(packages, installed)
-        if not to_resolve:
+        keep, to_resolve, pinned = self._split_specs(packages, installed)
+        if not keep and not to_resolve:
             logger.debug("All requirement specifiers satisfied by system packages.")
             return []
 
-        resolved = self._resolve_install_plan(to_resolve, pinned)
-        logger.debug(f"Resolved install list: {resolved}")
-        if not resolved:
-            # no packages to install
-            return []
+        if to_resolve:
+            resolved = self._resolve_install_plan(to_resolve, pinned)
+            logger.debug(f"Resolved install list: {resolved}")
+            if not keep and not resolved:
+                # no packages to install
+                return []
+        else:
+            resolved = []
 
-        final = []
+        final = keep.copy()
         for item in resolved:
             name, version = item.split("==")
             key = name.lower()
