@@ -26,7 +26,7 @@ from importlib.metadata import distributions
 from pathlib import Path
 from typing import Optional
 
-from packaging.requirements import InvalidRequirement, Requirement
+from packaging.requirements import Requirement
 from packaging.version import Version
 
 from .core import VirtualEnvManager
@@ -169,13 +169,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
                 keep.append(spec_str)
                 continue
 
-            try:
-                req = Requirement(spec_str)
-            except InvalidRequirement:
-                # illegal, just pass to resolver
-                keep.append(spec_str)
-                continue
-
+            req = Requirement(spec_str)
             name = req.name.lower()
             cur_ver = installed.get(name)
 
