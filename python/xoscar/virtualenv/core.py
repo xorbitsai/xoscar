@@ -30,6 +30,7 @@ from .platform import (
     get_cuda_arch,
     get_cuda_version,
 )
+from .utils import is_vcs_url
 
 
 class VirtualEnvManager(ABC):
@@ -243,7 +244,9 @@ def filter_requirements(requirements: list[str]) -> list[str]:
     env = get_env()
     result = []
     for req_str in requirements:
-        if ";" in req_str:
+        if is_vcs_url(req_str):
+            result.append(req_str)
+        elif ";" in req_str:
             req_part, marker_part = req_str.split(";", 1)
             marker_part = marker_part.strip()
             try:
