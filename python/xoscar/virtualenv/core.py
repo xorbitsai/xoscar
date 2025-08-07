@@ -259,9 +259,7 @@ def filter_requirements(requirements: list[str]) -> list[str]:
                 else:
                     raise
         else:
-            try:
-                req = Requirement(req_str.strip())
-                result.append(str(req))
-            except InvalidRequirement:
-                pass
+            req = Requirement(req_str.strip())
+            result.append(str(req))
+
     return result
