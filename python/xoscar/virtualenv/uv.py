@@ -30,7 +30,7 @@ from packaging.requirements import Requirement
 from packaging.version import Version
 
 from .core import VirtualEnvManager
-from .utils import run_subprocess_with_logger
+from .utils import is_vcs_url, run_subprocess_with_logger
 
 UV_PATH = os.getenv("XOSCAR_UV_PATH")
 SKIP_INSTALLED = bool(int(os.getenv("XOSCAR_VIRTUAL_ENV_SKIP_INSTALLED", "0")))
@@ -163,9 +163,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
 
         for spec_str in specs:
             # skip git+xxx
-            if spec_str.startswith(
-                ("git+", "http://", "https://", "svn+", "hg+", "bzr+")
-            ):
+            if is_vcs_url(spec_str):
                 keep.append(spec_str)
                 continue
 

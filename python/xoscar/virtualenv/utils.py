@@ -82,3 +82,19 @@ def run_subprocess_with_logger(
         process.wait()
         for t in threads:
             t.join()
+
+
+def is_vcs_url(spec_str: str) -> bool:
+    """
+    Check if the given spec string is a VCS URL.
+
+    Supports common VCS schemes like git+, svn+, hg+, bzr+, and HTTP/HTTPS URLs.
+
+    Args:
+        spec_str (str): The package spec string.
+
+    Returns:
+        bool: True if it's a VCS URL, False otherwise.
+    """
+    vcs_prefixes = ("git+", "http://", "https://", "svn+", "hg+", "bzr+")
+    return spec_str.startswith(vcs_prefixes)
