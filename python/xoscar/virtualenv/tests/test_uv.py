@@ -17,6 +17,7 @@ import os.path
 import sys
 import tempfile
 import time
+from unittest import mock
 
 import pytest
 
@@ -306,3 +307,84 @@ def test_uv_virtualenv_exists_env():
         manager.remove_env()
         assert not manager.exists_env()
         assert not os.path.exists(path)
+
+
+@pytest.fixture
+def uv_manager(tmp_path):
+    env_path = tmp_path / "test_env"
+    return UVVirtualEnvManager(env_path)
+
+
+@pytest.mark.parametrize(
+    "has_cuda, cuda_version, cuda_arch, has_npu, input_pkgs, expected_pkgs",
+    [
+        (
+            True,
+            "12.1",
+            "sm_80",
+            False,
+            [
+                "torch==2.0 ; has_cuda",
+                "xformers ; cuda_version >= '12.0'",
+                "cpu-lib ; not has_cuda",
+                "npu-lib ; has_npu",
+            ],
+            ["torch==2.0", "xformers"],
+        ),
+        (
+            False,
+            None,
+            None,
+            False,
+            ["torch==2.0 ; has_cuda", "cpu-lib ; not has_cuda", "npu-lib ; has_npu"],
+            ["cpu-lib"],
+        ),
+        (
+            False,
+            None,
+            None,
+            True,
+            ["torch==2.0 ; has_cuda", "cpu-lib ; not has_cuda", "npu-lib ; has_npu"],
+            ["cpu-lib", "npu-lib"],
+        ),
+    ],
+)
+def test_install_packages_marker_filtering(
+    uv_manager, has_cuda, cuda_version, cuda_arch, has_npu, input_pkgs, expected_pkgs
+):
+    # Mock environment detection functions and subprocess.Popen to avoid real installs
+    with mock.patch(
+        "xoscar.virtualenv.core.check_cuda_available", return_value=has_cuda
+    ), mock.patch(
+        "xoscar.virtualenv.core.get_cuda_version", return_value=cuda_version
+    ), mock.patch(
+        "xoscar.virtualenv.core.get_cuda_arch", return_value=cuda_arch
+    ), mock.patch(
+        "xoscar.virtualenv.core.check_npu_available", return_value=has_npu
+    ), mock.patch(
+        "subprocess.Popen"
+    ) as mock_popen, mock.patch.object(
+        UVVirtualEnvManager, "_get_uv_path", return_value="uv"
+    ):
+
+        # Mock the process and its return code
+        process = mock.Mock()
+        process.wait.return_value = 0
+        mock_popen.return_value = process
+
+        # Call install_packages with the input package list
+        uv_manager.install_packages(input_pkgs)
+
+        # Extract the command line passed to subprocess.Popen
+        cmd = mock_popen.call_args[0][0]
+        cmd_str = " ".join(cmd)
+
+        # Assert that all expected packages appear in the command
+        for pkg in expected_pkgs:
+            assert pkg in cmd_str
+
+        # Assert that packages that should be excluded are not present
+        for pkg in input_pkgs:
+            base_pkg = pkg.split(";")[0].strip()  # Strip marker if present
+            if base_pkg not in expected_pkgs:
+                assert base_pkg not in cmd_str
