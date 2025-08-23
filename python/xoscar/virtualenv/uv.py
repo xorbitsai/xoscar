@@ -239,6 +239,9 @@ class UVVirtualEnvManager(VirtualEnvManager):
             return
 
         packages = self.process_packages(packages)
+		if not packages:
+            return
+
         log = kwargs.pop("log", False)
         skip_installed = kwargs.pop("skip_installed", SKIP_INSTALLED)
         uv_path = self._get_uv_path()
