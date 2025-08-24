@@ -239,7 +239,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
             return
 
         packages = self.process_packages(packages)
-		if not packages:
+        if not packages:
             return
 
         log = kwargs.pop("log", False)
