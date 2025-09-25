@@ -1413,7 +1413,7 @@ class MainActorPoolBase(ActorPoolBase):
                 # Only watch process if it exists
                 if process is not None:
                     proc_task = asyncio.create_task(process.wait())
-                    tasks.add(proc_task)
+                    tasks.add(proc_task)  # type: ignore
                 else:
                     proc_task = None
 
