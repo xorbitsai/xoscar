@@ -21,7 +21,7 @@ import socket
 import threading
 from ctypes import sizeof
 
-from ...tests.core import lazy_import
+from ...utils import lazy_import
 
 cupy = lazy_import("cupy")
 

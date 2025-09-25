@@ -39,7 +39,10 @@ def get_cuda_arch() -> Optional[str]:
 
         major, minor = torch.cuda.get_device_capability()
         return f"sm_{major}{minor}"  # e.g. 'sm_80'
-    except (ImportError, AttributeError):
+    except (ImportError, AttributeError, AssertionError):
+        # If no cuda available,
+        # AssertionError("Torch not compiled with CUDA enabled")
+        # will be raised
         return None
 
 
