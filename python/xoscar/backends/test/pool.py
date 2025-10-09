@@ -154,6 +154,10 @@ class TestMainActorPool(MainActorPool):
     async def kill_sub_pool(
         self, process: asyncio.subprocess.Process, force: bool = False
     ):
+        # Test pool uses None for processes, so skip if process is None
+        if process is None:
+            return
+
         if force:
             try:
                 process.kill()
@@ -187,6 +191,7 @@ class TestMainActorPool(MainActorPool):
                 pass
 
     async def is_sub_pool_alive(self, process: asyncio.subprocess.Process):
+        # Test pool uses None for processes, so always return True
         return True
 
 
