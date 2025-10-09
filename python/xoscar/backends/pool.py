@@ -26,6 +26,7 @@ import os
 import threading
 import traceback
 from abc import ABC, ABCMeta, abstractmethod
+from contextlib import suppress
 from typing import Any, Callable, Coroutine, Optional, Type, TypeVar
 
 import psutil
@@ -1406,9 +1407,36 @@ class MainActorPoolBase(ActorPoolBase):
         )
         try:
             if timeout is None:
-                message = await self.call(address, stop_message)
-                if isinstance(message, ErrorMessage):  # pragma: no cover
-                    raise message.as_instanceof_cause()
+                call_task = asyncio.create_task(self.call(address, stop_message))
+                tasks = {call_task}
+
+                # Only watch process if it exists
+                if process is not None:
+                    proc_task = asyncio.create_task(process.wait())
+                    tasks.add(proc_task)  # type: ignore
+                else:
+                    proc_task = None
+
+                done, pending = await asyncio.wait(
+                    tasks, return_when=asyncio.FIRST_COMPLETED
+                )
+
+                if proc_task and proc_task in done:
+                    # Process exited first -> force kill
+                    force = True
+                    if not call_task.done():
+                        call_task.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await call_task
+                else:
+                    # call() finished first
+                    message = await call_task
+                    if isinstance(message, ErrorMessage):  # pragma: no cover
+                        raise message.as_instanceof_cause()
+                    if proc_task and not proc_task.done():
+                        proc_task.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await proc_task
             else:
                 call = asyncio.create_task(self.call(address, stop_message))
                 try:
