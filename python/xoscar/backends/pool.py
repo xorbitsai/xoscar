@@ -1337,7 +1337,9 @@ class MainActorPoolBase(ActorPoolBase):
         return pool
 
     async def start_monitor(self):
-        if self._monitor_task is None:
+        # Only start monitor if there are sub processes to monitor
+        # This prevents hanging when n_process=0
+        if self._monitor_task is None and self.sub_processes:
             self._monitor_task = asyncio.create_task(self.monitor_sub_pools())
         return self._monitor_task
 
@@ -1351,7 +1353,12 @@ class MainActorPoolBase(ActorPoolBase):
         self._auto_recover = False
         self._stopped.set()
         if self._monitor_task and not self._monitor_task.done():
-            await self._monitor_task
+            # Cancel the monitor task to ensure it exits immediately
+            self._monitor_task.cancel()
+            try:
+                await self._monitor_task
+            except asyncio.CancelledError:
+                pass  # Expected when cancelling the task
             self._monitor_task = None
         await self.stop_sub_pools()
         await super().stop()
