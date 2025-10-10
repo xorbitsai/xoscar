@@ -418,26 +418,70 @@ class MainActorPool(MainActorPoolBase):
     async def kill_sub_pool(
         self, process: asyncio.subprocess.Process, force: bool = False
     ):
-        try:
-            p = psutil.Process(process.pid)
-        except psutil.NoSuchProcess:
-            return
-
-        if not force:  # pragma: no cover
-            p.terminate()
+        # First, try to terminate the process gracefully
+        if not force:
             try:
-                p.wait(5)
-            except psutil.TimeoutExpired:
+                process.terminate()
+                # Wait for graceful termination
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    # Process didn't terminate gracefully, force kill
+                    force = True
+            except ProcessLookupError:
+                # Process already terminated
                 pass
 
-        count = 0
-        while p.is_running() and count < 3:
-            count += 1
-            p.kill()
-            if not p.is_running():
-                return
-            logger.info("Sub pool can't be killed: %s", p)
-            time.sleep(0.1)
+        # Force kill if needed or if graceful termination failed
+        if force:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                # Process already dead
+                pass
+
+        # Ensure process is completely terminated and cleaned up
+        try:
+            # Wait for process to complete
+            if process.returncode is None:
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    pass
+        except ProcessLookupError:
+            # Process already terminated
+            pass
+
+        # Python 3.13 specific cleanup for waitpid threads
+        if sys.version_info >= (3, 13):
+            try:
+                # Close the transport to clean up waitpid thread
+                if hasattr(process, "_transport") and process._transport:
+                    process._transport.close()
+                # Also try to close the pipe transport if it exists
+                if hasattr(process, "_pipes") and process._pipes:
+                    for pipe in process._pipes.values():
+                        if hasattr(pipe, "close"):
+                            pipe.close()
+            except Exception:
+                # Ignore errors during cleanup
+                pass
+
+        # Additional cleanup using psutil to ensure process tree is terminated
+        try:
+            p = psutil.Process(process.pid)
+            if p.is_running():
+                # Kill the entire process tree
+                for child in p.children(recursive=True):
+                    try:
+                        child.kill()
+                    except psutil.NoSuchProcess:
+                        pass
+                p.kill()
+                p.wait(timeout=2.0)
+        except (psutil.NoSuchProcess, psutil.TimeoutExpired):
+            # Process already dead or couldn't be killed
+            pass
 
     async def is_sub_pool_alive(self, process: asyncio.subprocess.Process):
         return process.returncode is None

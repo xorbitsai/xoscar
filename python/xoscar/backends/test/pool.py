@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from typing import Any, Optional
 
 from ..communication import DummyServer, gen_local_address
@@ -153,9 +154,44 @@ class TestMainActorPool(MainActorPool):
     async def kill_sub_pool(
         self, process: asyncio.subprocess.Process, force: bool = False
     ):
-        pass
+        # Test pool uses None for processes, so skip if process is None
+        if process is None:
+            return
+
+        if force:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+
+        # Ensure process is completely terminated and cleaned up
+        try:
+            # Wait for process to complete
+            if process.returncode is None:
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    pass
+        except ProcessLookupError:
+            pass
+
+        # Python 3.13 specific cleanup for waitpid threads
+        if sys.version_info >= (3, 13):
+            try:
+                # Close the transport to clean up waitpid thread
+                if hasattr(process, "_transport") and process._transport:
+                    process._transport.close()
+                # Also try to close the pipe transport if it exists
+                if hasattr(process, "_pipes") and process._pipes:
+                    for pipe in process._pipes.values():
+                        if hasattr(pipe, "close"):
+                            pipe.close()
+            except Exception:
+                # Ignore errors during cleanup
+                pass
 
     async def is_sub_pool_alive(self, process: asyncio.subprocess.Process):
+        # Test pool uses None for processes, so always return True
         return True
 
 

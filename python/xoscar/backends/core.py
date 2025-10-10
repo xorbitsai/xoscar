@@ -244,7 +244,27 @@ def _cancel_all_tasks(loop):
     for task in to_cancel:
         task.cancel()
 
-    loop.run_until_complete(asyncio.gather(*to_cancel, return_exceptions=True))
+    # In Python 3.13+, we need to use a different approach to avoid deadlocks
+    # when shutting down event loops in threads
+    if hasattr(asyncio, "run"):
+        # For Python 3.13+, use a more robust approach
+        async def _gather_cancelled():
+            await asyncio.gather(*to_cancel, return_exceptions=True)
+
+        try:
+            # Try to run the gather in the current loop context
+            if loop.is_running():
+                # If loop is running, schedule the gather
+                asyncio.run_coroutine_threadsafe(_gather_cancelled(), loop)
+            else:
+                # If loop is not running, we can run it directly
+                loop.run_until_complete(_gather_cancelled())
+        except RuntimeError:
+            # If we can't run the gather, just log and continue
+            logger.debug("Could not gather cancelled tasks during shutdown")
+    else:
+        # For older Python versions, use the original approach
+        loop.run_until_complete(asyncio.gather(*to_cancel, return_exceptions=True))
 
     for task in to_cancel:
         if task.cancelled():
@@ -263,8 +283,15 @@ def _safe_run_forever(loop):
     try:
         loop.run_forever()
     finally:
-        _cancel_all_tasks(loop)
-        loop.stop()
+        try:
+            _cancel_all_tasks(loop)
+        except Exception as e:
+            logger.debug("Error during task cancellation: %s", e)
+        finally:
+            try:
+                loop.stop()
+            except Exception as e:
+                logger.debug("Error stopping loop: %s", e)
 
 
 class ActorCaller:
@@ -273,12 +300,31 @@ class ActorCaller:
     class _RefHolder:
         pass
 
-    _close_loop = asyncio.new_event_loop()
-    _close_thread = threading.Thread(
-        target=_safe_run_forever, args=(_close_loop,), daemon=True
-    )
-    _close_thread.start()
-    atexit.register(_close_loop.call_soon_threadsafe, _close_loop.stop)
+    _close_loop = None
+    _close_thread = None
+    _initialized = False
+
+    @classmethod
+    def _ensure_initialized(cls):
+        if not cls._initialized:
+            cls._close_loop = asyncio.new_event_loop()
+            cls._close_thread = threading.Thread(
+                target=_safe_run_forever, args=(cls._close_loop,), daemon=True
+            )
+            cls._close_thread.start()
+            atexit.register(cls._cleanup)
+            cls._initialized = True
+
+    @classmethod
+    def _cleanup(cls):
+        if cls._close_loop and cls._close_loop.is_running():
+            try:
+                cls._close_loop.call_soon_threadsafe(cls._close_loop.stop)
+                # Give the loop a moment to stop
+                if cls._close_thread:
+                    cls._close_thread.join(timeout=0.5)  # Shorter timeout for tests
+            except Exception as e:
+                logger.debug("Error during cleanup: %s", e)
 
     def __init__(self):
         self._thread_local = threading.local()
@@ -294,6 +340,8 @@ class ActorCaller:
             # If the thread exit, we clean the related actor callers and channels.
 
             def _cleanup():
+                self._ensure_initialized()
+                # Use the background thread for cleanup
                 asyncio.run_coroutine_threadsafe(actor_caller.stop(), self._close_loop)
                 logger.debug(
                     "Clean up the actor caller due to thread exit: %s", thread_info

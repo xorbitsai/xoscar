@@ -470,6 +470,11 @@ def is_py_312():
     return sys.version_info[:2] == (3, 12)
 
 
+@lru_cache
+def is_py_312_or_above():
+    return sys.version_info[:2] >= (3, 12)
+
+
 def is_v4_zero_ip(ip_port_addr: str) -> bool:
     return ip_port_addr.split("://")[-1].startswith("0.0.0.0:")
 

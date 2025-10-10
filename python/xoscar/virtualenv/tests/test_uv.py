@@ -17,6 +17,7 @@ import os.path
 import sys
 import tempfile
 import time
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -40,10 +41,10 @@ def test_uv_virtialenv_manager():
 
         raw_sys_path = sys.path
         try:
-            manager.create_env()
+            manager.create_env(python_path=Path(sys.executable))
             assert os.path.exists(path)
             manager.install_packages(
-                ["transformers==4.40.0"],
+                ["transformers==4.50.0"],
                 index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
             )
 
@@ -51,7 +52,7 @@ def test_uv_virtialenv_manager():
 
             import transformers
 
-            assert transformers.__version__ == "4.40.0"
+            assert transformers.__version__ == "4.50.0"
 
             manager.remove_env()
             assert not os.path.exists(path)
@@ -61,8 +62,9 @@ def test_uv_virtialenv_manager():
 
 @pytest.mark.skipif(not UVVirtualEnvManager.is_available(), reason="uv not installed")
 @pytest.mark.skipif(
-    sys.platform.startswith("win"),
-    reason="skip windows because some files cannot be deleted",
+    sys.platform.startswith("win") or sys.version_info[:2] >= (3, 13),
+    reason="skip windows because some files cannot be deleted, "
+    "and skip python 3.13 since xllamacpp does not support",
 )
 async def test_uv_virtialenv_pool():
     with tempfile.TemporaryDirectory() as d:
@@ -229,14 +231,14 @@ def test_uv_virtualenv_manager_skip_system_package(caplog):
 
         raw_sys_path = sys.path
         try:
-            manager.create_env()
+            manager.create_env(python_path=Path(sys.executable))
             assert os.path.exists(path)
 
             caplog.set_level(logging.INFO)
 
             # Install transformers and system numpy with skip_installed=True
             manager.install_packages(
-                ["transformers==4.40.0", "#system_numpy#"],
+                ["transformers==4.50.0", "#system_numpy#"],
                 index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
                 skip_installed=True,
                 log=True,
@@ -248,14 +250,14 @@ def test_uv_virtualenv_manager_skip_system_package(caplog):
             import numpy as numpy_in_env
             import transformers
 
-            assert transformers.__version__ == "4.40.0"
+            assert transformers.__version__ == "4.50.0"
             assert numpy_in_env.__version__ == system_numpy_version
 
             caplog.clear()
 
             # Confirm numpy is skipped (no installation needed)
             manager.install_packages(
-                ["transformers>=4.40.0", "#system_numpy#"],
+                ["transformers>=4.50.0", "#system_numpy#"],
                 index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
                 skip_installed=True,
                 log=True,

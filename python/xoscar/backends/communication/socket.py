@@ -31,7 +31,7 @@ from urllib.parse import urlparse
 from ..._utils import to_binary
 from ...constants import XOSCAR_CONNECT_TIMEOUT, XOSCAR_UNIX_SOCKET_DIR
 from ...serialization import AioDeserializer, AioSerializer, deserialize
-from ...utils import classproperty, implements, is_py_312, is_v6_ip
+from ...utils import classproperty, implements, is_py_312, is_py_312_or_above, is_v6_ip
 from .base import Channel, ChannelType, Client, Server
 from .core import register_client, register_server
 from .errors import ChannelClosed
@@ -192,9 +192,9 @@ class _BaseSocketServer(Server, metaclass=ABCMeta):
     @implements(Server.stop)
     async def stop(self):
         self._aio_server.close()
-        # Python 3.12: # https://github.com/python/cpython/issues/104344
-        # `wait_closed` leads to hang
-        if not is_py_312():
+        # Python 3.12+: # https://github.com/python/cpython/issues/104344
+        # `wait_closed` leads to hang in Python 3.12 and 3.13
+        if not is_py_312_or_above():
             await self._aio_server.wait_closed()
         # close all channels
         await asyncio.gather(
