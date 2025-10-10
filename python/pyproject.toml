@@ -51,6 +51,6 @@ log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(linen
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
 
 [tool.cibuildwheel]
-build = ["cp39-*", "cp310-*", "cp311-*", "cp312-*"]
-skip = "pp* *musllinux* *i686 cp36* cp38-win32 cp39-win32 cp310-win32 cp311-win32 cp312-win32"
+build = ["cp39-*", "cp310-*", "cp311-*", "cp312-*", "cp313-*"]
+skip = "pp* *musllinux* *i686 cp38-win32 cp39-win32 cp310-win32 cp311-win32 cp312-win32 cp313-win32"
 manylinux-x86_64-image = "manylinux2014"
