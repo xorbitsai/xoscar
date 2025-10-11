@@ -19,7 +19,6 @@ from io import BytesIO
 from typing import Any, BinaryIO, Union
 
 import cloudpickle
-import numpy as np
 
 from ..utils import lazy_import
 from .core import deserialize, serialize_with_spawn
