@@ -19,7 +19,6 @@ from io import BytesIO
 from typing import Any, BinaryIO, Union
 
 import cloudpickle
-import numpy as np
 
 from ..utils import lazy_import
 from .core import deserialize, serialize_with_spawn
@@ -45,7 +44,7 @@ class AioSerializer:
             return hasattr(buf, "__cuda_array_interface__")
 
         is_cuda_buffers = [_is_cuda_buffer(buf) for buf in buffers]
-        headers[0]["is_cuda_buffers"] = np.array(is_cuda_buffers)
+        headers[0]["is_cuda_buffers"] = list(is_cuda_buffers)
 
         # add buffer lengths into headers
         headers[0][BUFFER_SIZES_NAME] = [
