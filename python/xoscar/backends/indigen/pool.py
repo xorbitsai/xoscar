@@ -119,9 +119,9 @@ class MainActorPool(MainActorPoolBase):
         if not schemes:
             prefix_iter = itertools.repeat("")
         else:
-            prefix_iter = [f"{scheme}://" if scheme else "" for scheme in schemes]  # type: ignore
+            prefix_iter = [f"{scheme}: //" if scheme else "" for scheme in schemes]  # type: ignore
         return [
-            f"{prefix}{host}:{port}"
+            f"{prefix}{host}: {port}"
             for port, prefix in zip([port] + sub_ports, prefix_iter)
         ]
 
@@ -130,7 +130,7 @@ class MainActorPool(MainActorPoolBase):
         cls, process_index: int, external_address: str | None = None
     ) -> str | None:
         if hasattr(asyncio, "start_unix_server"):
-            return f"unixsocket:///{process_index}"
+            return f"unixsocket: ///{process_index}"
         else:
             return external_address
 
@@ -297,6 +297,12 @@ class MainActorPool(MainActorPoolBase):
             new_env = dict(os.environ)
             env = actor_pool_config.get_pool_config(process_index).get("env") or {}
             new_env.update(env)
+            if os.getenv("XOSCAR_CPU_AFFINITY") == "1":
+                import multiprocessing
+
+                total_cores = multiprocessing.cpu_count()
+                all_cores_range = f"0-{total_cores - 1}"
+                cmd = ["taskset", "-c", all_cores_range] + cmd
             logger.info("Creating sub pool via command: %s", cmd)
             process = await create_subprocess_exec(*cmd, env=new_env)
 
