@@ -1,7 +1,7 @@
 [build-system]
 requires = [
-    # PEP 660 editable installs need a backend with build_editable; keep setuptools new enough everywhere
-    "setuptools>=75",
+    "setuptools>=64,<70; python_version<'3.12'",
+    "setuptools>=75; python_version>='3.12'",
     "packaging",
     "wheel",
     "oldest-supported-numpy",
