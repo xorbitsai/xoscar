@@ -26,6 +26,22 @@ from pathlib import Path
 # is missing (seen in editable builds with setuptools>=64 on some platforms).
 os.environ.setdefault("SETUPTOOLS_USE_DISTUTILS", "local")
 
+import importlib
+
+# In some build-isolation envs (editable builds with setuptools>=64),
+# top-level distutils modules may be absent. Patch sys.modules to point to
+# setuptools' vendored distutils so numpy.distutils imports succeed.
+try:
+    import distutils  # noqa: F401
+except ImportError:  # pragma: no cover - build-time guard
+    import setuptools._distutils as _st_distutils
+
+    sys.modules.setdefault("distutils", _st_distutils)
+    sys.modules.setdefault(
+        "distutils.msvccompiler",
+        importlib.import_module("setuptools._distutils.msvccompiler"),
+    )
+
 from sysconfig import get_config_vars
 
 import numpy as np
