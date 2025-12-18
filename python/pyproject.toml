@@ -1,6 +1,7 @@
 [build-system]
 requires = [
-    "setuptools<64; python_version<'3.12'",
+    # setuptools >=61 is needed for PEP 660 (build_editable hook)
+    "setuptools>=61,<64; python_version<'3.12'",
     "setuptools>=75; python_version>='3.12'",
     "packaging",
     "wheel",
