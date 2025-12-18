@@ -297,6 +297,12 @@ class MainActorPool(MainActorPoolBase):
             new_env = dict(os.environ)
             env = actor_pool_config.get_pool_config(process_index).get("env") or {}
             new_env.update(env)
+            if os.getenv("XOSCAR_CPU_AFFINITY") == "1":
+                import multiprocessing
+
+                total_cores = multiprocessing.cpu_count()
+                all_cores_range = f"0-{total_cores - 1}"
+                cmd = ["taskset", "-c", all_cores_range] + cmd
             logger.info("Creating sub pool via command: %s", cmd)
             process = await create_subprocess_exec(*cmd, env=new_env)
 
