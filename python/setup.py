@@ -22,6 +22,10 @@ from distutils.command.build_ext import build_ext as _du_build_ext
 from distutils.file_util import copy_file, move_file
 from pathlib import Path
 
+# Force setuptools to use its vendored distutils even when stdlib distutils
+# is missing (seen in editable builds with setuptools>=64 on some platforms).
+os.environ.setdefault("SETUPTOOLS_USE_DISTUTILS", "local")
+
 from sysconfig import get_config_vars
 
 import numpy as np
