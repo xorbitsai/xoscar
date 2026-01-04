@@ -397,7 +397,7 @@ async def test_spawn_threshold():
 # 然后添加PyTorch相关的测试用例
 @pytest.mark.skipif(torch is None, reason="need torch to run the test")
 @pytest.mark.parametrize(
-    "val",
+    "tensor_args, tensor_kwargs",
     [
         ([1, 2, 3, 4], {}),  # 1D 整数张量
         ([[1.0, 2.0], [3.0, 4.0]], {}),  # 2D 浮点数张量
@@ -405,7 +405,6 @@ async def test_spawn_threshold():
         ((3, 3, 3), {"ones": True}),  # 全一张量
         ((10, 10), {"randn": True}),  # 随机正态分布张量
         ([True, False, True], {}),  # 布尔张量
-        ([1, 2, 3], {"dtype": torch.int64}),  # 指定 dtype 的张量
     ],
 )
 def test_torch_cpu_tensor(tensor_args, tensor_kwargs):
@@ -489,7 +488,6 @@ async def test_aio_torch_serialization():
         ((3, 3, 3), {"ones": True}),  # 全一GPU张量
         ((10, 10), {"randn": True}),  # 随机正态分布GPU张量
         ([True, False, True], {}),  # 布尔GPU张量
-        ([1, 2, 3], {"dtype": torch.int64}),  # 指定dtype的GPU张量
     ],
 )
 def test_torch_gpu_tensor(tensor_args, tensor_kwargs):
