@@ -393,6 +393,7 @@ async def test_spawn_threshold():
     finally:
         MockSerializerForSpawn.unregister(CustomList)
 
+
 # 然后添加PyTorch相关的测试用例
 @pytest.mark.skipif(torch is None, reason="need torch to run the test")
 @pytest.mark.parametrize(
@@ -408,7 +409,7 @@ async def test_spawn_threshold():
     ],
 )
 def test_torch_cpu_tensor(tensor_args, tensor_kwargs):
-     # 在测试函数内部构造张量，避免模块加载时执行
+    # 在测试函数内部构造张量，避免模块加载时执行
     if "zeros" in tensor_kwargs:
         val = torch.zeros(*tensor_args)
     elif "ones" in tensor_kwargs:
@@ -424,12 +425,14 @@ def test_torch_cpu_tensor(tensor_args, tensor_kwargs):
     assert val.shape == deserialized.shape
     assert torch.allclose(val, deserialized)
 
+
 @pytest.mark.skipif(torch is None, reason="need torch to run the test")
 def test_torch_large_tensor():
     # 测试大型张量的序列化
     val = torch.randn(1024, 1024)  # 1MB 左右的张量
     deserialized = deserialize(*serialize(val))
     assert torch.allclose(val, deserialized)
+
 
 @pytest.mark.skipif(torch is None, reason="need torch to run the test")
 def test_torch_nested_tensor():
@@ -440,15 +443,16 @@ def test_torch_nested_tensor():
             torch.zeros(2, 2),
             torch.ones(3, 3),
         ],
-        "nested_dict": {
-            "deep_tensor": torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-        }
+        "nested_dict": {"deep_tensor": torch.tensor([[1.0, 2.0], [3.0, 4.0]])},
     }
     deserialized = deserialize(*serialize(val))
     assert torch.allclose(val["tensor1"], deserialized["tensor1"])
     assert torch.allclose(val["list_of_tensors"][0], deserialized["list_of_tensors"][0])
     assert torch.allclose(val["list_of_tensors"][1], deserialized["list_of_tensors"][1])
-    assert torch.allclose(val["nested_dict"]["deep_tensor"], deserialized["nested_dict"]["deep_tensor"])
+    assert torch.allclose(
+        val["nested_dict"]["deep_tensor"], deserialized["nested_dict"]["deep_tensor"]
+    )
+
 
 @pytest.mark.skipif(torch is None, reason="need torch to run the test")
 @pytest.mark.asyncio
@@ -471,6 +475,7 @@ async def test_aio_torch_serialization():
 
     val3 = val2 + 1
     await _test(val3)
+
 
 # 添加PyTorch GPU张量测试用例
 @pytest.mark.skipif(torch is None, reason="need torch to run the test")
@@ -499,7 +504,7 @@ def test_torch_gpu_tensor(tensor_args, tensor_kwargs):
         val = torch.randn(*tensor_args, **tensor_kwargs)
     else:
         val = torch.tensor(tensor_args, **tensor_kwargs)
-    
+
     # 测试基本序列化/反序列化功能
     deserialized = deserialize(*serialize(val))
     assert type(val) is type(deserialized)
