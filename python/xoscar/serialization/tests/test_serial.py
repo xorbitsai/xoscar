@@ -33,6 +33,10 @@ try:
     import scipy.sparse as sps
 except ImportError:
     sps = None
+try:
+    import torch
+except ImportError:
+    torch = None
 
 from ...aio.file import AioFileObject
 from ...tests.core import require_cudf, require_cupy
@@ -388,3 +392,181 @@ async def test_spawn_threshold():
         assert calls[threading.current_thread().ident] == 101
     finally:
         MockSerializerForSpawn.unregister(CustomList)
+
+# 然后添加PyTorch相关的测试用例
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+@pytest.mark.parametrize(
+    "val",
+    [
+        ([1, 2, 3, 4], {}),  # 1D 整数张量
+        ([[1.0, 2.0], [3.0, 4.0]], {}),  # 2D 浮点数张量
+        ((5, 5), {"zeros": True}),  # 全零张量（通过参数标记特殊构造）
+        ((3, 3, 3), {"ones": True}),  # 全一张量
+        ((10, 10), {"randn": True}),  # 随机正态分布张量
+        ([True, False, True], {}),  # 布尔张量
+        ([1, 2, 3], {"dtype": torch.int64}),  # 指定 dtype 的张量
+    ],
+)
+def test_torch_cpu_tensor(tensor_args, tensor_kwargs):
+     # 在测试函数内部构造张量，避免模块加载时执行
+    if "zeros" in tensor_kwargs:
+        val = torch.zeros(*tensor_args)
+    elif "ones" in tensor_kwargs:
+        val = torch.ones(*tensor_args)
+    elif "randn" in tensor_kwargs:
+        val = torch.randn(*tensor_args)
+    else:
+        val = torch.tensor(tensor_args, **tensor_kwargs)
+    # 测试基本序列化/反序列化功能
+    deserialized = deserialize(*serialize(val))
+    assert type(val) is type(deserialized)
+    assert val.dtype == deserialized.dtype
+    assert val.shape == deserialized.shape
+    assert torch.allclose(val, deserialized)
+
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+def test_torch_large_tensor():
+    # 测试大型张量的序列化
+    val = torch.randn(1024, 1024)  # 1MB 左右的张量
+    deserialized = deserialize(*serialize(val))
+    assert torch.allclose(val, deserialized)
+
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+def test_torch_nested_tensor():
+    # 测试嵌套在复杂结构中的张量
+    val = {
+        "tensor1": torch.tensor([1, 2, 3]),
+        "list_of_tensors": [
+            torch.zeros(2, 2),
+            torch.ones(3, 3),
+        ],
+        "nested_dict": {
+            "deep_tensor": torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        }
+    }
+    deserialized = deserialize(*serialize(val))
+    assert torch.allclose(val["tensor1"], deserialized["tensor1"])
+    assert torch.allclose(val["list_of_tensors"][0], deserialized["list_of_tensors"][0])
+    assert torch.allclose(val["list_of_tensors"][1], deserialized["list_of_tensors"][1])
+    assert torch.allclose(val["nested_dict"]["deep_tensor"], deserialized["nested_dict"]["deep_tensor"])
+
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+@pytest.mark.asyncio
+async def test_aio_torch_serialization():
+    # 测试异步序列化/反序列化
+    async def _test(data):
+        buffers = await AioSerializer(data).run()
+        f = AioFileObject(io.BytesIO())
+        for b in buffers:
+            await f.write(b)
+        await f.seek(0)
+        val2 = await AioDeserializer(f).run()
+        assert torch.allclose(data, val2)
+
+    val = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    await _test(val)
+
+    val2 = val[::2, 1:]
+    await _test(val2)
+
+    val3 = val2 + 1
+    await _test(val3)
+
+# 添加PyTorch GPU张量测试用例
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+@pytest.mark.require_cuda
+@pytest.mark.parametrize(
+    "tensor_args, tensor_kwargs",
+    [
+        ([1, 2, 3, 4], {}),  # 1D 整数GPU张量
+        ([[1.0, 2.0], [3.0, 4.0]], {}),  # 2D 浮点数GPU张量
+        ((5, 5), {"zeros": True}),  # 全零GPU张量
+        ((3, 3, 3), {"ones": True}),  # 全一GPU张量
+        ((10, 10), {"randn": True}),  # 随机正态分布GPU张量
+        ([True, False, True], {}),  # 布尔GPU张量
+        ([1, 2, 3], {"dtype": torch.int64}),  # 指定dtype的GPU张量
+    ],
+)
+def test_torch_gpu_tensor(tensor_args, tensor_kwargs):
+    # 在测试函数内部构造GPU张量，避免模块加载时执行
+    # 统一添加device="cuda"参数
+    tensor_kwargs["device"] = "cuda"
+    if "zeros" in tensor_kwargs:
+        val = torch.zeros(*tensor_args, **tensor_kwargs)
+    elif "ones" in tensor_kwargs:
+        val = torch.ones(*tensor_args, **tensor_kwargs)
+    elif "randn" in tensor_kwargs:
+        val = torch.randn(*tensor_args, **tensor_kwargs)
+    else:
+        val = torch.tensor(tensor_args, **tensor_kwargs)
+    
+    # 测试基本序列化/反序列化功能
+    deserialized = deserialize(*serialize(val))
+    assert type(val) is type(deserialized)
+    assert val.dtype == deserialized.dtype
+    assert val.shape == deserialized.shape
+    assert val.device == deserialized.device  # 验证设备一致性
+    assert torch.allclose(val, deserialized)
+
+
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+@pytest.mark.require_cuda
+def test_torch_large_gpu_tensor():
+    # 测试大型GPU张量的序列化
+    val = torch.randn(1024, 1024, device="cuda")  # 大型GPU张量
+    deserialized = deserialize(*serialize(val))
+    assert torch.allclose(val, deserialized)
+    assert val.device == deserialized.device
+
+
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+@pytest.mark.require_cuda
+def test_torch_nested_gpu_tensor():
+    # 测试嵌套结构中的GPU张量（在函数内构造，避免模块加载时执行）
+    val = {
+        "tensor1": torch.tensor([1, 2, 3], device="cuda"),
+        "list_of_tensors": [
+            torch.zeros(2, 2, device="cuda"),
+            torch.ones(3, 3, device="cuda"),
+        ],
+        "nested_dict": {
+            "deep_tensor": torch.tensor([[1.0, 2.0], [3.0, 4.0]], device="cuda")
+        },
+    }
+    deserialized = deserialize(*serialize(val))
+    assert torch.allclose(val["tensor1"], deserialized["tensor1"])
+    assert val["tensor1"].device == deserialized["tensor1"].device
+    assert torch.allclose(val["list_of_tensors"][0], deserialized["list_of_tensors"][0])
+    assert torch.allclose(val["list_of_tensors"][1], deserialized["list_of_tensors"][1])
+    assert torch.allclose(
+        val["nested_dict"]["deep_tensor"], deserialized["nested_dict"]["deep_tensor"]
+    )
+
+
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+@pytest.mark.require_cuda
+@pytest.mark.asyncio
+async def test_aio_torch_gpu_serialization():
+    # 测试异步序列化/反序列化GPU张量
+    async def _test(data):
+        buffers = await AioSerializer(data).run()
+        f = AioFileObject(io.BytesIO())
+        for b in buffers:
+            await f.write(b)
+        await f.seek(0)
+        val2 = await AioDeserializer(f).run()
+        assert data.device == val2.device
+        assert torch.allclose(data, val2)
+
+    # 在函数内构造GPU张量，避免模块加载时执行
+    val = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], device="cuda")
+    await _test(val)
+
+    val2 = val[::2, 1:]  # 测试切片后的GPU张量
+    await _test(val2)
+
+    val3 = val2 + 1  # 测试运算后的GPU张量
+    await _test(val3)
+
+    val4 = val.transpose(0, 1)  # 测试转置后的GPU张量
+    await _test(val4)

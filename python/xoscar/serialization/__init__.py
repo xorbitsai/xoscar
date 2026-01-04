@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import cuda, exception, mlx, numpy, scipy
+from . import cuda, exception, mlx, numpy, scipy, torch
 from .aio import AioDeserializer, AioSerializer
 from .core import Serializer, deserialize, serialize, serialize_with_spawn
 
-del cuda, numpy, scipy, mlx, exception
+del cuda, numpy, scipy, mlx, exception, torch
