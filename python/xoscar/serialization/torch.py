@@ -19,19 +19,19 @@ import numpy as np
 from ..utils import lazy_import
 from .core import Serializer, buffered
 
-# 延迟导入PyTorch，避免强制依赖
+# lazy import PyTorch to avoid enforced dependency
 torch = lazy_import("torch")
 
 
 class TorchTensorSerializer(Serializer):
     @buffered
     def serial(self, obj: "torch.Tensor", context: Dict):  # type: ignore
-        # 对于CPU张量，直接使用内存视图
+        # for cpu tensor, use memory viewpoint
         if obj.device.type == "cpu":
-            # 确保张量是连续的以避免复制
+            # make sure tensor is contiguous
             if not obj.is_contiguous():
                 obj = obj.contiguous()
-            # 获取内存视图并构建头部信息
+            # get memory viewpoint and collect header information
             header = {
                 "shape": tuple(obj.shape),
                 "dtype": str(obj.dtype),
@@ -39,18 +39,18 @@ class TorchTensorSerializer(Serializer):
                 "requires_grad": obj.requires_grad,
                 "strides": tuple(obj.stride()),
             }
-            # 将张量数据转换为uint8视图以获取原始字节
+            # convert tensor data into uint8 viewpoint, to get original bytes
             data = obj.view(torch.uint8).cpu().numpy()
             return (header,), [memoryview(data)], True
         elif obj.device.type == "cuda":
-            # 对于CUDA张量，使用__cuda_array_interface__
+            # for CUDA， use __cuda_array_interface__
             if not (
                 obj.is_contiguous()
                 or obj.is_contiguous(memory_format=torch.channels_last)
             ):
                 obj = obj.contiguous()
 
-            # 获取CUDA数组接口信息
+            # get cuda array interface information
             cuda_interface = obj.__cuda_array_interface__
             header = {
                 "shape": tuple(obj.shape),
@@ -62,9 +62,9 @@ class TorchTensorSerializer(Serializer):
                 "cuda_array_interface": cuda_interface,
             }
 
-            # 创建缓冲区视图（零拷贝）
-            buffer = obj.data_ptr()  # 获取原始设备指针
-            # 通过numpy创建设备缓冲区视图（实际不复制数据）
+            # create buffer view, zero copy, get device pointer
+            buffer = obj.data_ptr()
+            # instead of actual copy, create device buffer viewpoint from numpy
             buffer_view = np.ndarray(
                 shape=(obj.nbytes,),
                 dtype=np.uint8,
@@ -74,7 +74,7 @@ class TorchTensorSerializer(Serializer):
             )
             return (header,), [buffer_view], True
         else:
-            # 不支持的设备类型，回退到常规序列化
+            # for unsupported device
             raise NotImplementedError(f"Unsupported device type: {obj.device.type}")
 
     def deserial(self, serialized: Tuple, context: Dict, subs: List[Any]):
@@ -84,28 +84,27 @@ class TorchTensorSerializer(Serializer):
 
         # 从缓冲区重建张量
         if device == "cpu":
-            # 从内存视图创建numpy数组，再转换为PyTorch张量
+            # create numpy array from memory viewpoint, then convert to PyTorch tensor
             np_array = np.frombuffer(
                 data_buffer, dtype=np.dtype(header["dtype"].split(".")[-1])
             )
             tensor = torch.from_numpy(np_array).view(header["shape"])
         elif device == "cuda":
-            # 从CUDA数组接口信息重建
             np_array = np.frombuffer(data_buffer, dtype=np.uint8)
-            # 将数据转移到目标设备
+            # move data into cuda device
             tensor = (
                 torch.from_numpy(np_array)
                 .view(torch.dtype(header["dtype"]), *header["shape"])
-                .to(device=f"cuda:{header['device_index']}")
+                .to(device=f"cuda: {header['device_index']}")
             )
         else:
             raise NotImplementedError(f"Unsupported device type: {device}")
 
-        # 恢复requires_grad属性
+        # recover requires_grad attributes
         tensor.requires_grad = header["requires_grad"]
         return tensor
 
 
-# 仅当PyTorch可用时注册序列化器
+# only when torch is available, we register module
 if torch is not None:
     TorchTensorSerializer.register("torch.Tensor")
