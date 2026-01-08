@@ -21,6 +21,13 @@ from .core import Serializer, buffered
 
 # lazy import PyTorch to avoid enforced dependency
 torch = lazy_import("torch")
+cupy = lazy_import("cupy")
+
+
+def rmm_to_torch(buf):
+    cupy_arr = cupy.asarray(buf)  # zero-copy
+    torch_tensor = torch.utils.dlpack.from_dlpack(cupy_arr.toDlpack())  # zero-copy
+    return torch_tensor
 
 
 class TorchTensorSerializer(Serializer):
@@ -51,7 +58,6 @@ class TorchTensorSerializer(Serializer):
                 obj = obj.contiguous()
 
             # get cuda array interface information
-            cuda_interface = obj.__cuda_array_interface__
             header = {
                 "shape": tuple(obj.shape),
                 "dtype": str(obj.dtype),
@@ -59,20 +65,25 @@ class TorchTensorSerializer(Serializer):
                 "device_index": obj.device.index,
                 "requires_grad": obj.requires_grad,
                 "strides": tuple(obj.stride()),
-                "cuda_array_interface": cuda_interface,
             }
 
-            # create buffer view, zero copy, get device pointer
-            buffer = obj.data_ptr()
-            # instead of actual copy, create device buffer viewpoint from numpy
-            buffer_view = np.ndarray(
-                shape=(obj.nbytes,),
-                dtype=np.uint8,
-                buffer=None,
-                offset=buffer,
-                strides=(1,),
+            # ---- Core idea: expose raw CUDA memory as a uint8 buffer (zero-copy) ----
+            # Get the underlying untyped storage that actually owns the CUDA memory
+            storage = obj.untyped_storage()
+
+            # Create a uint8 CUDA tensor that will act as a byte-view of the same memory
+            # This does NOT allocate new GPU memory; it only creates a new Tensor wrapper
+            buffer = torch.empty(
+                (storage.nbytes(),),
+                dtype=torch.uint8,
+                device=obj.device,
             )
-            return (header,), [buffer_view], True
+
+            # Make the buffer tensor share the same storage (zero-copy)
+            buffer.set_(storage)
+
+            # Return: (metadata,), [raw CUDA buffer], mark as buffered
+            return (header,), [buffer], True
         else:
             # for unsupported device
             raise NotImplementedError(f"Unsupported device type: {obj.device.type}")
@@ -90,13 +101,41 @@ class TorchTensorSerializer(Serializer):
             )
             tensor = torch.from_numpy(np_array).view(header["shape"])
         elif device == "cuda":
-            np_array = np.frombuffer(data_buffer, dtype=np.uint8)
-            # move data into cuda device
-            tensor = (
-                torch.from_numpy(np_array)
-                .view(torch.dtype(header["dtype"]), *header["shape"])
-                .to(device=f"cuda: {header['device_index']}")
+            # Unpack metadata
+            (header,) = serialized
+
+            # Raw CUDA buffer (uint8 tensor)
+            buffer = subs[0]
+            if not isinstance(buffer, torch.Tensor):
+                buffer = rmm_to_torch(buffer)
+            assert buffer.is_cuda, "buffer must be a CUDA tensor"
+            assert buffer.dtype == torch.uint8, "buffer must be uint8"
+
+            # Get the shared CUDA storage
+            storage = buffer.untyped_storage()
+
+            # Resolve original dtype
+            dtype_name = header["dtype"].split(".")[-1]
+            dtype = getattr(torch, dtype_name)
+
+            # Create an empty tensor wrapper with the correct dtype
+            # This does NOT allocate new GPU memory for data
+            tensor = torch.empty(0, device=buffer.device, dtype=dtype)
+
+            # Bind the tensor to the same storage with original shape/stride
+            # Pure zero-copy: only a new Tensor view, no data movement
+            tensor.set_(
+                storage,
+                storage_offset=0,
+                size=tuple(header["shape"]),
+                stride=tuple(header["strides"]),
             )
+
+            # Restore requires_grad if needed
+            if header.get("requires_grad"):
+                tensor.requires_grad_(True)
+
+            return tensor
         else:
             raise NotImplementedError(f"Unsupported device type: {device}")
 

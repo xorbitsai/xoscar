@@ -22,6 +22,7 @@ from ..utils import is_linux, is_windows, lazy_import
 cupy = lazy_import("cupy")
 cudf = lazy_import("cudf")
 ucx = lazy_import("ucp")
+torch_cuda = lazy_import("torch.cuda")
 
 
 def require_cupy(func):
@@ -42,6 +43,16 @@ def require_ucx(func):
     if pytest:
         func = pytest.mark.ucx(func)
     func = pytest.mark.skipif(ucx is None, reason="ucx not installed")(func)
+    return func
+
+
+def require_torch_cuda(func):
+    if pytest:
+        func = pytest.mark.cuda(func)
+    func = pytest.mark.skipif(
+        torch_cuda is None or not torch_cuda.is_available(),
+        reason="torch.cuda not installed",
+    )(func)
     return func
 
 

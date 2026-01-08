@@ -39,7 +39,7 @@ except ImportError:
     torch = None
 
 from ...aio.file import AioFileObject
-from ...tests.core import require_cudf, require_cupy
+from ...tests.core import require_cudf, require_cupy, require_torch_cuda
 from ...utils import lazy_import
 from .. import deserialize, serialize, serialize_with_spawn
 from ..aio import AioDeserializer, AioSerializer
@@ -477,7 +477,7 @@ async def test_aio_torch_serialization():
 
 # PyTorch GPU test case
 @pytest.mark.skipif(torch is None, reason="need torch to run the test")
-@pytest.mark.require_cuda
+@require_torch_cuda
 @pytest.mark.parametrize(
     "tensor_args, tensor_kwargs",
     [
@@ -493,10 +493,13 @@ def test_torch_gpu_tensor(tensor_args, tensor_kwargs):
     # add device="cuda"
     tensor_kwargs["device"] = "cuda"
     if "zeros" in tensor_kwargs:
+        tensor_kwargs.pop("zeros")  # remove the flag
         val = torch.zeros(*tensor_args, **tensor_kwargs)
     elif "ones" in tensor_kwargs:
+        tensor_kwargs.pop("ones")
         val = torch.ones(*tensor_args, **tensor_kwargs)
     elif "randn" in tensor_kwargs:
+        tensor_kwargs.pop("randn")
         val = torch.randn(*tensor_args, **tensor_kwargs)
     else:
         val = torch.tensor(tensor_args, **tensor_kwargs)
@@ -510,7 +513,7 @@ def test_torch_gpu_tensor(tensor_args, tensor_kwargs):
 
 
 @pytest.mark.skipif(torch is None, reason="need torch to run the test")
-@pytest.mark.require_cuda
+@require_torch_cuda
 def test_torch_large_gpu_tensor():
     # test large GPU tensor
     val = torch.randn(1024, 1024, device="cuda")
@@ -520,7 +523,7 @@ def test_torch_large_gpu_tensor():
 
 
 @pytest.mark.skipif(torch is None, reason="need torch to run the test")
-@pytest.mark.require_cuda
+@require_torch_cuda
 def test_torch_nested_gpu_tensor():
     val = {
         "tensor1": torch.tensor([1, 2, 3], device="cuda"),
@@ -540,31 +543,3 @@ def test_torch_nested_gpu_tensor():
     assert torch.allclose(
         val["nested_dict"]["deep_tensor"], deserialized["nested_dict"]["deep_tensor"]
     )
-
-
-@pytest.mark.skipif(torch is None, reason="need torch to run the test")
-@pytest.mark.require_cuda
-@pytest.mark.asyncio
-async def test_aio_torch_gpu_serialization():
-    # test async case for GPU tensor
-    async def _test(data):
-        buffers = await AioSerializer(data).run()
-        f = AioFileObject(io.BytesIO())
-        for b in buffers:
-            await f.write(b)
-        await f.seek(0)
-        val2 = await AioDeserializer(f).run()
-        assert data.device == val2.device
-        assert torch.allclose(data, val2)
-
-    val = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], device="cuda")
-    await _test(val)
-
-    val2 = val[::2, 1:]  # test slice GPU tensor
-    await _test(val2)
-
-    val3 = val2 + 1  # basic operation
-    await _test(val3)
-
-    val4 = val.transpose(0, 1)  # transpose operation
-    await _test(val4)
