@@ -33,9 +33,13 @@ try:
     import scipy.sparse as sps
 except ImportError:
     sps = None
+try:
+    import torch
+except ImportError:
+    torch = None
 
 from ...aio.file import AioFileObject
-from ...tests.core import require_cudf, require_cupy
+from ...tests.core import require_cudf, require_cupy, require_torch_cuda
 from ...utils import lazy_import
 from .. import deserialize, serialize, serialize_with_spawn
 from ..aio import AioDeserializer, AioSerializer
@@ -388,3 +392,156 @@ async def test_spawn_threshold():
         assert calls[threading.current_thread().ident] == 101
     finally:
         MockSerializerForSpawn.unregister(CustomList)
+
+
+# Add PyTorch test case
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+@pytest.mark.parametrize(
+    "tensor_args, tensor_kwargs",
+    [
+        # ([1, 2, 3, 4], {}),  # 1D int tensor
+        # ([[1.0, 2.0], [3.0, 4.0]], {}),  # 2D float tensor
+        # ((5, 5), {"zeros": True}),  # all zero tensor, marked by special parameter
+        # ((3, 3, 3), {"ones": True}),  # all one tensor
+        # ((10, 10), {"randn": True}),  # normal distribution tensor
+        # ([True, False, True], {}),  # bool tensor
+        ((3, 3), {"dtype": torch.bfloat16}),  # bfloat16 that numpy does not support
+        ((4, 4), {"dtype": torch.float16}),
+    ],
+)
+def test_torch_cpu_tensor(tensor_args, tensor_kwargs):
+    # construct data inside function
+    if "zeros" in tensor_kwargs:
+        val = torch.zeros(*tensor_args)
+    elif "ones" in tensor_kwargs:
+        val = torch.ones(*tensor_args)
+    elif "randn" in tensor_kwargs:
+        val = torch.randn(*tensor_args)
+    else:
+        val = torch.tensor(tensor_args, **tensor_kwargs)
+    deserialized = deserialize(*serialize(val))
+    assert type(val) is type(deserialized)
+    assert val.dtype == deserialized.dtype
+    assert val.shape == deserialized.shape
+    assert torch.allclose(val, deserialized)
+
+
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+def test_torch_large_tensor():
+    # test large tensor
+    val = torch.randn(1024, 1024)  # 1MB size tensor
+    deserialized = deserialize(*serialize(val))
+    assert torch.allclose(val, deserialized)
+
+
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+def test_torch_nested_tensor():
+    # test nested structure
+    val = {
+        "tensor1": torch.tensor([1, 2, 3]),
+        "list_of_tensors": [
+            torch.zeros(2, 2),
+            torch.ones(3, 3),
+        ],
+        "nested_dict": {"deep_tensor": torch.tensor([[1.0, 2.0], [3.0, 4.0]])},
+    }
+    deserialized = deserialize(*serialize(val))
+    assert torch.allclose(val["tensor1"], deserialized["tensor1"])
+    assert torch.allclose(val["list_of_tensors"][0], deserialized["list_of_tensors"][0])
+    assert torch.allclose(val["list_of_tensors"][1], deserialized["list_of_tensors"][1])
+    assert torch.allclose(
+        val["nested_dict"]["deep_tensor"], deserialized["nested_dict"]["deep_tensor"]
+    )
+
+
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+@pytest.mark.asyncio
+async def test_aio_torch_serialization():
+    # test for async case
+    async def _test(data):
+        buffers = await AioSerializer(data).run()
+        f = AioFileObject(io.BytesIO())
+        for b in buffers:
+            await f.write(b)
+        await f.seek(0)
+        val2 = await AioDeserializer(f).run()
+        assert torch.allclose(data, val2)
+
+    val = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    await _test(val)
+
+    val2 = val[::2, 1:]
+    await _test(val2)
+
+    val3 = val2 + 1
+    await _test(val3)
+
+
+# PyTorch GPU test case
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+@require_torch_cuda
+@pytest.mark.parametrize(
+    "tensor_args, tensor_kwargs",
+    [
+        ([1, 2, 3, 4], {}),
+        ([[1.0, 2.0], [3.0, 4.0]], {}),
+        ((5, 5), {"zeros": True}),
+        ((3, 3, 3), {"ones": True}),
+        ((10, 10), {"randn": True}),
+        ([True, False, True], {}),
+    ],
+)
+def test_torch_gpu_tensor(tensor_args, tensor_kwargs):
+    # add device="cuda"
+    tensor_kwargs["device"] = "cuda"
+    if "zeros" in tensor_kwargs:
+        tensor_kwargs.pop("zeros")  # remove the flag
+        val = torch.zeros(*tensor_args, **tensor_kwargs)
+    elif "ones" in tensor_kwargs:
+        tensor_kwargs.pop("ones")
+        val = torch.ones(*tensor_args, **tensor_kwargs)
+    elif "randn" in tensor_kwargs:
+        tensor_kwargs.pop("randn")
+        val = torch.randn(*tensor_args, **tensor_kwargs)
+    else:
+        val = torch.tensor(tensor_args, **tensor_kwargs)
+
+    deserialized = deserialize(*serialize(val))
+    assert type(val) is type(deserialized)
+    assert val.dtype == deserialized.dtype
+    assert val.shape == deserialized.shape
+    assert val.device == deserialized.device  # make sure device consistency
+    assert torch.allclose(val, deserialized)
+
+
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+@require_torch_cuda
+def test_torch_large_gpu_tensor():
+    # test large GPU tensor
+    val = torch.randn(1024, 1024, device="cuda")
+    deserialized = deserialize(*serialize(val))
+    assert torch.allclose(val, deserialized)
+    assert val.device == deserialized.device
+
+
+@pytest.mark.skipif(torch is None, reason="need torch to run the test")
+@require_torch_cuda
+def test_torch_nested_gpu_tensor():
+    val = {
+        "tensor1": torch.tensor([1, 2, 3], device="cuda"),
+        "list_of_tensors": [
+            torch.zeros(2, 2, device="cuda"),
+            torch.ones(3, 3, device="cuda"),
+        ],
+        "nested_dict": {
+            "deep_tensor": torch.tensor([[1.0, 2.0], [3.0, 4.0]], device="cuda")
+        },
+    }
+    deserialized = deserialize(*serialize(val))
+    assert torch.allclose(val["tensor1"], deserialized["tensor1"])
+    assert val["tensor1"].device == deserialized["tensor1"].device
+    assert torch.allclose(val["list_of_tensors"][0], deserialized["list_of_tensors"][0])
+    assert torch.allclose(val["list_of_tensors"][1], deserialized["list_of_tensors"][1])
+    assert torch.allclose(
+        val["nested_dict"]["deep_tensor"], deserialized["nested_dict"]["deep_tensor"]
+    )

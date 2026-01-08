@@ -23,7 +23,7 @@ import pandas as pd
 import pytest
 
 from ....aio import AioEvent
-from ....tests.core import require_cudf, require_cupy
+from ....tests.core import require_cudf, require_cupy, require_torch_cuda
 from ....utils import ensure_coverage, get_next_port, lazy_import
 from .. import (
     Channel,
@@ -46,6 +46,7 @@ port = get_next_port()
 cupy = lazy_import("cupy")
 cudf = lazy_import("cudf")
 ucp = lazy_import("ucp")
+torch = lazy_import("torch")
 
 
 def gen_params() -> List[Tuple[Type[Server], Dict, str]]:
@@ -176,6 +177,8 @@ def _wrap_cuda_test(server_started_event, conf, tp):
 
             if isinstance(r, cupy.ndarray):
                 np.testing.assert_array_equal(cupy.asnumpy(r), cupy_data)
+            elif isinstance(r, torch.Tensor):
+                np.testing.assert_array_equal(np.asarray(r.cpu()), cupy_data)
             else:
                 pd.testing.assert_frame_equal(r.to_pandas(), cudf_data)
             await chan.send("success")
@@ -194,6 +197,7 @@ def _wrap_cuda_test(server_started_event, conf, tp):
 
 @require_cupy
 @require_cudf
+@require_torch_cuda
 @pytest.mark.parametrize("server_type", [SocketServer, UCXServer])
 @pytest.mark.asyncio
 async def test_multiprocess_cuda_comm(server_type):
@@ -223,6 +227,11 @@ async def test_multiprocess_cuda_comm(server_type):
     client = await server_type.client_type.connect(f"127.0.0.1:{port}")
 
     await client.channel.send(cudf.DataFrame(cudf_data))
+    assert "success" == await client.recv()
+
+    client = await server_type.client_type.connect(f"127.0.0.1:{port}")
+
+    await client.channel.send(torch.from_numpy(cupy_data).to("cuda"))
     assert "success" == await client.recv()
 
     await client.close()
