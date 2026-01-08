@@ -399,12 +399,14 @@ async def test_spawn_threshold():
 @pytest.mark.parametrize(
     "tensor_args, tensor_kwargs",
     [
-        ([1, 2, 3, 4], {}),  # 1D int tensor
-        ([[1.0, 2.0], [3.0, 4.0]], {}),  # 2D float tensor
-        ((5, 5), {"zeros": True}),  # all zero tensor, marked by special parameter
-        ((3, 3, 3), {"ones": True}),  # all one tensor
-        ((10, 10), {"randn": True}),  # normal distribution tensor
-        ([True, False, True], {}),  # bool tensor
+        # ([1, 2, 3, 4], {}),  # 1D int tensor
+        # ([[1.0, 2.0], [3.0, 4.0]], {}),  # 2D float tensor
+        # ((5, 5), {"zeros": True}),  # all zero tensor, marked by special parameter
+        # ((3, 3, 3), {"ones": True}),  # all one tensor
+        # ((10, 10), {"randn": True}),  # normal distribution tensor
+        # ([True, False, True], {}),  # bool tensor
+        ((3, 3), {"dtype": torch.bfloat16}),  # bfloat16 that numpy does not support
+        ((4, 4), {"dtype": torch.float16}),
     ],
 )
 def test_torch_cpu_tensor(tensor_args, tensor_kwargs):

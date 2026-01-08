@@ -46,9 +46,21 @@ class TorchTensorSerializer(Serializer):
                 "requires_grad": obj.requires_grad,
                 "strides": tuple(obj.stride()),
             }
-            # convert tensor data into uint8 viewpoint, to get original bytes
-            data = obj.view(torch.uint8).cpu().numpy()
-            return (header,), [memoryview(data)], True
+            # Try zero-copy path: torch -> numpy
+            try:
+                np_array = obj.numpy()  # zero-copy if supported
+                buffer = memoryview(np_array)
+                header["format"] = "numpy"
+                return (header,), [buffer], True
+
+            except Exception:
+                # Fallback: copy to uint8 bytes
+                # This works for ANY dtype
+                byte_tensor = obj.view(torch.uint8).clone()  # explicit copy
+                np_array = byte_tensor.numpy()
+                buffer = memoryview(np_array)
+                header["format"] = "bytes"
+                return (header,), [buffer], True
         elif obj.device.type == "cuda":
             # for CUDA， use __cuda_array_interface__
             if not (
@@ -80,7 +92,7 @@ class TorchTensorSerializer(Serializer):
             )
 
             # Make the buffer tensor share the same storage (zero-copy)
-            buffer.set_(storage)
+            buffer.set_(storage)  # type: ignore[attr-defined]
 
             # Return: (metadata,), [raw CUDA buffer], mark as buffered
             return (header,), [buffer], True
@@ -94,11 +106,31 @@ class TorchTensorSerializer(Serializer):
         data_buffer = subs[0]
 
         if device == "cpu":
-            # create numpy array from memory viewpoint, then convert to PyTorch tensor
-            np_array = np.frombuffer(
-                data_buffer, dtype=np.dtype(header["dtype"].split(".")[-1])
-            )
-            tensor = torch.from_numpy(np_array).view(header["shape"])
+            fmt = header.get("format", "numpy")
+            dtype_name = header["dtype"].split(".")[-1]
+            dtype = getattr(torch, dtype_name)
+
+            if fmt == "numpy":
+                # zero-copy path
+                np_array = np.frombuffer(data_buffer, dtype=np.dtype(dtype_name))
+                tensor = torch.from_numpy(np_array).view(header["shape"])
+
+            else:
+                # bytes path (copy unavoidable)
+                byte_np = np.frombuffer(data_buffer, dtype=np.uint8)
+                byte_tensor = torch.from_numpy(byte_np)
+
+                tensor = torch.empty(0, dtype=dtype)
+                tensor = tensor.set_(
+                    byte_tensor.untyped_storage(),
+                    storage_offset=0,
+                    size=tuple(header["shape"]),
+                    stride=tuple(header["strides"]),
+                )
+
+            if header.get("requires_grad"):
+                tensor.requires_grad_(True)
+
         elif device == "cuda":
             # Unpack metadata
             (header,) = serialized
