@@ -93,7 +93,6 @@ class TorchTensorSerializer(Serializer):
         device = header["device"]
         data_buffer = subs[0]
 
-        # 从缓冲区重建张量
         if device == "cpu":
             # create numpy array from memory viewpoint, then convert to PyTorch tensor
             np_array = np.frombuffer(
