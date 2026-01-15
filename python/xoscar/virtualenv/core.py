@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import json
 import operator
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -57,7 +58,7 @@ class VirtualEnvManager(ABC):
         pass
 
     @staticmethod
-    def process_packages(packages: list[str]) -> list[str]:
+    def process_packages(packages: list[str], **variables) -> list[str]:
         """
         Process a list of package names, replacing placeholders like #system_<package>#
         with the installed version of the corresponding package from the system environment.
@@ -67,6 +68,7 @@ class VirtualEnvManager(ABC):
 
         Args:
             packages (list[str]): A list of package names, which may include placeholders.
+            **variables: Dynamic variables for marker substitution, e.g., engine='vllm'.
 
         Returns:
             list[str]: A new list with resolved package names and versions.
@@ -98,7 +100,8 @@ class VirtualEnvManager(ABC):
         # - cuda_version: CUDA version string, e.g. "12.1" (str)
         # - cuda_arch: CUDA architecture string, e.g. "sm_80" (str)
         # - has_npu: whether an NPU is available (bool)
-        processed = filter_requirements(processed)
+        # - #var#: dynamic variable substitution, e.g., #engine# == "vllm"
+        processed = filter_requirements(processed, **variables)
 
         return processed
 
@@ -117,6 +120,45 @@ class VirtualEnvManager(ABC):
     @abstractmethod
     def remove_env(self):
         pass
+
+
+def substitute_variables(marker_str: str, variables: dict) -> str:
+    """
+    Replace #var# placeholders in marker string with actual values.
+
+    Example:
+        substitute_variables('#engine# == "vllm"', {'engine': 'vllm'})
+        -> '"vllm" == "vllm"'
+
+    Args:
+        marker_str: Marker expression, e.g., '#engine# == "vllm"'
+        variables: Variable dict, e.g., {'engine': 'vllm', 'count': 10}
+
+    Returns:
+        Marker string with placeholders replaced
+    """
+    result = marker_str
+
+    for var_name, var_value in variables.items():
+        placeholder = f"#{var_name}#"
+        if placeholder not in result:
+            continue
+
+        # Format value based on type
+        if var_value is None:
+            formatted = "None"
+        elif isinstance(var_value, bool):
+            # Boolean: use Python literal (True/False) without quotes
+            formatted = str(var_value)  # True -> "True", False -> "False"
+        elif isinstance(var_value, (int, float)):
+            formatted = str(var_value)
+        else:
+            # String: escape and add quotes
+            formatted = json.dumps(var_value)
+
+        result = result.replace(placeholder, formatted)
+
+    return result
 
 
 def get_env() -> dict[str, str | bool]:
@@ -236,10 +278,14 @@ def eval_custom_marker(marker_str: str, env: dict) -> bool:
     return _eval(tree.body)
 
 
-def filter_requirements(requirements: list[str]) -> list[str]:
+def filter_requirements(requirements: list[str], **variables) -> list[str]:
     """
     Filter requirements by evaluating markers in given env.
     If env is None, use get_env().
+
+    Args:
+        requirements: List of requirement strings
+        **variables: Dynamic variables for #var# substitution, e.g., engine='vllm'
     """
     env = get_env()
     result = []
@@ -249,6 +295,10 @@ def filter_requirements(requirements: list[str]) -> list[str]:
         elif ";" in req_str:
             req_part, marker_part = req_str.split(";", 1)
             marker_part = marker_part.strip()
+
+            # Substitute #var# placeholders with actual values
+            marker_part = substitute_variables(marker_part, variables)
+
             try:
                 req = Requirement(req_str)
                 if req.marker is None or req.marker.evaluate(env):

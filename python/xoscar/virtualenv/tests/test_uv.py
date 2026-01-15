@@ -390,3 +390,96 @@ def test_install_packages_marker_filtering(
             base_pkg = pkg.split(";")[0].strip()  # Strip marker if present
             if base_pkg not in expected_pkgs:
                 assert base_pkg not in cmd_str
+
+
+@pytest.mark.skipif(not UVVirtualEnvManager.is_available(), reason="uv not installed")
+@pytest.mark.parametrize(
+    "variables, input_pkgs, expected_pkgs",
+    [
+        # Test string variable substitution
+        (
+            {"engine": "vllm"},
+            [
+                'transformers==4.30.0; #engine# == "vllm"',
+                'requests==2.28.0; #engine# == "sglang"',
+            ],
+            ["transformers==4.30.0"],
+        ),
+        # Test numeric variable substitution
+        (
+            {"count": 10},
+            ["pkg1==1.0; #count# > 5", "pkg2==2.0; #count# < 5"],
+            ["pkg1==1.0"],
+        ),
+        # Test boolean variable substitution
+        (
+            {"enabled": True},
+            ["pkg1==1.0; #enabled# == True", "pkg2==2.0; #enabled# == False"],
+            ["pkg1==1.0"],
+        ),
+        # Test multiple variables with AND
+        (
+            {"engine": "vllm", "mode": "local"},
+            [
+                'pkg1==1.0; #engine# == "vllm" and #mode# == "local"',
+                'pkg2==2.0; #engine# == "sglang"',
+            ],
+            ["pkg1==1.0"],
+        ),
+        # Test mixed: variables with standard markers
+        (
+            {"engine": "vllm"},
+            ['pkg1==1.0; #engine# == "vllm" and python_version >= "3.8"'],
+            ["pkg1==1.0"],
+        ),
+        # Test no match - empty result
+        (
+            {"engine": "sglang"},
+            ['pkg1==1.0; #engine# == "vllm"', 'pkg2==2.0; #engine# == "transformers"'],
+            [],
+        ),
+    ],
+)
+def test_variable_substitution_in_install_packages(
+    variables, input_pkgs, expected_pkgs
+):
+    """Test that #var# placeholders are correctly substituted during install_packages."""
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, ".env")
+        uv_manager = UVVirtualEnvManager(Path(path))
+
+        with mock.patch("subprocess.Popen") as mock_popen, mock.patch.object(
+            UVVirtualEnvManager, "_get_uv_path", return_value="uv"
+        ):
+            # Mock the process and its return code
+            process = mock.Mock()
+            process.wait.return_value = 0
+            mock_popen.return_value = process
+
+            # Call install_packages with variables
+            uv_manager.install_packages(input_pkgs, **variables)
+
+            # If no packages expected, subprocess should not be called
+            if not expected_pkgs:
+                assert (
+                    mock_popen.call_count == 0
+                ), "Expected no subprocess call when no packages match"
+                return
+
+            # Extract the command line passed to subprocess.Popen
+            cmd = mock_popen.call_args[0][0]
+            cmd_str = " ".join(cmd)
+
+            # Assert that all expected packages appear in the command
+            for pkg in expected_pkgs:
+                assert (
+                    pkg in cmd_str
+                ), f"Expected package '{pkg}' not found in command: {cmd_str}"
+
+            # Assert that packages that should be excluded are not present
+            for pkg in input_pkgs:
+                base_pkg = pkg.split(";")[0].strip()  # Strip marker if present
+                if base_pkg not in expected_pkgs:
+                    assert (
+                        base_pkg not in cmd_str
+                    ), f"Unexpected package '{base_pkg}' found in command: {cmd_str}"
