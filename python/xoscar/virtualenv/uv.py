@@ -233,17 +233,26 @@ class UVVirtualEnvManager(VirtualEnvManager):
     def install_packages(self, packages: list[str], **kwargs):
         """
         Install packages into the virtual environment using uv.
-        Supports pip-compatible kwargs: index_url, extra_index_url, find_links.
+
+        Args:
+            packages: List of package specifications
+            **kwargs: Can include:
+                - Pip configuration: index_url, extra_index_url, find_links, trusted_host,
+                  no_build_isolation, log, skip_installed
+                - Dynamic variables for #var# substitution: e.g., engine='vllm', mode='remote'
         """
         if not packages:
             return
 
-        packages = self.process_packages(packages)
+        # Pop pip configuration parameters, remaining kwargs are for variable substitution
+        log = kwargs.pop("log", False)
+        skip_installed = kwargs.pop("skip_installed", SKIP_INSTALLED)
+
+        # Process packages with variable substitution
+        packages = self.process_packages(packages, **kwargs)
         if not packages:
             return
 
-        log = kwargs.pop("log", False)
-        skip_installed = kwargs.pop("skip_installed", SKIP_INSTALLED)
         uv_path = self._get_uv_path()
 
         if skip_installed:
