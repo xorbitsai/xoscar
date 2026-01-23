@@ -163,7 +163,7 @@ def substitute_variables(marker_str: str, variables: dict) -> str:
     return result
 
 
-def get_env() -> dict[str, str | bool]:
+def get_env() -> dict[str, str | bool | int | float | None]:
     env = default_environment().copy()
     # Your custom env vars here, e.g.:
     env.update(
