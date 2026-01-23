@@ -129,7 +129,16 @@ def substitute_variables(marker_str: str, variables: dict) -> str:
         placeholder = f"#{var_name}#"
         if placeholder not in result:
             continue
-        result = result.replace(placeholder, var_name)
+        if var_value is None:
+            formatted = "None"
+        elif isinstance(var_value, bool):
+            formatted = str(var_value)
+        elif isinstance(var_value, (int, float)):
+            formatted = str(var_value)
+        else:
+            formatted = json.dumps(var_value)
+
+        result = result.replace(placeholder, formatted)
 
     return result
 

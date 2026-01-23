@@ -250,7 +250,10 @@ class TestFilterRequirementsWithVariables:
     def test_system_package_with_marker(self):
         with patch("importlib.metadata.version", return_value="1.26.4"):
             filtered = filter_requirements(
-                ['#system_numpy#; #engine# == "vllm"', '#system_numpy#; #engine# == "sglang"'],
+                [
+                    '#system_numpy#; #engine# == "vllm"',
+                    '#system_numpy#; #engine# == "sglang"',
+                ],
                 engine="vllm",
             )
         assert filtered == ["numpy==1.26.4"]
