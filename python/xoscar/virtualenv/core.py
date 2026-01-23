@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import ast
 import importlib
-import json
 import operator
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -129,16 +128,7 @@ def substitute_variables(marker_str: str, variables: dict) -> str:
         placeholder = f"#{var_name}#"
         if placeholder not in result:
             continue
-        if var_value is None:
-            formatted = "None"
-        elif isinstance(var_value, bool):
-            formatted = str(var_value)
-        elif isinstance(var_value, (int, float)):
-            formatted = str(var_value)
-        else:
-            formatted = json.dumps(var_value)
-
-        result = result.replace(placeholder, formatted)
+        result = result.replace(placeholder, var_name)
 
     return result
 
@@ -160,7 +150,7 @@ def resolve_system_requirement(req_part: str) -> str:
     return f"{real_pkg}=={version}"
 
 
-def get_env() -> dict[str, str | bool | int | float | None]:
+def get_env() -> dict[str, str | bool]:
     env = default_environment().copy()
     # Your custom env vars here, e.g.:
     env.update(
