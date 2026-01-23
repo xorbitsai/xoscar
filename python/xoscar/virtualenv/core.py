@@ -150,7 +150,7 @@ def resolve_system_requirement(req_part: str) -> str:
     return f"{real_pkg}=={version}"
 
 
-def get_env() -> dict[str, str | bool]:
+def get_env() -> dict[str, str | bool | int | float | None]:
     env = default_environment().copy()
     # Your custom env vars here, e.g.:
     env.update(
