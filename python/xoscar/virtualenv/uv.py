@@ -296,6 +296,8 @@ class UVVirtualEnvManager(VirtualEnvManager):
                     else [opt for v in val for opt in (option, v)]
                 )
 
+        if "index_strategy" in kwargs and kwargs["index_strategy"]:
+            cmd += ["--index-strategy", kwargs["index_strategy"]]
         if kwargs.get("no_build_isolation", False):
             cmd += ["--no-build-isolation"]
 
