@@ -79,21 +79,7 @@ class VirtualEnvManager(ABC):
         processed = []
 
         for pkg in packages:
-            if pkg.startswith("#system_") and pkg.endswith("#"):
-                real_pkg = pkg[
-                    len("#system_") : -1
-                ]  # Extract actual package name, e.g., "torch"
-                try:
-                    version = importlib.metadata.version(real_pkg)
-                    # Strip build metadata like "+cpu"
-                    version = version.split("+")[0]
-                except importlib.metadata.PackageNotFoundError:
-                    raise RuntimeError(
-                        f"System package '{real_pkg}' not found. Cannot resolve '{pkg}'."
-                    )
-                processed.append(f"{real_pkg}=={version}")
-            else:
-                processed.append(pkg)
+            processed.append(resolve_system_requirement(pkg))
 
         # apply extended syntax including:
         # - has_cuda: whether CUDA is available (bool)
@@ -159,6 +145,23 @@ def substitute_variables(marker_str: str, variables: dict) -> str:
         result = result.replace(placeholder, formatted)
 
     return result
+
+
+def resolve_system_requirement(req_part: str) -> str:
+    req_part = req_part.strip()
+    if not (req_part.startswith("#system_") and req_part.endswith("#")):
+        return req_part
+
+    real_pkg = req_part[len("#system_") : -1]
+    try:
+        version = importlib.metadata.version(real_pkg)
+        # Strip build metadata like "+cpu"
+        version = version.split("+")[0]
+    except importlib.metadata.PackageNotFoundError:
+        raise RuntimeError(
+            f"System package '{real_pkg}' not found. Cannot resolve '{req_part}'."
+        )
+    return f"{real_pkg}=={version}"
 
 
 def get_env() -> dict[str, str | bool]:
@@ -295,12 +298,13 @@ def filter_requirements(requirements: list[str], **variables) -> list[str]:
         elif ";" in req_str:
             req_part, marker_part = req_str.split(";", 1)
             marker_part = marker_part.strip()
+            req_part = resolve_system_requirement(req_part.strip())
 
             # Substitute #var# placeholders with actual values
             marker_part = substitute_variables(marker_part, variables)
 
             try:
-                req = Requirement(req_str)
+                req = Requirement(f"{req_part}; {marker_part}")
                 if req.marker is None or req.marker.evaluate(env):
                     result.append(f"{req.name}{req.specifier}")
                     continue
