@@ -129,20 +129,7 @@ def substitute_variables(marker_str: str, variables: dict) -> str:
         placeholder = f"#{var_name}#"
         if placeholder not in result:
             continue
-
-        # Format value based on type
-        if var_value is None:
-            formatted = "None"
-        elif isinstance(var_value, bool):
-            # Boolean: use Python literal (True/False) without quotes
-            formatted = str(var_value)  # True -> "True", False -> "False"
-        elif isinstance(var_value, (int, float)):
-            formatted = str(var_value)
-        else:
-            # String: escape and add quotes
-            formatted = json.dumps(var_value)
-
-        result = result.replace(placeholder, formatted)
+        result = result.replace(placeholder, var_name)
 
     return result
 
@@ -291,6 +278,9 @@ def filter_requirements(requirements: list[str], **variables) -> list[str]:
         **variables: Dynamic variables for #var# substitution, e.g., engine='vllm'
     """
     env = get_env()
+    for var_name, var_value in variables.items():
+        if isinstance(var_value, (str, int, float, bool)) or var_value is None:
+            env[var_name] = var_value
     result = []
     for req_str in requirements:
         if is_vcs_url(req_str):
