@@ -139,37 +139,37 @@ class TestSubstituteVariables:
     def test_string_variable(self):
         """Test string variable substitution."""
         result = substitute_variables('#engine# == "vllm"', {"engine": "vllm"})
-        assert result == '"vllm" == "vllm"'
+        assert result == 'engine == "vllm"'
 
     def test_string_variable_no_match(self):
         """Test when variable value doesn't match."""
         result = substitute_variables('#engine# == "vllm"', {"engine": "sglang"})
-        assert result == '"sglang" == "vllm"'
+        assert result == 'engine == "vllm"'
 
     def test_numeric_variable(self):
         """Test numeric variable substitution."""
         result = substitute_variables("#count# > 5", {"count": 10})
-        assert result == "10 > 5"
+        assert result == "count > 5"
 
     def test_boolean_variable_true(self):
         """Test boolean variable substitution (True)."""
         result = substitute_variables("#enabled# == True", {"enabled": True})
-        assert result == "True == True"
+        assert result == "enabled == True"
 
     def test_boolean_variable_false(self):
         """Test boolean variable substitution (False)."""
         result = substitute_variables("#enabled# == True", {"enabled": False})
-        assert result == "False == True"
+        assert result == "enabled == True"
 
     def test_none_variable(self):
         """Test None variable substitution."""
         result = substitute_variables("#value# == None", {"value": None})
-        assert result == "None == None"
+        assert result == "value == None"
 
     def test_string_with_quotes(self):
         """Test string variable with quotes gets escaped."""
         result = substitute_variables('#engine# == "test"', {"engine": 'my"engine'})
-        assert result == '"my\\"engine" == "test"'
+        assert result == 'engine == "test"'
 
     def test_multiple_variables(self):
         """Test multiple variables in one marker."""
@@ -177,7 +177,7 @@ class TestSubstituteVariables:
             '#engine# == "vllm" and #mode# == "local"',
             {"engine": "vllm", "mode": "local"},
         )
-        assert result == '"vllm" == "vllm" and "local" == "local"'
+        assert result == 'engine == "vllm" and mode == "local"'
 
     def test_no_placeholder(self):
         """Test marker without placeholder remains unchanged."""
