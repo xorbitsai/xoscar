@@ -137,8 +137,11 @@ class UVVirtualEnvManager(VirtualEnvManager):
                 f.name,
                 *specs,
             ]
-            result = subprocess.run(cmd, check=True, text=True, capture_output=True)
-
+            try:
+                result = subprocess.run(cmd, check=True, text=True, capture_output=True)
+            except subprocess.CalledProcessError as e:
+                logger.error(e.stderr)
+                raise e
         # the temp file is automatically deleted here
         deps = [
             f"{m.group(1)}=={m.group(2)}"
