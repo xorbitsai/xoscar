@@ -224,8 +224,7 @@ class CMakeBuild(build_ext):
                 # that the right extensions for the current Python/platform are
                 # used.
                 copy_file(
-                    src_filename, dest_filename, verbose=self.verbose,
-                    dry_run=self.dry_run
+                    src_filename, dest_filename, verbose=self.verbose
                 )
                 if ext._needs_stub:
                     self.write_stub(package_dir or os.curdir, ext, True)
@@ -238,8 +237,7 @@ class CMakeBuild(build_ext):
                 dest_filename = os.path.join(collective_dir,
                                                 os.path.basename(filename))
                 copy_file(
-                    src_filename, dest_filename, verbose=self.verbose,
-                    dry_run=self.dry_run
+                    src_filename, dest_filename, verbose=self.verbose
                 )
 
 
@@ -371,14 +369,12 @@ class CMakeBuild(build_ext):
                     dest_filename = os.path.join(dest_dir,
                                             os.path.basename(file))
                     move_file(
-                        src_filename, dest_filename, verbose=self.verbose,
-                        dry_run=self.dry_run
+                        src_filename, dest_filename, verbose=self.verbose
                     )
                     libuv_filename = "xoscar\\collective\\uv.dll"
                     libuv_dest_filename = os.path.join(dest_dir, "uv.dll")
                     copy_file(
-                        libuv_filename, libuv_dest_filename, verbose=self.verbose,
-                        dry_run=self.dry_run
+                        libuv_filename, libuv_dest_filename, verbose=self.verbose
                     )
 
 
