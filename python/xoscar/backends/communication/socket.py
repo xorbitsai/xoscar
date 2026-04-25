@@ -314,6 +314,30 @@ class SocketClient(Client):
             reader, writer = await asyncio.wait_for(fut, timeout=connect_timeout)
         except asyncio.TimeoutError:
             raise ConnectionError("connect timeout")
+        # Enable TCP keepalive to detect silently dropped connections
+        sock = writer.get_extra_info("socket")
+        if sock is not None:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            if hasattr(socket, "TCP_KEEPIDLE"):
+                # Linux
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+            elif sys.platform == "darwin":
+                # macOS uses TCP_KEEPALIVE instead of TCP_KEEPIDLE
+                TCP_KEEPALIVE_DARWIN = 0x10
+                sock.setsockopt(
+                    socket.IPPROTO_TCP, TCP_KEEPALIVE_DARWIN, 60
+                )
+            elif _is_windows:
+                # Windows: use SIO_KEEPALIVE_VALS via ioctl
+                # struct: (onoff, keepalivetime_ms, keepaliveinterval_ms)
+                import struct
+
+                sock.ioctl(
+                    socket.SIO_KEEPALIVE_VALS,
+                    struct.pack("III", 1, 60 * 1000, 10 * 1000),
+                )
         channel = SocketChannel(
             reader,
             writer,
