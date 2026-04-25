@@ -56,3 +56,4 @@ repos:
     hooks:
       - id: cpplint
         files: cpp
+        additional_dependencies: [cpplint]
