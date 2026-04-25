@@ -333,7 +333,7 @@ class SocketClient(Client):
                 import struct
 
                 sock.ioctl(
-                    socket.SIO_KEEPALIVE_VALS,
+                    socket.SIO_KEEPALIVE_VALS,  # type: ignore[attr-defined]
                     struct.pack("III", 1, 60 * 1000, 10 * 1000),
                 )
         channel = SocketChannel(

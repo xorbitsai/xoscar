@@ -30,37 +30,24 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
-      - name: flake8 Lint
-        uses: py-actions/flake8@v2
-        with:
-          path: "python/xoscar"
-          args: "--config python/setup.cfg"
-      - name: black
-        uses: psf/black@stable
-        with:
-          src: "python/xoscar"
-          options: "--check"
-          version: "24.10.0"
-      - uses: isort/isort-action@master
+      - name: Install pre-commit
+        run: pip install pre-commit
+      - name: Run pre-commit
+        run: pre-commit run --all-files --show-diff-on-failure
+
+      # Keep these for configurations not covered by pre-commit
+      - name: isort (with check-only --diff)
+        uses: isort/isort-action@master
         with:
           sortPaths: "python/xoscar"
           configuration: "--check-only --diff --sp python/setup.cfg"
-      - name: mypy
-        run: pip install mypy && cd python && mypy xoscar
-      - name: codespell
-        run: pip install codespell && cd python && codespell xoscar
-
-      - name: clang-format
+      - name: clang-format (version 14)
         uses: jidicula/clang-format-action@v4.11.0
         with:
           clang-format-version: '14'
           fallback-style: 'LLVM'
           check-path: 'cpp'
-      - name: cpplint
-        run: |
-          pip install cpplint
-          cpplint --recursive cpp
-      - name: cmake-format
+      - name: cmake-format (exclude third_party)
         run: |
           pip install cmakelang[YAML]
           find . -name "CMakeLists.txt" -not -path "*third_party/*" | xargs cmake-format -c .cmake-format.yaml --check
