@@ -326,9 +326,7 @@ class SocketClient(Client):
             elif sys.platform == "darwin":
                 # macOS uses TCP_KEEPALIVE instead of TCP_KEEPIDLE
                 TCP_KEEPALIVE_DARWIN = 0x10
-                sock.setsockopt(
-                    socket.IPPROTO_TCP, TCP_KEEPALIVE_DARWIN, 60
-                )
+                sock.setsockopt(socket.IPPROTO_TCP, TCP_KEEPALIVE_DARWIN, 60)
             elif _is_windows:
                 # Windows: use SIO_KEEPALIVE_VALS via ioctl
                 # struct: (onoff, keepalivetime_ms, keepaliveinterval_ms)
