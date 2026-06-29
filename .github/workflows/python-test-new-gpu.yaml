@@ -124,9 +124,8 @@ jobs:
     - name: Install cmake for GPU runner
       if: ${{ matrix.os == 'gpu-t4' }}
       run: |
-        echo "=== Installing cmake ==="
-        apt-get update -y
-        apt-get install -y cmake
+        echo "=== Installing cmake via conda ==="
+        conda install -c conda-forge cmake -y
         echo ""
         echo "=== Verifying cmake installation ==="
         cmake --version
@@ -170,7 +169,7 @@ jobs:
       if: ${{ matrix.module == 'gpu' }}
       run: |
         conda activate ${{ env.CONDA_ENV }}
-        conda install -y conda-forge::nccl=2.22.3
+        conda install -c conda-forge nccl=2.22.3 -y
         pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
         pip install ucxx-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky torch
         python setup.py clean --all
