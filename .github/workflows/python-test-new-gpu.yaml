@@ -99,6 +99,8 @@ jobs:
         echo ""
         echo "=== GPU Information ==="
         nvidia-smi || echo "NVIDIA GPU not available or nvidia-smi not installed"
+        echo "==== CMake Version ===="
+        which cmake && cmake --version || echo "CMake not installed"
     - name: Check libstdcxx-ng status
       if: ${{ matrix.os == 'gpu-t4' }}
       run: |
@@ -131,6 +133,7 @@ jobs:
     - name: Install dependencies
       env:
         MODULE: ${{ matrix.module }}
+      if: ${{ matrix.module != 'gpu' }}
       run: |
         pip install numpy scipy cython coverage flaky
         pip install -e ".[dev,extra]"
@@ -143,16 +146,16 @@ jobs:
         # conda install -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
         pip install ucxx-cu12
 
-    # - name: Install on GPU
-    #   if: ${{ matrix.module == 'gpu' }}
-    #   run: |
-    #     source activate ${{ env.CONDA_ENV }}
-    #     conda install -y conda-forge::nccl=2.22.3
-    #     pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
-    #     pip install ucxx-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky torch
-    #     python setup.py clean --all
-    #     pip install -e ./
-    #   working-directory: ./python
+    - name: Install on GPU
+      if: ${{ matrix.module == 'gpu' }}
+      run: |
+        source activate ${{ env.CONDA_ENV }}
+        conda install -y conda-forge::nccl=2.22.3
+        pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
+        pip install ucxx-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky torch
+        python setup.py clean --all
+        pip install -e ./
+      working-directory: ./python
 
     - name: Test with pytest
       env:
