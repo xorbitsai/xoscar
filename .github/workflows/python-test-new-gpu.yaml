@@ -128,7 +128,7 @@ jobs:
         conda install -c conda-forge cmake -y
         echo ""
         echo "=== Verifying cmake installation ==="
-        cmake --version
+        conda run cmake --version
     - name: Add msbuild to PATH
       if: ${{ matrix.os == 'windows-latest'}}
       uses: microsoft/setup-msbuild@v1.3.1
