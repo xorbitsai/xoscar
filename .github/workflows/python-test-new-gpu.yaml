@@ -1,0 +1,175 @@
+name: Python CI - Test new GPU Runner
+
+on:
+  push:
+    branches:
+      - 'bld/adopt-gpu-larger-runner'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ "ubuntu-latest" ]
+        python-version: [ "3.10" ]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: Set up Python environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - name: Install pre-commit
+        run: pip install pre-commit
+      - name: Run pre-commit
+        run: pre-commit run --all-files --show-diff-on-failure
+
+      # Keep these for configurations not covered by pre-commit
+      - name: isort (with check-only --diff)
+        uses: isort/isort-action@master
+        with:
+          sortPaths: "python/xoscar"
+          configuration: "--check-only --diff --sp python/setup.cfg"
+      - name: clang-format (version 14)
+        uses: jidicula/clang-format-action@v4.11.0
+        with:
+          clang-format-version: '14'
+          fallback-style: 'LLVM'
+          check-path: 'cpp'
+      - name: cmake-format (exclude third_party)
+        run: |
+          pip install cmakelang[YAML]
+          find . -name "CMakeLists.txt" -not -path "*third_party/*" | xargs cmake-format -c .cmake-format.yaml --check
+
+  build_test_job:
+    if: github.repository == 'xorbitsai/xoscar'
+    runs-on: ${{ matrix.os }}
+    needs: lint
+    env:
+      CONDA_ENV: xoscar-test
+      SELF_HOST_PYTHON: /root/miniconda3/envs/xoscar-test/bin/python
+      SELF_HOST_CONDA: /root/miniconda3/condabin/conda
+    defaults:
+      run:
+        shell: bash -l {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        module: ["xoscar"]
+        exclude:
+          - { os: macos-latest, python-version: 3.10}
+          - { os: macos-latest, python-version: 3.11}
+          - { os: windows-latest, python-version: 3.10}
+          - { os: windows-latest, python-version: 3.11}
+        include:
+          - { os: gpu-t4, module: gpu, python-version: "3.12"}
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        submodules: recursive
+    - name: Check system and Linux release Only for GPU Runner
+      if: ${{ matrix.os == 'gpu-t4' }}
+      run: |
+        echo "=== System Information ==="
+        uname -a
+        echo ""
+        echo "=== Linux Release Version ==="
+        if [ -f /etc/os-release ]; then
+          cat /etc/os-release
+        elif command -v lsb_release &> /dev/null; then
+          lsb_release -a
+        else
+          echo "Unable to determine Linux release"
+        fi
+        echo ""
+        echo "=== GPU Information ==="
+        nvidia-smi || echo "NVIDIA GPU not available or nvidia-smi not installed"
+    - name: Check libstdcxx-ng status
+      if: ${{ matrix.os == 'gpu-t4' }}
+      run: |
+        echo "=== Checking libstdcxx-ng ==="
+        strings /usr/lib/x86_64-linux-gnu/libstdc++.so.6 | grep GLIBC | sort -V | tail -5
+        echo ""
+        echo "=== Conda environment info ==="
+        conda list | grep -i libstdcxx || echo "libstdcxx-ng not found in conda"
+    - name: Add msbuild to PATH
+      if: ${{ matrix.os == 'windows-latest'}}
+      uses: microsoft/setup-msbuild@v1.3.1
+    - name: Set up conda ${{ matrix.python-version }}
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+        activate-environment: ${{ env.CONDA_ENV }}
+
+    # Fix "version `GLIBCXX_3.4.30' not found (required by xoscar_store.cpython-311-x86_64-linux-gnu.so)" issue
+    - name: Install libstdcxx-ng
+      if: ${{ (matrix.module != 'gpu') && (matrix.os == 'ubuntu-latest') }}
+      run: |
+        conda install -c conda-forge libstdcxx-ng
+
+    # Important for python == 3.12
+    - name: Update pip and setuptools
+      if: ${{ matrix.python-version == '3.12' }}
+      run: |
+        python -m pip install -U pip setuptools
+
+    - name: Install dependencies
+      env:
+        MODULE: ${{ matrix.module }}
+      run: |
+        pip install numpy scipy cython coverage flaky
+        pip install -e ".[dev,extra]"
+      working-directory: ./python
+
+    - name: Install ucx dependencies
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: |
+        # ucx-py move to ucxx and ucxx-cu12 can be run on CPU
+        # conda install -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
+        pip install ucxx-cu12
+
+    # - name: Install on GPU
+    #   if: ${{ matrix.module == 'gpu' }}
+    #   run: |
+    #     source activate ${{ env.CONDA_ENV }}
+    #     conda install -y conda-forge::nccl=2.22.3
+    #     pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
+    #     pip install ucxx-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky torch
+    #     python setup.py clean --all
+    #     pip install -e ./
+    #   working-directory: ./python
+
+    - name: Test with pytest
+      env:
+        MODULE: ${{ matrix.module }}
+      run: |
+        if [[ "$MODULE" == "xoscar" ]]; then
+          pytest -s -v --timeout=500 \
+            -W ignore::PendingDeprecationWarning \
+            --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar
+        else
+          source activate ${{ env.CONDA_ENV }}
+          pytest -s -v -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar
+        fi
+      working-directory: ./python
+
+    - name: Report coverage data
+      uses: codecov/codecov-action@v4
+      with:
+        working-directory: ./python
+        flags: unittests
