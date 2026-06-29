@@ -74,8 +74,8 @@ jobs:
           - { os: macos-latest, python-version: 3.11}
           - { os: windows-latest, python-version: 3.10}
           - { os: windows-latest, python-version: 3.11}
-        include:
-          - { os: self-hosted, module: gpu, python-version: 3.11}
+        # include:                                                commented out temporarily
+        #   - { os: gpu-t4, module: gpu, python-version: "3.12"}
 
     steps:
     - name: Check out code
@@ -86,12 +86,18 @@ jobs:
     - name: Add msbuild to PATH
       if: ${{ matrix.os == 'windows-latest'}}
       uses: microsoft/setup-msbuild@v1.3.1
+
     - name: Set up conda ${{ matrix.python-version }}
       uses: conda-incubator/setup-miniconda@v3
-      if: ${{ matrix.module != 'gpu' }}
       with:
         python-version: ${{ matrix.python-version }}
         activate-environment: ${{ env.CONDA_ENV }}
+
+    - name: Install cmake for GPU runner
+      if: ${{ matrix.os == 'gpu-t4' }}
+      run: |
+        echo "=== Installing cmake via conda ==="
+        conda install -c conda-forge cmake -y
 
     # Fix "version `GLIBCXX_3.4.30' not found (required by xoscar_store.cpython-311-x86_64-linux-gnu.so)" issue
     - name: Install libstdcxx-ng
@@ -108,7 +114,6 @@ jobs:
     - name: Install dependencies
       env:
         MODULE: ${{ matrix.module }}
-      if: ${{ matrix.module != 'gpu' }}
       run: |
         pip install numpy scipy cython coverage flaky
         pip install -e ".[dev,extra]"
@@ -124,10 +129,11 @@ jobs:
     - name: Install on GPU
       if: ${{ matrix.module == 'gpu' }}
       run: |
-        source activate ${{ env.CONDA_ENV }}
-        conda install -y conda-forge::nccl=2.22.3
+        conda activate ${{ env.CONDA_ENV }}
+        conda install -c conda-forge nccl=2.22.3 -y
+        pip install "numpy<2.0.0" scipy cython
         pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
-        pip install ucxx-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky torch
+        pip install ucxx-cu12 cloudpickle psutil tblib uvloop packaging coverage flaky torch
         python setup.py clean --all
         pip install -e ./
       working-directory: ./python
@@ -141,7 +147,7 @@ jobs:
             -W ignore::PendingDeprecationWarning \
             --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar
         else
-          source activate ${{ env.CONDA_ENV }}
+          conda activate ${{ env.CONDA_ENV }}
           pytest -s -v -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar
         fi
       working-directory: ./python
