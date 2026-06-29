@@ -121,6 +121,15 @@ jobs:
         echo ""
         echo "=== Listing conda environments ==="
         conda env list || echo "conda env list failed"
+    - name: Install cmake for GPU runner
+      if: ${{ matrix.os == 'gpu-t4' }}
+      run: |
+        echo "=== Installing cmake ==="
+        apt-get update -y
+        apt-get install -y cmake
+        echo ""
+        echo "=== Verifying cmake installation ==="
+        cmake --version
     - name: Add msbuild to PATH
       if: ${{ matrix.os == 'windows-latest'}}
       uses: microsoft/setup-msbuild@v1.3.1
@@ -145,7 +154,6 @@ jobs:
     - name: Install dependencies
       env:
         MODULE: ${{ matrix.module }}
-      if: ${{ matrix.module != 'gpu' }}
       run: |
         pip install numpy scipy cython coverage flaky
         pip install -e ".[dev,extra]"
