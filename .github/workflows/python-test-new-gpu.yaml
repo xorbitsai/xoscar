@@ -109,6 +109,18 @@ jobs:
         echo ""
         echo "=== Conda environment info ==="
         conda list | grep -i libstdcxx || echo "libstdcxx-ng not found in conda"
+    - name: Check conda availability
+      if: ${{ matrix.os == 'gpu-t4' }}
+      run: |
+        echo "=== Checking conda command ==="
+        which conda || echo "conda not found in PATH"
+        conda --version || echo "conda command failed"
+        echo ""
+        echo "=== Checking conda init ==="
+        conda info || echo "conda info failed"
+        echo ""
+        echo "=== Listing conda environments ==="
+        conda env list || echo "conda env list failed"
     - name: Add msbuild to PATH
       if: ${{ matrix.os == 'windows-latest'}}
       uses: microsoft/setup-msbuild@v1.3.1
@@ -149,7 +161,7 @@ jobs:
     - name: Install on GPU
       if: ${{ matrix.module == 'gpu' }}
       run: |
-        source activate ${{ env.CONDA_ENV }}
+        conda activate ${{ env.CONDA_ENV }}
         conda install -y conda-forge::nccl=2.22.3
         pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
         pip install ucxx-cu12 cloudpickle psutil tblib uvloop packaging "numpy<2.0.0" scipy cython coverage flaky torch
@@ -166,7 +178,7 @@ jobs:
             -W ignore::PendingDeprecationWarning \
             --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar
         else
-          source activate ${{ env.CONDA_ENV }}
+          conda activate ${{ env.CONDA_ENV }}
           pytest -s -v -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar
         fi
       working-directory: ./python
