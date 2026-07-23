@@ -29,7 +29,7 @@ from typing import Optional
 from packaging.requirements import Requirement
 from packaging.version import Version
 
-from .core import VirtualEnvManager
+from .core import VirtualEnvManager, collect_system_pins
 from .utils import is_vcs_url, run_subprocess_with_logger
 
 UV_PATH = os.getenv("XOSCAR_UV_PATH")
@@ -283,79 +283,103 @@ class UVVirtualEnvManager(VirtualEnvManager):
         index_strategy = kwargs.pop("index_strategy", None)
 
         # Process packages with variable substitution
-        packages = self.process_packages(packages, **kwargs)
-        if not packages:
+        raw_packages = packages
+        processed = self.process_packages(packages, **kwargs)
+        if not processed:
             return
 
-        uv_path = self._get_uv_path()
+        def _do_install(install_list: list[str]) -> None:
+            uv_path = self._get_uv_path()
 
-        if skip_installed:
-            packages = self._filter_packages_not_installed(
-                packages, index_url, extra_index_url, index_strategy
-            )
-            if not packages:
-                logger.info("All required packages are already installed.")
-                return
-
-            cmd = [
-                uv_path,
-                "pip",
-                "install",
-                "-p",
-                str(self.env_path),
-                "--color=always",
-                "--no-deps",
-            ] + packages
-        else:
-            cmd = [
-                uv_path,
-                "pip",
-                "install",
-                "-p",
-                str(self.env_path),
-                "--color=always",
-            ] + packages
-
-        if index_url:
-            cmd += ["-i", index_url]
-        param_and_option = [
-            (extra_index_url, "--extra-index-url"),
-            ("find_links" in kwargs and kwargs["find_links"], "-f"),
-            ("trusted_host" in kwargs and kwargs["trusted_host"], "--trusted-host"),
-        ]
-        for param, option in param_and_option:
-            if param:
-                val = (
-                    param
-                    if not isinstance(param, bool)
-                    else kwargs.get(
-                        {"-f": "find_links", "--trusted-host": "trusted_host"}[option]
-                    )
+            if skip_installed:
+                install_list = self._filter_packages_not_installed(
+                    install_list, index_url, extra_index_url, index_strategy
                 )
-                if val:
-                    cmd += (
-                        [option, val]
-                        if isinstance(val, str)
-                        else [opt for v in val for opt in (option, v)]
+                if not install_list:
+                    logger.info("All required packages are already installed.")
+                    return
+
+                cmd = [
+                    uv_path,
+                    "pip",
+                    "install",
+                    "-p",
+                    str(self.env_path),
+                    "--color=always",
+                    "--no-deps",
+                ] + install_list
+            else:
+                cmd = [
+                    uv_path,
+                    "pip",
+                    "install",
+                    "-p",
+                    str(self.env_path),
+                    "--color=always",
+                ] + install_list
+
+            if index_url:
+                cmd += ["-i", index_url]
+            param_and_option = [
+                (extra_index_url, "--extra-index-url"),
+                ("find_links" in kwargs and kwargs["find_links"], "-f"),
+                ("trusted_host" in kwargs and kwargs["trusted_host"], "--trusted-host"),
+            ]
+            for param, option in param_and_option:
+                if param:
+                    val = (
+                        param
+                        if not isinstance(param, bool)
+                        else kwargs.get(
+                            {"-f": "find_links", "--trusted-host": "trusted_host"}[
+                                option
+                            ]
+                        )
                     )
+                    if val:
+                        cmd += (
+                            [option, val]
+                            if isinstance(val, str)
+                            else [opt for v in val for opt in (option, v)]
+                        )
 
-        if index_strategy:
-            cmd += ["--index-strategy", index_strategy]
-        if kwargs.get("no_build_isolation", False):
-            cmd += ["--no-build-isolation"]
+            if index_strategy:
+                cmd += ["--index-strategy", index_strategy]
+            if kwargs.get("no_build_isolation", False):
+                cmd += ["--no-build-isolation"]
 
-        logger.info("Installing packages via command: %s", cmd)
-        if not log:
-            self._install_process = process = subprocess.Popen(cmd)
-            returncode = process.wait()
-        else:
-            with run_subprocess_with_logger(cmd) as process:
-                self._install_process = process
-            returncode = process.returncode
+            logger.info("Installing packages via command: %s", cmd)
+            if not log:
+                self._install_process = process = subprocess.Popen(cmd)
+                returncode = process.wait()
+            else:
+                with run_subprocess_with_logger(cmd) as process:
+                    self._install_process = process
+                returncode = process.returncode
 
-        self._install_process = None
-        if returncode != 0:
-            raise subprocess.CalledProcessError(returncode, cmd)
+            self._install_process = None
+            if returncode != 0:
+                raise subprocess.CalledProcessError(returncode, cmd)
+
+        try:
+            _do_install(processed)
+        except subprocess.CalledProcessError:
+            # Host-aligned #system_*# pins can conflict with other requirements,
+            # e.g. a model requires a newer engine whose dependencies exceed the
+            # host-pinned version. Drop only those pins and retry once.
+            pins = collect_system_pins(raw_packages) & set(processed)
+            if not pins:
+                raise
+            retry_list = [
+                spec.split("==", 1)[0] if spec in pins else spec for spec in processed
+            ]
+            logger.warning(
+                "Package installation failed with host-aligned pins %s; "
+                "retrying without them. The virtual environment may end up with "
+                "versions different from the host environment.",
+                sorted(pins),
+            )
+            _do_install(retry_list)
 
     def cancel_install(self):
         if self._install_process and self._install_process.poll() is None:
