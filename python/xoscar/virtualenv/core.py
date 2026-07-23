@@ -17,6 +17,7 @@ from __future__ import annotations
 import ast
 import importlib
 import json
+import logging
 import operator
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -33,10 +34,16 @@ from .platform import (
 )
 from .utils import is_vcs_url
 
+logger = logging.getLogger(__name__)
 
-def resolve_system_requirement(req_part: str) -> str:
+
+def is_system_requirement(req_part: str) -> bool:
+    return req_part.startswith("#system_") and req_part.endswith("#")
+
+
+def resolve_system_requirement(req_part: str, warn: bool = True) -> str:
     req_part = req_part.strip()
-    if not (req_part.startswith("#system_") and req_part.endswith("#")):
+    if not is_system_requirement(req_part):
         return req_part
 
     real_pkg = req_part[len("#system_") : -1]
@@ -44,10 +51,36 @@ def resolve_system_requirement(req_part: str) -> str:
         version = importlib.metadata.version(real_pkg)
         version = version.split("+")[0]
     except importlib.metadata.PackageNotFoundError:
-        raise RuntimeError(
-            f"System package '{real_pkg}' not found. Cannot resolve '{req_part}'."
-        )
+        # The placeholder exists to keep the virtualenv aligned with the host
+        # environment; if the host doesn't have the package, there is nothing
+        # to align with, so install it unpinned instead of failing.
+        if warn:
+            logger.warning(
+                "System package '%s' not found in the host environment, "
+                "'%s' will be installed without version pinning.",
+                real_pkg,
+                req_part,
+            )
+        return real_pkg
     return f"{real_pkg}=={version}"
+
+
+def collect_system_pins(packages: list[str]) -> set[str]:
+    """
+    Return the pinned specs (e.g. {"numpy==1.26.4"}) that #system_<package>#
+    placeholders in ``packages`` resolve to in the current host environment.
+
+    Placeholders whose package is not installed on the host resolve to an
+    unpinned name and are not included.
+    """
+    pins = set()
+    for pkg in packages:
+        req_part = pkg.split(";", 1)[0].strip()
+        if is_system_requirement(req_part):
+            resolved = resolve_system_requirement(req_part, warn=False)
+            if "==" in resolved:
+                pins.add(resolved)
+    return pins
 
 
 class VirtualEnvManager(ABC):
@@ -88,9 +121,8 @@ class VirtualEnvManager(ABC):
 
         Returns:
             list[str]: A new list with resolved package names and versions.
-
-        Raises:
-            RuntimeError: If a specified system package is not found in the environment.
+            Placeholders whose package is missing from the host environment
+            resolve to the unpinned package name.
         """
         processed = []
 
@@ -300,10 +332,25 @@ def filter_requirements(requirements: list[str], **variables) -> list[str]:
         elif ";" in req_str:
             req_part, marker_part = req_str.split(";", 1)
             marker_part = marker_part.strip()
-            req_part = resolve_system_requirement(req_part.strip())
+            req_part = req_part.strip()
 
             # Substitute #var# placeholders with actual values
             marker_part = substitute_variables(marker_part, variables)
+
+            if is_system_requirement(req_part):
+                # A #system_*# placeholder is not a valid Requirement, so
+                # evaluate its marker separately; resolve the placeholder only
+                # if the entry is kept, to avoid spurious not-found warnings
+                # for entries that get filtered out anyway.
+                try:
+                    keep = Marker(marker_part).evaluate(env)
+                except Exception:
+                    keep = is_custom_marker(marker_part) and eval_custom_marker(
+                        marker_part, env
+                    )
+                if keep:
+                    result.append(resolve_system_requirement(req_part))
+                continue
 
             try:
                 req = Requirement(f"{req_part}; {marker_part}")
@@ -327,7 +374,7 @@ def filter_requirements(requirements: list[str], **variables) -> list[str]:
                 else:
                     raise
         else:
-            req = Requirement(req_str.strip())
+            req = Requirement(resolve_system_requirement(req_str))
             result.append(str(req))
 
     return result

@@ -485,3 +485,62 @@ def test_variable_substitution_in_install_packages(
                     assert (
                         base_pkg not in cmd_str
                     ), f"Unexpected package '{base_pkg}' found in command: {cmd_str}"
+
+
+def test_install_packages_retry_without_system_pins(uv_manager, caplog):
+    # first uv invocation fails (simulating a resolver conflict with the
+    # host-aligned pin), the retry without pins succeeds
+    calls = []
+
+    def fake_popen(cmd, *args, **kwargs):
+        calls.append(list(cmd))
+        process = mock.Mock()
+        process.wait.return_value = 1 if len(calls) == 1 else 0
+        return process
+
+    with mock.patch("importlib.metadata.version", return_value="1.26.4"), mock.patch(
+        "subprocess.Popen", side_effect=fake_popen
+    ), mock.patch.object(UVVirtualEnvManager, "_get_uv_path", return_value="uv"):
+        with caplog.at_level(logging.WARNING, logger="xoscar.virtualenv.uv"):
+            uv_manager.install_packages(["#system_numpy#", "vllm==0.21.0"])
+
+    assert len(calls) == 2
+    assert "numpy==1.26.4" in calls[0]
+    assert "numpy==1.26.4" not in calls[1]
+    assert "numpy" in calls[1]
+    # explicit user/spec pins are never dropped
+    assert "vllm==0.21.0" in calls[1]
+    assert "retrying without them" in caplog.text
+
+
+def test_install_packages_failure_without_system_pins_reraises(uv_manager):
+    import subprocess
+
+    with mock.patch("subprocess.Popen") as mock_popen, mock.patch.object(
+        UVVirtualEnvManager, "_get_uv_path", return_value="uv"
+    ):
+        process = mock.Mock()
+        process.wait.return_value = 1
+        mock_popen.return_value = process
+
+        with pytest.raises(subprocess.CalledProcessError):
+            uv_manager.install_packages(["vllm==0.21.0"])
+        # no system pins involved, so no retry
+        assert mock_popen.call_count == 1
+
+
+def test_install_packages_retry_also_fails(uv_manager):
+    import subprocess
+
+    with mock.patch("importlib.metadata.version", return_value="1.26.4"), mock.patch(
+        "subprocess.Popen"
+    ) as mock_popen, mock.patch.object(
+        UVVirtualEnvManager, "_get_uv_path", return_value="uv"
+    ):
+        process = mock.Mock()
+        process.wait.return_value = 1
+        mock_popen.return_value = process
+
+        with pytest.raises(subprocess.CalledProcessError):
+            uv_manager.install_packages(["#system_numpy#", "vllm==0.21.0"])
+        assert mock_popen.call_count == 2
