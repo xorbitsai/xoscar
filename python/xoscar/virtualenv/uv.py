@@ -194,6 +194,14 @@ class UVVirtualEnvManager(VirtualEnvManager):
             name = req.name.lower()
             cur_ver = installed.get(name)
 
+            if req.extras:
+                # The installed distribution may lack the extra dependencies
+                # (e.g. "sglang[diffusion]" vs a bare "sglang" install), so let
+                # the resolver figure out what is actually missing; already
+                # satisfied packages stay locked via the pinned constraints.
+                to_resolve.append(spec_str)
+                continue
+
             if cur_ver is None:
                 # Package not installed, needs resolution
                 to_resolve.append(spec_str)
