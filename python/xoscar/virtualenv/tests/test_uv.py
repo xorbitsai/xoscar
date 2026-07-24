@@ -544,3 +544,39 @@ def test_install_packages_retry_also_fails(uv_manager):
         with pytest.raises(subprocess.CalledProcessError):
             uv_manager.install_packages(["#system_numpy#", "vllm==0.21.0"])
         assert mock_popen.call_count == 2
+
+
+def test_install_packages_no_retry_after_cancel(uv_manager):
+    # cancel_install terminates uv, which also exits non-zero; that must not
+    # be mistaken for a resolver conflict and trigger the pin-drop retry
+    import subprocess
+
+    calls = []
+
+    class FakeProcess:
+        def __init__(self):
+            self._terminated = False
+
+        def poll(self):
+            return -15 if self._terminated else None
+
+        def terminate(self):
+            self._terminated = True
+
+        def wait(self):
+            if not self._terminated:
+                # simulate the user cancelling while uv is running
+                uv_manager.cancel_install()
+            return -15
+
+    def fake_popen(cmd, *args, **kwargs):
+        calls.append(list(cmd))
+        return FakeProcess()
+
+    with mock.patch("importlib.metadata.version", return_value="1.26.4"), mock.patch(
+        "subprocess.Popen", side_effect=fake_popen
+    ), mock.patch.object(UVVirtualEnvManager, "_get_uv_path", return_value="uv"):
+        with pytest.raises(subprocess.CalledProcessError):
+            uv_manager.install_packages(["#system_numpy#", "vllm==0.21.0"])
+
+    assert len(calls) == 1

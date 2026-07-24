@@ -45,6 +45,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
     def __init__(self, env_path: Path):
         super().__init__(env_path)
         self._install_process: Optional[subprocess.Popen] = None
+        self._install_cancelled = False
 
     @classmethod
     def is_available(cls):
@@ -287,6 +288,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
         processed = self.process_packages(packages, **kwargs)
         if not processed:
             return
+        self._install_cancelled = False
 
         def _do_install(install_list: list[str]) -> None:
             uv_path = self._get_uv_path()
@@ -364,6 +366,10 @@ class UVVirtualEnvManager(VirtualEnvManager):
         try:
             _do_install(processed)
         except subprocess.CalledProcessError:
+            # An explicitly cancelled install also exits non-zero; never
+            # start a second install in that case.
+            if self._install_cancelled:
+                raise
             # Host-aligned #system_*# pins can conflict with other requirements,
             # e.g. a model requires a newer engine whose dependencies exceed the
             # host-pinned version. Drop only those pins and retry once.
@@ -383,6 +389,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
 
     def cancel_install(self):
         if self._install_process and self._install_process.poll() is None:
+            self._install_cancelled = True
             self._install_process.terminate()
             self._install_process.wait()
 
