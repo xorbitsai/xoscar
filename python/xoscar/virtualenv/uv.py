@@ -29,7 +29,7 @@ from typing import Optional
 from packaging.requirements import Requirement
 from packaging.version import Version
 
-from .core import VirtualEnvManager
+from .core import VirtualEnvManager, collect_system_pins, relax_system_requirement
 from .utils import is_vcs_url, run_subprocess_with_logger
 
 UV_PATH = os.getenv("XOSCAR_UV_PATH")
@@ -45,6 +45,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
     def __init__(self, env_path: Path):
         super().__init__(env_path)
         self._install_process: Optional[subprocess.Popen] = None
+        self._install_cancelled = False
 
     @classmethod
     def is_available(cls):
@@ -172,13 +173,19 @@ class UVVirtualEnvManager(VirtualEnvManager):
 
     @staticmethod
     def _split_specs(
-        specs: list[str], installed: dict[str, str]
+        specs: list[str],
+        installed: dict[str, str],
+        relax_names: frozenset[str] = frozenset(),
     ) -> tuple[list[str], list[str], dict[str, str]]:
         """
         Split the given requirement specs into:
         - keep： specs that need to be kept, e.g. git+github://xxx
         - to_resolve: specs that need to be passed to the resolver (unsatisfied ones)
         - pinned: already satisfied specs, used for constraint to lock their versions
+
+        Package names in ``relax_names`` (host-aligned pins dropped by the
+        retry path) are always sent to the resolver instead of being pinned
+        back to the installed host version.
         """
         keep: list[str] = []
         to_resolve: list[str] = []
@@ -192,6 +199,9 @@ class UVVirtualEnvManager(VirtualEnvManager):
 
             req = Requirement(spec_str)
             name = req.name.lower()
+            if name in relax_names:
+                to_resolve.append(spec_str)
+                continue
             cur_ver = installed.get(name)
 
             if req.extras:
@@ -241,6 +251,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
         index_url: str | None = None,
         extra_index_url: str | list[str] | None = None,
         index_strategy: str | None = None,
+        relax_names: frozenset[str] = frozenset(),
     ) -> list[str]:
         """
         Filter out packages that are already installed with the same version.
@@ -254,7 +265,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
         }
 
         # exclude those packages that satisfied in system site packages
-        keep, to_resolve, pinned = self._split_specs(packages, installed)
+        keep, to_resolve, pinned = self._split_specs(packages, installed, relax_names)
         if not keep and not to_resolve:
             logger.debug("All requirement specifiers satisfied by system packages.")
             return []
@@ -301,82 +312,124 @@ class UVVirtualEnvManager(VirtualEnvManager):
         index_strategy = kwargs.pop("index_strategy", None)
 
         # Process packages with variable substitution
-        packages = self.process_packages(packages, **kwargs)
-        if not packages:
+        raw_packages = packages
+        processed = self.process_packages(packages, **kwargs)
+        if not processed:
             return
+        self._install_cancelled = False
 
-        uv_path = self._get_uv_path()
+        def _do_install(
+            install_list: list[str], relax_names: frozenset[str] = frozenset()
+        ) -> None:
+            uv_path = self._get_uv_path()
 
-        if skip_installed:
-            packages = self._filter_packages_not_installed(
-                packages, index_url, extra_index_url, index_strategy
-            )
-            if not packages:
-                logger.info("All required packages are already installed.")
-                return
-
-            cmd = [
-                uv_path,
-                "pip",
-                "install",
-                "-p",
-                str(self.env_path),
-                "--color=always",
-                "--no-deps",
-            ] + packages
-        else:
-            cmd = [
-                uv_path,
-                "pip",
-                "install",
-                "-p",
-                str(self.env_path),
-                "--color=always",
-            ] + packages
-
-        if index_url:
-            cmd += ["-i", index_url]
-        param_and_option = [
-            (extra_index_url, "--extra-index-url"),
-            ("find_links" in kwargs and kwargs["find_links"], "-f"),
-            ("trusted_host" in kwargs and kwargs["trusted_host"], "--trusted-host"),
-        ]
-        for param, option in param_and_option:
-            if param:
-                val = (
-                    param
-                    if not isinstance(param, bool)
-                    else kwargs.get(
-                        {"-f": "find_links", "--trusted-host": "trusted_host"}[option]
-                    )
+            if skip_installed:
+                install_list = self._filter_packages_not_installed(
+                    install_list,
+                    index_url,
+                    extra_index_url,
+                    index_strategy,
+                    relax_names,
                 )
-                if val:
-                    cmd += (
-                        [option, val]
-                        if isinstance(val, str)
-                        else [opt for v in val for opt in (option, v)]
+                if not install_list:
+                    logger.info("All required packages are already installed.")
+                    return
+
+                cmd = [
+                    uv_path,
+                    "pip",
+                    "install",
+                    "-p",
+                    str(self.env_path),
+                    "--color=always",
+                    "--no-deps",
+                ] + install_list
+            else:
+                cmd = [
+                    uv_path,
+                    "pip",
+                    "install",
+                    "-p",
+                    str(self.env_path),
+                    "--color=always",
+                ] + install_list
+
+            if index_url:
+                cmd += ["-i", index_url]
+            param_and_option = [
+                (extra_index_url, "--extra-index-url"),
+                ("find_links" in kwargs and kwargs["find_links"], "-f"),
+                ("trusted_host" in kwargs and kwargs["trusted_host"], "--trusted-host"),
+            ]
+            for param, option in param_and_option:
+                if param:
+                    val = (
+                        param
+                        if not isinstance(param, bool)
+                        else kwargs.get(
+                            {"-f": "find_links", "--trusted-host": "trusted_host"}[
+                                option
+                            ]
+                        )
                     )
+                    if val:
+                        cmd += (
+                            [option, val]
+                            if isinstance(val, str)
+                            else [opt for v in val for opt in (option, v)]
+                        )
 
-        if index_strategy:
-            cmd += ["--index-strategy", index_strategy]
-        if kwargs.get("no_build_isolation", False):
-            cmd += ["--no-build-isolation"]
+            if index_strategy:
+                cmd += ["--index-strategy", index_strategy]
+            if kwargs.get("no_build_isolation", False):
+                cmd += ["--no-build-isolation"]
 
-        logger.info("Installing packages via command: %s", cmd)
-        if not log:
-            self._install_process = process = subprocess.Popen(cmd)
-            returncode = process.wait()
-        else:
-            with run_subprocess_with_logger(cmd) as process:
-                self._install_process = process
-            returncode = process.returncode
+            logger.info("Installing packages via command: %s", cmd)
+            if not log:
+                self._install_process = process = subprocess.Popen(cmd)
+                returncode = process.wait()
+            else:
+                with run_subprocess_with_logger(cmd) as process:
+                    self._install_process = process
+                returncode = process.returncode
 
-        self._install_process = None
-        if returncode != 0:
-            raise subprocess.CalledProcessError(returncode, cmd)
+            self._install_process = None
+            if returncode != 0:
+                raise subprocess.CalledProcessError(returncode, cmd)
+
+        try:
+            _do_install(processed)
+        except subprocess.CalledProcessError:
+            # An explicitly cancelled install also exits non-zero; never
+            # start a second install in that case.
+            if self._install_cancelled:
+                raise
+            # Host-aligned #system_*# pins can conflict with other requirements,
+            # e.g. a model requires a newer engine whose dependencies exceed the
+            # host-pinned version. Drop only those pins and retry once.
+            pins = collect_system_pins(raw_packages) & set(processed)
+            if not pins:
+                raise
+            # Re-process with the placeholders relaxed to bare names so that
+            # only placeholder-derived pins are dropped; an explicit user/spec
+            # pin that happens to spell the same version is kept.
+            retry_list = self.process_packages(
+                [relax_system_requirement(pkg) for pkg in raw_packages], **kwargs
+            )
+            # In skip_installed mode the relaxed names must not be pinned back
+            # to the installed host versions by _split_specs.
+            relaxed_names = frozenset(p.split("==", 1)[0].lower() for p in pins)
+            logger.warning(
+                "Package installation failed with host-aligned pins %s; "
+                "retrying without them. The virtual environment may end up with "
+                "versions different from the host environment.",
+                sorted(pins),
+            )
+            _do_install(retry_list, relaxed_names)
 
     def cancel_install(self):
         if self._install_process and self._install_process.poll() is None:
+            self._install_cancelled = True
             self._install_process.terminate()
             self._install_process.wait()
 

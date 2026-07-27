@@ -12,13 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from importlib.metadata import PackageNotFoundError
 from unittest.mock import patch
 
 import pytest
 from packaging.markers import default_environment
 
-from ..core import VirtualEnvManager, filter_requirements, substitute_variables
+from ..core import (
+    VirtualEnvManager,
+    collect_system_pins,
+    filter_requirements,
+    substitute_variables,
+)
 
 
 def test_system_package_with_plus_cpu():
@@ -39,10 +45,111 @@ def test_non_placeholder_package():
     assert result == ["requests>=2.0.0"]
 
 
-def test_package_not_found():
+def test_package_not_found_falls_back_unpinned(caplog):
     with patch("importlib.metadata.version", side_effect=PackageNotFoundError):
-        with pytest.raises(RuntimeError, match="System package 'notexist' not found"):
-            VirtualEnvManager.process_packages(["#system_notexist#"])
+        with caplog.at_level(logging.WARNING, logger="xoscar.virtualenv.core"):
+            result = VirtualEnvManager.process_packages(["#system_notexist#"])
+    assert result == ["notexist"]
+    assert "not found in the host environment" in caplog.text
+
+
+def test_system_package_with_marker_filtered_out(caplog):
+    # the entry is dropped by its marker, so the missing host package
+    # must not be looked up at all (no warning)
+    with patch("importlib.metadata.version", side_effect=PackageNotFoundError):
+        with caplog.at_level(logging.WARNING, logger="xoscar.virtualenv.core"):
+            result = filter_requirements(
+                ['#system_notexist# ; #engine# == "vllm"'], engine="transformers"
+            )
+    assert result == []
+    assert "notexist" not in caplog.text
+
+
+def test_system_package_with_marker_matched_but_not_installed(caplog):
+    with patch("importlib.metadata.version", side_effect=PackageNotFoundError):
+        with caplog.at_level(logging.WARNING, logger="xoscar.virtualenv.core"):
+            result = filter_requirements(
+                ['#system_notexist# ; #engine# == "vllm"'], engine="vllm"
+            )
+    assert result == ["notexist"]
+    assert "not found in the host environment" in caplog.text
+
+
+def test_system_package_with_marker_matched_and_installed():
+    with patch("importlib.metadata.version", return_value="1.26.4"):
+        result = filter_requirements(
+            ['#system_numpy# ; #engine# == "vllm"'], engine="vllm"
+        )
+    assert result == ["numpy==1.26.4"]
+
+
+def test_collect_system_pins():
+    with patch("importlib.metadata.version", return_value="1.26.4"):
+        pins = collect_system_pins(
+            [
+                "#system_numpy#",
+                '#system_torch# ; #engine# == "vllm"',
+                "vllm==0.21.0",
+                "transformers>=4.50.0",
+            ]
+        )
+    assert pins == {"numpy==1.26.4", "torch==1.26.4"}
+
+
+def test_collect_system_pins_missing_package(caplog):
+    with patch("importlib.metadata.version", side_effect=PackageNotFoundError):
+        with caplog.at_level(logging.WARNING, logger="xoscar.virtualenv.core"):
+            assert collect_system_pins(["#system_notexist#"]) == set()
+    # collecting pins must not duplicate the not-found warning
+    assert "notexist" not in caplog.text
+
+
+def test_relax_system_requirement():
+    from ..core import relax_system_requirement
+
+    assert relax_system_requirement("#system_numpy#") == "numpy"
+    assert (
+        relax_system_requirement('#system_numpy# ; #engine# == "vllm"')
+        == 'numpy ; #engine# == "vllm"'
+    )
+    # non-placeholder requirements are untouched, pinned or not
+    assert relax_system_requirement("numpy==1.26.4") == "numpy==1.26.4"
+    assert relax_system_requirement("vllm>=0.11.2") == "vllm>=0.11.2"
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "python_version >",  # unparsable
+        "python_version == 3",  # invalid standard marker, valid python expr
+        'python_version >= "abc"',  # parses, evaluation raises
+    ],
+)
+def test_malformed_marker_system_path_matches_plain_path(marker):
+    # malformed markers must behave the same for #system_*# placeholders
+    # as for plain requirements (either both raise or both drop)
+    def run(req):
+        try:
+            return ("ok", bool(filter_requirements([req])))
+        except Exception as e:
+            return ("raise", type(e).__name__)
+
+    with patch("importlib.metadata.version", return_value="1.26.4"):
+        system_result = run(f"#system_numpy# ; {marker}")
+        plain_result = run(f"requests ; {marker}")
+    assert system_result == plain_result
+
+
+def test_system_package_with_custom_marker():
+    with patch("importlib.metadata.version", return_value="2.1.2+cpu"):
+        with patch(
+            "xoscar.virtualenv.core.get_env",
+            return_value={**default_environment(), "has_cuda": True},
+        ):
+            assert filter_requirements(["#system_torch# ; has_cuda"]) == [
+                "torch==2.1.2"
+            ]
+            assert filter_requirements(["#system_torch# ; not has_cuda"]) == []
 
 
 @pytest.mark.parametrize(
