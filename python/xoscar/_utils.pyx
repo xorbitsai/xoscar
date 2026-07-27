@@ -17,6 +17,7 @@
 import collections
 import importlib
 import itertools
+import logging
 import time
 import warnings
 from functools import partial
@@ -35,6 +36,7 @@ cdef mt19937_64 _rnd_gen
 cdef bint _rnd_is_seed_set = False
 NamedType = collections.namedtuple("NamedType", ["name", "type_"])
 _type_dispatchers = WeakSet()
+logger = logging.getLogger(__name__)
 
 cdef class TypeDispatcher:
     def __init__(self):
@@ -64,16 +66,30 @@ cdef class TypeDispatcher:
             self._inherit_handlers.clear()
 
     cdef _reload_lazy_handlers(self):
-        for k, v in self._lazy_handlers.items():
+        missing = object()
+        for k in list(self._lazy_handlers):
+            v = self._lazy_handlers.pop(k, missing)
+            if v is missing:
+                # A nested or concurrent reload may have already consumed it.
+                continue
             mod_name, obj_name = k.rsplit('.', 1)
-            with warnings.catch_warnings():
-                # the lazy imported cudf will warn no device found,
-                # when we set visible device to -1 for CPU processes,
-                # ignore the warning to not distract users
-                warnings.simplefilter("ignore")
-                mod = importlib.import_module(mod_name, __name__)
-            self.register(getattr(mod, obj_name), v)
-        self._lazy_handlers = dict()
+            try:
+                with warnings.catch_warnings():
+                    # the lazy imported cudf will warn no device found,
+                    # when we set visible device to -1 for CPU processes,
+                    # ignore the warning to not distract users
+                    warnings.simplefilter("ignore")
+                    mod = importlib.import_module(mod_name, __name__)
+                obj_type = getattr(mod, obj_name)
+            except Exception:
+                # Lazy handlers are used for optional dependencies.  A module can
+                # be discoverable in a child process yet fail to import there
+                # because a transitive dependency or shared library is absent or
+                # incompatible.  Skip only that handler so unrelated actor-pool
+                # startup and serialization remain available.
+                logger.debug("Failed to load lazy handler %s", k, exc_info=True)
+                continue
+            self.register(obj_type, v)
 
     cpdef get_handler(self, object type_):
         try:
