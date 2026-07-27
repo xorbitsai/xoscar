@@ -66,8 +66,12 @@ cdef class TypeDispatcher:
             self._inherit_handlers.clear()
 
     cdef _reload_lazy_handlers(self):
+        missing = object()
         for k in list(self._lazy_handlers):
-            v = self._lazy_handlers.pop(k)
+            v = self._lazy_handlers.pop(k, missing)
+            if v is missing:
+                # A nested or concurrent reload may have already consumed it.
+                continue
             mod_name, obj_name = k.rsplit('.', 1)
             try:
                 with warnings.catch_warnings():

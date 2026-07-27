@@ -192,6 +192,29 @@ def test_type_dispatcher_keeps_lazy_handler_registered_during_import(monkeypatch
     assert dispatcher("value") == "String"
 
 
+def test_type_dispatcher_handles_reentrant_lazy_reload(monkeypatch):
+    dispatcher = utils.TypeDispatcher()
+    real_import_module = importlib.import_module
+    reentrant_results = []
+
+    class ImportedType:
+        pass
+
+    def import_module(name, package=None):
+        if name == "reentrant_optional":
+            reentrant_results.append(dispatcher("value"))
+            return type("Module", (), {"Type": ImportedType})
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(importlib, "import_module", import_module)
+    dispatcher.register("reentrant_optional.Type", lambda x: "Imported")
+    dispatcher.register("builtins.str", lambda x: "String")
+
+    assert dispatcher(ImportedType()) == "Imported"
+    assert reentrant_results == ["String"]
+    assert dispatcher("value") == "String"
+
+
 def test_timer():
     with utils.Timer() as timer:
         time.sleep(0.1)
