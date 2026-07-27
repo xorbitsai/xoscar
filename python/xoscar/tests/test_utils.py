@@ -172,6 +172,26 @@ def test_type_dispatcher_skips_unimportable_lazy_handler(monkeypatch):
     assert dispatcher(pd.DataFrame()) == "DataFrame"
 
 
+def test_type_dispatcher_keeps_lazy_handler_registered_during_import(monkeypatch):
+    dispatcher = utils.TypeDispatcher()
+    real_import_module = importlib.import_module
+
+    class ImportedType:
+        pass
+
+    def import_module(name, package=None):
+        if name == "registering_optional":
+            dispatcher.register("builtins.str", lambda x: "String")
+            return type("Module", (), {"Type": ImportedType})
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(importlib, "import_module", import_module)
+    dispatcher.register("registering_optional.Type", lambda x: "Imported")
+
+    assert dispatcher(ImportedType()) == "Imported"
+    assert dispatcher("value") == "String"
+
+
 def test_timer():
     with utils.Timer() as timer:
         time.sleep(0.1)

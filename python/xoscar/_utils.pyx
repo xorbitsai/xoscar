@@ -66,7 +66,8 @@ cdef class TypeDispatcher:
             self._inherit_handlers.clear()
 
     cdef _reload_lazy_handlers(self):
-        for k, v in self._lazy_handlers.items():
+        for k in list(self._lazy_handlers):
+            v = self._lazy_handlers.pop(k)
             mod_name, obj_name = k.rsplit('.', 1)
             try:
                 with warnings.catch_warnings():
@@ -85,7 +86,6 @@ cdef class TypeDispatcher:
                 logger.debug("Failed to load lazy handler %s", k, exc_info=True)
                 continue
             self.register(obj_type, v)
-        self._lazy_handlers = dict()
 
     cpdef get_handler(self, object type_):
         try:
