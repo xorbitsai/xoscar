@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import os
 import shutil
 import sys
@@ -153,6 +154,22 @@ def test_type_dispatcher():
     dispatcher.unregister(object)
     with pytest.raises(KeyError):
         dispatcher(type3())
+
+
+def test_type_dispatcher_skips_unimportable_lazy_handler(monkeypatch):
+    dispatcher = utils.TypeDispatcher()
+    real_import_module = importlib.import_module
+
+    def import_module(name, package=None):
+        if name == "broken_optional":
+            raise AttributeError("incompatible optional dependency")
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(importlib, "import_module", import_module)
+    dispatcher.register("broken_optional.Type", lambda x: "Broken")
+    dispatcher.register("pandas.DataFrame", lambda x: "DataFrame")
+
+    assert dispatcher(pd.DataFrame()) == "DataFrame"
 
 
 def test_timer():
