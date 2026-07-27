@@ -571,6 +571,53 @@ def test_install_packages_retry_keeps_identical_explicit_pin(uv_manager):
     assert "vllm==0.21.0" in calls[1]
 
 
+def test_install_packages_retry_skip_installed_does_not_repin(uv_manager):
+    # with skip_installed=True the retry must not let _split_specs pin the
+    # relaxed placeholder back to the installed host version, otherwise the
+    # second dry-run reuses the exact constraint that just failed
+    import subprocess
+
+    class FakeDist:
+        metadata = {"Name": "numpy"}
+        version = "1.26.4"
+
+    plan_calls = []
+
+    def fake_resolve(self, specs, pinned, *args, **kwargs):
+        plan_calls.append((list(specs), dict(pinned)))
+        if len(plan_calls) == 1:
+            raise subprocess.CalledProcessError(1, "uv")
+        return ["numpy==2.1.0", "vllm==0.21.0"]
+
+    def fake_popen(cmd, *args, **kwargs):
+        process = mock.Mock()
+        process.wait.return_value = 0
+        return process
+
+    with mock.patch("importlib.metadata.version", return_value="1.26.4"), mock.patch(
+        "xoscar.virtualenv.uv.distributions", return_value=[FakeDist()]
+    ), mock.patch.object(
+        UVVirtualEnvManager, "_resolve_install_plan", autospec=True
+    ) as mock_plan, mock.patch(
+        "subprocess.Popen", side_effect=fake_popen
+    ), mock.patch.object(
+        UVVirtualEnvManager, "_get_uv_path", return_value="uv"
+    ):
+        mock_plan.side_effect = fake_resolve
+        uv_manager.install_packages(
+            ["#system_numpy#", "vllm==0.21.0"], skip_installed=True
+        )
+
+    assert len(plan_calls) == 2
+    # first attempt: the placeholder resolves to the host pin, so numpy is
+    # satisfied and becomes a dry-run constraint
+    assert plan_calls[0] == (["vllm==0.21.0"], {"numpy": "1.26.4"})
+    # retry: numpy is sent to the resolver unconstrained instead of being
+    # re-pinned to the host version
+    assert "numpy" in plan_calls[1][0]
+    assert "numpy" not in plan_calls[1][1]
+
+
 def test_install_packages_no_retry_after_cancel(uv_manager):
     # cancel_install terminates uv, which also exits non-zero; that must not
     # be mistaken for a resolver conflict and trigger the pin-drop retry
