@@ -65,6 +65,20 @@ def resolve_system_requirement(req_part: str, warn: bool = True) -> str:
     return f"{real_pkg}=={version}"
 
 
+def relax_system_requirement(req_str: str) -> str:
+    """
+    Replace the #system_<pkg># placeholder in a requirement string with the
+    bare package name (keeping any marker), dropping host alignment.
+    Non-placeholder requirements are returned unchanged.
+    """
+    req_part, sep, marker_part = req_str.partition(";")
+    stripped = req_part.strip()
+    if not is_system_requirement(stripped):
+        return req_str
+    bare = stripped[len("#system_") : -1]
+    return f"{bare} ;{marker_part}" if sep else bare
+
+
 def collect_system_pins(packages: list[str]) -> set[str]:
     """
     Return the pinned specs (e.g. {"numpy==1.26.4"}) that #system_<package>#

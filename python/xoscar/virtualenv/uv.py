@@ -29,7 +29,7 @@ from typing import Optional
 from packaging.requirements import Requirement
 from packaging.version import Version
 
-from .core import VirtualEnvManager, collect_system_pins
+from .core import VirtualEnvManager, collect_system_pins, relax_system_requirement
 from .utils import is_vcs_url, run_subprocess_with_logger
 
 UV_PATH = os.getenv("XOSCAR_UV_PATH")
@@ -376,9 +376,12 @@ class UVVirtualEnvManager(VirtualEnvManager):
             pins = collect_system_pins(raw_packages) & set(processed)
             if not pins:
                 raise
-            retry_list = [
-                spec.split("==", 1)[0] if spec in pins else spec for spec in processed
-            ]
+            # Re-process with the placeholders relaxed to bare names so that
+            # only placeholder-derived pins are dropped; an explicit user/spec
+            # pin that happens to spell the same version is kept.
+            retry_list = self.process_packages(
+                [relax_system_requirement(pkg) for pkg in raw_packages], **kwargs
+            )
             logger.warning(
                 "Package installation failed with host-aligned pins %s; "
                 "retrying without them. The virtual environment may end up with "

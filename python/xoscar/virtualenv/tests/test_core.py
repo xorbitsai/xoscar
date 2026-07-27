@@ -104,6 +104,42 @@ def test_collect_system_pins_missing_package(caplog):
     assert "notexist" not in caplog.text
 
 
+def test_relax_system_requirement():
+    from ..core import relax_system_requirement
+
+    assert relax_system_requirement("#system_numpy#") == "numpy"
+    assert (
+        relax_system_requirement('#system_numpy# ; #engine# == "vllm"')
+        == 'numpy ; #engine# == "vllm"'
+    )
+    # non-placeholder requirements are untouched, pinned or not
+    assert relax_system_requirement("numpy==1.26.4") == "numpy==1.26.4"
+    assert relax_system_requirement("vllm>=0.11.2") == "vllm>=0.11.2"
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "python_version >",  # unparseable
+        "python_version == 3",  # invalid standard marker, valid python expr
+        'python_version >= "abc"',  # parses, evaluation raises
+    ],
+)
+def test_malformed_marker_system_path_matches_plain_path(marker):
+    # malformed markers must behave the same for #system_*# placeholders
+    # as for plain requirements (either both raise or both drop)
+    def run(req):
+        try:
+            return ("ok", bool(filter_requirements([req])))
+        except Exception as e:
+            return ("raise", type(e).__name__)
+
+    with patch("importlib.metadata.version", return_value="1.26.4"):
+        system_result = run(f"#system_numpy# ; {marker}")
+        plain_result = run(f"requests ; {marker}")
+    assert system_result == plain_result
+
+
 def test_system_package_with_custom_marker():
     with patch("importlib.metadata.version", return_value="2.1.2+cpu"):
         with patch(

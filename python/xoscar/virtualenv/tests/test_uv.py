@@ -546,6 +546,31 @@ def test_install_packages_retry_also_fails(uv_manager):
         assert mock_popen.call_count == 2
 
 
+def test_install_packages_retry_keeps_identical_explicit_pin(uv_manager):
+    # an explicit user/spec pin spelling the same version as the resolved
+    # #system_*# placeholder must survive the retry; only the
+    # placeholder-derived entry is relaxed
+    calls = []
+
+    def fake_popen(cmd, *args, **kwargs):
+        calls.append(list(cmd))
+        process = mock.Mock()
+        process.wait.return_value = 1 if len(calls) == 1 else 0
+        return process
+
+    with mock.patch("importlib.metadata.version", return_value="1.26.4"), mock.patch(
+        "subprocess.Popen", side_effect=fake_popen
+    ), mock.patch.object(UVVirtualEnvManager, "_get_uv_path", return_value="uv"):
+        uv_manager.install_packages(["#system_numpy#", "numpy==1.26.4", "vllm==0.21.0"])
+
+    assert len(calls) == 2
+    # the placeholder-derived pin is relaxed to a bare name...
+    assert "numpy" in calls[1]
+    # ...while the explicit identical pin is preserved
+    assert "numpy==1.26.4" in calls[1]
+    assert "vllm==0.21.0" in calls[1]
+
+
 def test_install_packages_no_retry_after_cancel(uv_manager):
     # cancel_install terminates uv, which also exits non-zero; that must not
     # be mistaken for a resolver conflict and trigger the pin-drop retry
