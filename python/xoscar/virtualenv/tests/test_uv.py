@@ -315,18 +315,31 @@ def test_uv_virtualenv_exists_env():
 
 def test_split_specs_with_extras():
     """Specs with extras must be resolved even if the base package is installed,
-    since a bare install may lack the extra dependencies."""
-    installed = {"sglang": "0.5.7", "requests": "2.28.0"}
+    since a bare install may lack the extra dependencies. The satisfied base
+    distribution is pinned so the resolver only adds the missing extra deps."""
+    installed = {"sglang": "0.5.7", "requests": "2.28.0", "oldpkg": "1.0"}
 
     keep, to_resolve, pinned = UVVirtualEnvManager._split_specs(
-        ["sglang[diffusion]", "requests[socks]>=2.0", "requests"], installed
+        [
+            "sglang[diffusion]",
+            "requests[socks]>=2.0",
+            "oldpkg[x]>=2.0",
+            "newpkg[y]",
+        ],
+        installed,
     )
 
     assert keep == []
-    # both extras specs go to the resolver despite the base packages being installed
-    assert to_resolve == ["sglang[diffusion]", "requests[socks]>=2.0"]
-    # the plain spec satisfied by the installed version is pinned
-    assert pinned == {"requests": "2.28.0"}
+    # all extras specs go to the resolver despite the base packages being installed
+    assert to_resolve == [
+        "sglang[diffusion]",
+        "requests[socks]>=2.0",
+        "oldpkg[x]>=2.0",
+        "newpkg[y]",
+    ]
+    # installed base distributions satisfying the specifier are pinned so the
+    # resolver won't upgrade them; unsatisfied or missing ones are left free
+    assert pinned == {"sglang": "0.5.7", "requests": "2.28.0"}
 
 
 @pytest.fixture

@@ -197,8 +197,18 @@ class UVVirtualEnvManager(VirtualEnvManager):
             if req.extras:
                 # The installed distribution may lack the extra dependencies
                 # (e.g. "sglang[diffusion]" vs a bare "sglang" install), so let
-                # the resolver figure out what is actually missing; already
-                # satisfied packages stay locked via the pinned constraints.
+                # the resolver figure out what is actually missing. Pin the
+                # installed base distribution when it already satisfies the
+                # requirement so the resolver only adds the missing extra
+                # dependencies instead of upgrading the base package.
+                if cur_ver is not None:
+                    try:
+                        if not req.specifier or Version(cur_ver) in req.specifier:
+                            pinned[name] = cur_ver
+                    except Exception:
+                        # Parsing error, leave it unpinned and let the
+                        # resolver decide
+                        pass
                 to_resolve.append(spec_str)
                 continue
 
