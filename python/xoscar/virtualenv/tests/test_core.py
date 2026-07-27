@@ -120,7 +120,7 @@ def test_relax_system_requirement():
 @pytest.mark.parametrize(
     "marker",
     [
-        "python_version >",  # unparseable
+        "python_version >",  # unparsable
         "python_version == 3",  # invalid standard marker, valid python expr
         'python_version >= "abc"',  # parses, evaluation raises
     ],
