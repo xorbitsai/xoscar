@@ -49,10 +49,14 @@ logger = logging.getLogger(__name__)
 
 
 def synchronize_stream(stream: int = 0):
-    ctx = numba_cuda.current_context()
-    cu_stream = numba_cuda.driver.drvapi.cu_stream(stream)
-    stream = numba_cuda.driver.Stream(ctx, cu_stream, None)
-    stream.synchronize()  # type: ignore
+    # Build the stream through the public numba.cuda API. The old approach
+    # (numba.cuda.driver.Stream(ctx, drvapi.cu_stream(stream), None)) broke in
+    # numba-cuda 0.28.0: driver.py no longer re-exports drvapi, and Stream
+    # dropped its `context` argument.
+    if stream == 0:
+        numba_cuda.legacy_default_stream().synchronize()
+    else:
+        numba_cuda.external_stream(stream).synchronize()
 
 
 class UCXInitializer:
