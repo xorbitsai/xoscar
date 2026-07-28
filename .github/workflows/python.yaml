@@ -132,15 +132,16 @@ jobs:
       run: |
         conda activate ${{ env.CONDA_ENV }}
         conda install -c conda-forge nccl=2.22.3 -y
-        pip install "numpy<2.0.0" scipy cython
+        # Let cudf pick the numpy it was built against. Pinning numpy<2 here
+        # downgrades it after cupy is installed against numpy 2.x, which breaks
+        # cupy's C ABI ("numpy.core.multiarray failed to import").
+        pip install scipy cython
         pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
         pip install ucxx-cu12 cloudpickle psutil tblib uvloop packaging coverage flaky torch
         python setup.py clean --all
         # dev extras carry pytest and plugins; the new runner is provisioned
         # fresh each run, so nothing is pre-installed in the environment.
         pip install -e ".[dev,extra]"
-        # cudf pins numpy<2, and the dev/extra resolve above may bump it.
-        pip install "numpy<2.0.0"
       working-directory: ./python
 
     - name: Test with pytest
