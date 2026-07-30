@@ -347,12 +347,31 @@ class SocketClient(Client):
             # message futures are resolved with an error, preventing
             # indefinite RPC hangs.
             if hasattr(socket, "TCP_USER_TIMEOUT"):
-                tcp_user_timeout = int(
-                    os.environ.get("XOSCAR_TCP_USER_TIMEOUT", "30000")
-                )
-                sock.setsockopt(
-                    socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT, tcp_user_timeout
-                )
+                try:
+                    tcp_user_timeout = int(
+                        os.environ.get("XOSCAR_TCP_USER_TIMEOUT", "30000")
+                    )
+                    if tcp_user_timeout < 0:
+                        raise ValueError("Timeout must be non-negative")
+                except ValueError:
+                    logger.warning(
+                        "Invalid XOSCAR_TCP_USER_TIMEOUT environment variable. "
+                        "Falling back to 30000 ms."
+                    )
+                    tcp_user_timeout = 30_000
+                try:
+                    sock.setsockopt(
+                        socket.IPPROTO_TCP,
+                        socket.TCP_USER_TIMEOUT,
+                        tcp_user_timeout,
+                    )
+                except OSError as e:
+                    logger.warning(
+                        "Failed to set TCP_USER_TIMEOUT: %s. "
+                        "The kernel may not support this option "
+                        "(e.g., WSL, gVisor, or restricted containers).",
+                        e,
+                    )
         channel = SocketChannel(
             reader,
             writer,
