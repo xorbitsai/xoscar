@@ -314,28 +314,64 @@ class SocketClient(Client):
             reader, writer = await asyncio.wait_for(fut, timeout=connect_timeout)
         except asyncio.TimeoutError:
             raise ConnectionError("connect timeout")
-        # Enable TCP keepalive to detect silently dropped connections
+        # Enable TCP keepalive to detect silently dropped connections.
+        # Use relatively aggressive defaults (30s idle, 5s interval, 3 probes
+        # ≈ 45s total) so that dead hosts are detected quickly even on macOS
+        # and Windows which lack TCP_USER_TIMEOUT.
         sock = writer.get_extra_info("socket")
         if sock is not None:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             if hasattr(socket, "TCP_KEEPIDLE"):
                 # Linux
-                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
-                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 30)
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 5)
                 sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
             elif sys.platform == "darwin":
-                # macOS uses TCP_KEEPALIVE instead of TCP_KEEPIDLE
                 TCP_KEEPALIVE_DARWIN = 0x10
-                sock.setsockopt(socket.IPPROTO_TCP, TCP_KEEPALIVE_DARWIN, 60)
+                sock.setsockopt(socket.IPPROTO_TCP, TCP_KEEPALIVE_DARWIN, 30)
             elif _is_windows:
-                # Windows: use SIO_KEEPALIVE_VALS via ioctl
-                # struct: (onoff, keepalivetime_ms, keepaliveinterval_ms)
                 import struct
 
                 sock.ioctl(
                     socket.SIO_KEEPALIVE_VALS,  # type: ignore[attr-defined]
-                    struct.pack("III", 1, 60 * 1000, 10 * 1000),
+                    struct.pack("III", 1, 30 * 1000, 5 * 1000),
                 )
+
+            # TCP_USER_TIMEOUT (Linux 2.6.37+): force-close the connection
+            # when the remote TCP stack stops acknowledging data for the
+            # specified duration (ms). Unlike SO_SNDTIMEO/SO_RCVTIMEO,
+            # this works with non-blocking sockets because it operates at
+            # the TCP protocol level rather than the socket I/O level.
+            # When triggered, the kernel sends RST → asyncio StreamReader
+            # receives EOF → _listen() raises ServerClosed → all pending
+            # message futures are resolved with an error, preventing
+            # indefinite RPC hangs.
+            if hasattr(socket, "TCP_USER_TIMEOUT"):
+                try:
+                    tcp_user_timeout = int(
+                        os.environ.get("XOSCAR_TCP_USER_TIMEOUT", "30000")
+                    )
+                    if tcp_user_timeout < 0:
+                        raise ValueError("Timeout must be non-negative")
+                except ValueError:
+                    logger.warning(
+                        "Invalid XOSCAR_TCP_USER_TIMEOUT environment variable. "
+                        "Falling back to 30000 ms."
+                    )
+                    tcp_user_timeout = 30_000
+                try:
+                    sock.setsockopt(
+                        socket.IPPROTO_TCP,
+                        socket.TCP_USER_TIMEOUT,
+                        tcp_user_timeout,
+                    )
+                except OSError as e:
+                    logger.warning(
+                        "Failed to set TCP_USER_TIMEOUT: %s. "
+                        "The kernel may not support this option "
+                        "(e.g., WSL, gVisor, or restricted containers).",
+                        e,
+                    )
         channel = SocketChannel(
             reader,
             writer,
