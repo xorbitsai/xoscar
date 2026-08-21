@@ -236,7 +236,10 @@ class Router:
                     del self._cache[cache_key]
                 elif cached_client.dest_address != address:
                     del self._cache[cache_key]
-                    await cached_client.close()
+                    try:
+                        await cached_client.close()
+                    except Exception:
+                        pass
                 else:
                     return cached_client
 
