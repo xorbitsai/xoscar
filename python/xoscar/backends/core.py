@@ -142,6 +142,9 @@ class ActorCallerThreadLocal:
             except:  # noqa: E722  # nosec  # pylint: disable=bare-except
                 # ignore all error if fail to close at last
                 pass
+            finally:
+                self._clients.pop(client, None)
+                self._client_to_message_futures.pop(client, None)
 
     async def call_with_client(
         self, client: Client, message: _MessageBase, wait: bool = True

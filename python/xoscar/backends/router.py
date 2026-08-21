@@ -93,7 +93,6 @@ class Router:
 
     def set_mapping(self, mapping: dict[str, str]):
         self._mapping = mapping
-        self._cache_local = threading.local()
 
     def add_router(self, router: "Router"):
         self._curr_external_addresses.extend(router._curr_external_addresses)
@@ -101,7 +100,6 @@ class Router:
         self._mapping.update(router._mapping)
         self._comm_config.update(router._comm_config)
         self._proxy_config.update(router._proxy_config)
-        self._cache_local = threading.local()
 
     def remove_router(self, router: "Router"):
         for external_address in router._curr_external_addresses:
@@ -113,7 +111,6 @@ class Router:
             self._local_mapping.pop(addr, None)
         for addr in router._mapping:
             self._mapping.pop(addr, None)
-        self._cache_local = threading.local()
 
     @property
     def external_address(self):
@@ -128,6 +125,25 @@ class Router:
             # try to lookup inner address from address mapping
             return self._mapping.get(external_address)
 
+    def _resolve_address(
+        self,
+        external_address: str,
+        proxy_addresses: list[str] | None = None,
+    ) -> str:
+        address = self.get_internal_address(external_address)
+        if address is not None:
+            return address
+
+        address = external_address
+        proxy_address = proxy_addresses[-1] if proxy_addresses else None
+        if proxy_address is None:
+            proxy_address = self.get_proxy(address)
+            if proxy_address and proxy_address != self.external_address:
+                address = proxy_address
+        else:
+            address = self.get_proxy(proxy_address) or proxy_address
+        return address
+
     async def get_client(
         self,
         external_address: str,
@@ -140,39 +156,25 @@ class Router:
             proxy_addrs: tuple[str, ...] | None = (
                 tuple(proxy_addresses) if proxy_addresses else None
             )
-            if (
-                cached
-                and (external_address, from_who, None, proxy_addrs) in self._cache
-            ):
-                cached_client = self._cache[
-                    external_address, from_who, None, proxy_addrs
-                ]
+            cache_key = (external_address, from_who, None, proxy_addrs)
+            address = self._resolve_address(external_address, proxy_addresses)
+            if cached and cache_key in self._cache:
+                cached_client = self._cache[cache_key]
                 if cached_client.closed:
                     # closed before, ignore it
-                    del self._cache[external_address, from_who, None, proxy_addrs]
+                    del self._cache[cache_key]
+                elif cached_client.dest_address != address:
+                    # The route changed. Retire the stale connection from the
+                    # event loop that owns this thread-local cache.
+                    del self._cache[cache_key]
+                    await cached_client.close()
                 else:
                     return cached_client
-
-            address = self.get_internal_address(external_address)
-            if address is None:
-                # no inner address, just use external address
-                address = external_address
-                # check if proxy address exists
-                proxy_address = proxy_addresses[-1] if proxy_addresses else None
-                if proxy_address is None:
-                    proxy_address = self.get_proxy(address)
-                    if proxy_address and proxy_address != self.external_address:
-                        address = proxy_address
-                else:
-                    if new_proxy_address := self.get_proxy(proxy_address):
-                        address = new_proxy_address
-                    else:
-                        address = proxy_address
 
             client_type: Type[Client] = get_client_type(address)
             client = await self._create_client(client_type, address, **kw)
             if cached:
-                self._cache[external_address, from_who, None, proxy_addrs] = client
+                self._cache[cache_key] = client
             return client
 
     async def _create_client(
@@ -215,14 +217,6 @@ class Router:
         **kw,
     ) -> Client:
         async with self._lock:
-            if cached and (external_address, from_who, client_type) in self._cache:
-                cached_client = self._cache[external_address, from_who, client_type]
-                if cached_client.closed:  # pragma: no cover
-                    # closed before, ignore it
-                    del self._cache[external_address, from_who, client_type]
-                else:
-                    return cached_client
-
             client_type_to_addresses = self._get_client_type_to_addresses(
                 external_address
             )
@@ -231,9 +225,21 @@ class Router:
                     f"Client type({client_type}) is not supported for {external_address}"
                 )
             address = client_type_to_addresses[client_type]
+            cache_key = (external_address, from_who, client_type)
+            if cached and cache_key in self._cache:
+                cached_client = self._cache[cache_key]
+                if cached_client.closed:  # pragma: no cover
+                    # closed before, ignore it
+                    del self._cache[cache_key]
+                elif cached_client.dest_address != address:
+                    del self._cache[cache_key]
+                    await cached_client.close()
+                else:
+                    return cached_client
+
             client = await self._create_client(client_type, address, **kw)
             if cached:
-                self._cache[external_address, from_who, client_type] = client
+                self._cache[cache_key] = client
             return client
 
     def get_proxy(self, from_addr: str) -> str | None:
