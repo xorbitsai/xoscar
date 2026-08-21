@@ -167,7 +167,10 @@ class Router:
                     # The route changed. Retire the stale connection from the
                     # event loop that owns this thread-local cache.
                     del self._cache[cache_key]
-                    await cached_client.close()
+                    try:
+                        await cached_client.close()
+                    except Exception:
+                        pass
                 else:
                     return cached_client
 
