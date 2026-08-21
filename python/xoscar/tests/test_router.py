@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import threading
 from unittest import mock
 
@@ -19,6 +20,7 @@ import pytest
 
 from ..backends.core import ActorCallerThreadLocal
 from ..backends.router import Router
+from ..errors import ServerClosed
 
 
 class FakeClient:
@@ -99,6 +101,34 @@ async def test_listener_removes_closed_client():
     task = caller._clients[client]  # noqa: SLF001
 
     await task
+
+    assert client not in caller._clients  # noqa: SLF001
+    assert client not in caller._client_to_message_futures  # noqa: SLF001
+    assert client.closed
+
+
+@pytest.mark.asyncio
+async def test_listener_cancellation_notifies_pending_futures():
+    class BlockingClient(FakeClient):
+        async def recv(self):
+            await asyncio.Event().wait()
+
+    caller = ActorCallerThreadLocal()
+    client = BlockingClient("127.0.0.1:1234")
+    caller._listen_client(client)  # noqa: SLF001
+    task = caller._clients[client]  # noqa: SLF001
+    pending = asyncio.get_running_loop().create_future()
+    caller._client_to_message_futures[client][  # noqa: SLF001
+        b"message-id"
+    ] = pending
+
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    with pytest.raises(ServerClosed):
+        await pending
 
     assert client not in caller._clients  # noqa: SLF001
     assert client not in caller._client_to_message_futures  # noqa: SLF001

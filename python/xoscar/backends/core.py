@@ -144,7 +144,14 @@ class ActorCallerThreadLocal:
                 pass
             finally:
                 self._clients.pop(client, None)
-                self._client_to_message_futures.pop(client, None)
+                message_futures = self._client_to_message_futures.pop(client, {})
+                if message_futures:
+                    error = ServerClosed(
+                        f"Remote server {client.dest_address} closed"
+                    )
+                    for future in message_futures.values():
+                        if not future.done():
+                            future.set_exception(copy.copy(error))
 
     async def call_with_client(
         self, client: Client, message: _MessageBase, wait: bool = True
