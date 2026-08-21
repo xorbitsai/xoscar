@@ -137,28 +137,28 @@ class ActorCallerThreadLocal:
             for future in message_futures.values():
                 future.set_exception(copy.copy(error))
         finally:
+            self._clients.pop(client, None)
+            message_futures = self._client_to_message_futures.pop(client, {})
+            if message_futures:
+                error = ServerClosed(f"Remote server {client.dest_address} closed")
+                for future in message_futures.values():
+                    if not future.done():
+                        future.set_exception(copy.copy(error))
             try:
                 await client.close()
             except:  # noqa: E722  # nosec  # pylint: disable=bare-except
                 # ignore all error if fail to close at last
                 pass
-            finally:
-                self._clients.pop(client, None)
-                message_futures = self._client_to_message_futures.pop(client, {})
-                if message_futures:
-                    error = ServerClosed(
-                        f"Remote server {client.dest_address} closed"
-                    )
-                    for future in message_futures.values():
-                        if not future.done():
-                            future.set_exception(copy.copy(error))
 
     async def call_with_client(
         self, client: Client, message: _MessageBase, wait: bool = True
     ) -> ResultMessage | ErrorMessage | asyncio.Future:
+        message_futures = self._client_to_message_futures.get(client)
+        if message_futures is None or client.closed:
+            raise ServerClosed(f"Remote server {client.dest_address} closed")
         loop = asyncio.get_running_loop()
         wait_response = loop.create_future()
-        self._client_to_message_futures[client][message.message_id] = wait_response
+        message_futures[message.message_id] = wait_response
 
         with Timer() as timer:
             try:
@@ -186,9 +186,12 @@ class ActorCallerThreadLocal:
         meta_message: _MessageBase,
         wait: bool = True,
     ) -> ResultMessage | ErrorMessage | asyncio.Future:
+        message_futures = self._client_to_message_futures.get(client)
+        if message_futures is None or client.closed:
+            raise ServerClosed(f"Remote server {client.dest_address} closed")
         loop = asyncio.get_running_loop()
         wait_response = loop.create_future()
-        self._client_to_message_futures[client][meta_message.message_id] = wait_response
+        message_futures[meta_message.message_id] = wait_response
 
         with Timer() as timer:
             try:

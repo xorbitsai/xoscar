@@ -152,6 +152,7 @@ class Router:
         proxy_addresses: list[str] | None = None,
         **kw,
     ) -> Client:
+        stale_client: Client | None = None
         async with self._lock:
             proxy_addrs: tuple[str, ...] | None = (
                 tuple(proxy_addresses) if proxy_addresses else None
@@ -167,10 +168,7 @@ class Router:
                     # The route changed. Retire the stale connection from the
                     # event loop that owns this thread-local cache.
                     del self._cache[cache_key]
-                    try:
-                        await cached_client.close()
-                    except Exception:
-                        pass
+                    stale_client = cached_client
                 else:
                     return cached_client
 
@@ -178,7 +176,13 @@ class Router:
             client = await self._create_client(client_type, address, **kw)
             if cached:
                 self._cache[cache_key] = client
-            return client
+
+        if stale_client is not None:
+            try:
+                await stale_client.close()
+            except Exception:
+                pass
+        return client
 
     async def _create_client(
         self, client_type: Type[Client], address: str, **kw
@@ -219,6 +223,7 @@ class Router:
         cached: bool = True,
         **kw,
     ) -> Client:
+        stale_client: Client | None = None
         async with self._lock:
             client_type_to_addresses = self._get_client_type_to_addresses(
                 external_address
@@ -236,17 +241,20 @@ class Router:
                     del self._cache[cache_key]
                 elif cached_client.dest_address != address:
                     del self._cache[cache_key]
-                    try:
-                        await cached_client.close()
-                    except Exception:
-                        pass
+                    stale_client = cached_client
                 else:
                     return cached_client
 
             client = await self._create_client(client_type, address, **kw)
             if cached:
                 self._cache[cache_key] = client
-            return client
+
+        if stale_client is not None:
+            try:
+                await stale_client.close()
+            except Exception:
+                pass
+        return client
 
     def get_proxy(self, from_addr: str) -> str | None:
         """
