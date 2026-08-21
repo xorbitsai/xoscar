@@ -18,6 +18,7 @@ from unittest import mock
 
 import pytest
 
+from ..backends.communication import get_client_type
 from ..backends.core import ActorCallerThreadLocal
 from ..backends.router import Router
 from ..errors import ServerClosed
@@ -123,6 +124,37 @@ async def test_closing_stale_client_does_not_hold_router_lock():
 
         allow_close.set()
         await changed_route
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("via_type", [False, True])
+async def test_stale_client_closed_when_replacement_creation_fails(via_type):
+    router = Router([], None, {"worker": "127.0.0.1:1234"})
+    stale_client = FakeClient("127.0.0.1:1234")
+    first_client = True
+
+    async def create_client(_client_type, _address, **_kwargs):
+        nonlocal first_client
+        if first_client:
+            first_client = False
+            return stale_client
+        raise ConnectionError("connect failed")
+
+    async def get_client():
+        if via_type:
+            client_type = get_client_type("127.0.0.1:1234")
+            return await router.get_client_via_type("worker", client_type)
+        return await router.get_client("worker")
+
+    with mock.patch.object(Router, "_create_client", side_effect=create_client):
+        await get_client()
+        router.set_mapping({"worker": "127.0.0.1:4321"})
+
+        with pytest.raises(ConnectionError, match="connect failed"):
+            await get_client()
+
+    assert stale_client.closed
+    assert stale_client.close_count == 1
 
 
 @pytest.mark.asyncio

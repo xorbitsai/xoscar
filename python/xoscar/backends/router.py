@@ -153,36 +153,37 @@ class Router:
         **kw,
     ) -> Client:
         stale_client: Client | None = None
-        async with self._lock:
-            proxy_addrs: tuple[str, ...] | None = (
-                tuple(proxy_addresses) if proxy_addresses else None
-            )
-            cache_key = (external_address, from_who, None, proxy_addrs)
-            address = self._resolve_address(external_address, proxy_addresses)
-            if cached and cache_key in self._cache:
-                cached_client = self._cache[cache_key]
-                if cached_client.closed:
-                    # closed before, ignore it
-                    del self._cache[cache_key]
-                elif cached_client.dest_address != address:
-                    # The route changed. Retire the stale connection from the
-                    # event loop that owns this thread-local cache.
-                    del self._cache[cache_key]
-                    stale_client = cached_client
-                else:
-                    return cached_client
+        try:
+            async with self._lock:
+                proxy_addrs: tuple[str, ...] | None = (
+                    tuple(proxy_addresses) if proxy_addresses else None
+                )
+                cache_key = (external_address, from_who, None, proxy_addrs)
+                address = self._resolve_address(external_address, proxy_addresses)
+                if cached and cache_key in self._cache:
+                    cached_client = self._cache[cache_key]
+                    if cached_client.closed:
+                        # closed before, ignore it
+                        del self._cache[cache_key]
+                    elif cached_client.dest_address != address:
+                        # The route changed. Retire the stale connection from the
+                        # event loop that owns this thread-local cache.
+                        del self._cache[cache_key]
+                        stale_client = cached_client
+                    else:
+                        return cached_client
 
-            client_type: Type[Client] = get_client_type(address)
-            client = await self._create_client(client_type, address, **kw)
-            if cached:
-                self._cache[cache_key] = client
-
-        if stale_client is not None:
-            try:
-                await stale_client.close()
-            except Exception:
-                pass
-        return client
+                client_type: Type[Client] = get_client_type(address)
+                client = await self._create_client(client_type, address, **kw)
+                if cached:
+                    self._cache[cache_key] = client
+                return client
+        finally:
+            if stale_client is not None:
+                try:
+                    await stale_client.close()
+                except Exception:
+                    pass
 
     async def _create_client(
         self, client_type: Type[Client], address: str, **kw
@@ -224,37 +225,39 @@ class Router:
         **kw,
     ) -> Client:
         stale_client: Client | None = None
-        async with self._lock:
-            client_type_to_addresses = self._get_client_type_to_addresses(
-                external_address
-            )
-            if client_type not in client_type_to_addresses:  # pragma: no cover
-                raise ValueError(
-                    f"Client type({client_type}) is not supported for {external_address}"
+        try:
+            async with self._lock:
+                client_type_to_addresses = self._get_client_type_to_addresses(
+                    external_address
                 )
-            address = client_type_to_addresses[client_type]
-            cache_key = (external_address, from_who, client_type)
-            if cached and cache_key in self._cache:
-                cached_client = self._cache[cache_key]
-                if cached_client.closed:  # pragma: no cover
-                    # closed before, ignore it
-                    del self._cache[cache_key]
-                elif cached_client.dest_address != address:
-                    del self._cache[cache_key]
-                    stale_client = cached_client
-                else:
-                    return cached_client
+                if client_type not in client_type_to_addresses:  # pragma: no cover
+                    raise ValueError(
+                        f"Client type({client_type}) is not supported for "
+                        f"{external_address}"
+                    )
+                address = client_type_to_addresses[client_type]
+                cache_key = (external_address, from_who, client_type)
+                if cached and cache_key in self._cache:
+                    cached_client = self._cache[cache_key]
+                    if cached_client.closed:  # pragma: no cover
+                        # closed before, ignore it
+                        del self._cache[cache_key]
+                    elif cached_client.dest_address != address:
+                        del self._cache[cache_key]
+                        stale_client = cached_client
+                    else:
+                        return cached_client
 
-            client = await self._create_client(client_type, address, **kw)
-            if cached:
-                self._cache[cache_key] = client
-
-        if stale_client is not None:
-            try:
-                await stale_client.close()
-            except Exception:
-                pass
-        return client
+                client = await self._create_client(client_type, address, **kw)
+                if cached:
+                    self._cache[cache_key] = client
+                return client
+        finally:
+            if stale_client is not None:
+                try:
+                    await stale_client.close()
+                except Exception:
+                    pass
 
     def get_proxy(self, from_addr: str) -> str | None:
         """
