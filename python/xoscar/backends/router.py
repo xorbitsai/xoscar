@@ -77,19 +77,26 @@ class Router:
 
     @property
     def _cache(self) -> dict[_CACHE_KEY_TYPE, Client]:
-        try:
-            return self._cache_local.cache
-        except AttributeError:
-            cache = self._cache_local.cache = dict()
-            return cache
+        self._ensure_loop_local_cache()
+        return self._cache_local.cache
 
     @property
     def _lock(self) -> asyncio.Lock:
+        self._ensure_loop_local_cache()
+        return self._cache_local.lock
+
+    def _ensure_loop_local_cache(self) -> None:
         try:
-            return self._cache_local.lock
-        except AttributeError:
-            lock = self._cache_local.lock = asyncio.Lock()
-            return lock
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Keep supporting synchronous cache inspection. Once this thread
+            # enters an event loop, a separate loop-owned cache is created.
+            loop = None
+
+        if getattr(self._cache_local, "loop", object()) is not loop:
+            self._cache_local.loop = loop
+            self._cache_local.cache = dict()
+            self._cache_local.lock = asyncio.Lock()
 
     def set_mapping(self, mapping: dict[str, str]):
         self._mapping = mapping

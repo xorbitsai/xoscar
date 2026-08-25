@@ -62,6 +62,23 @@ def test_mapping_updates_preserve_other_thread_cache():
     assert result["after"] is result["before"]
 
 
+def test_router_cache_and_lock_are_scoped_by_event_loop():
+    router = Router([], None, {"worker": "127.0.0.1:1234"})
+    states = []
+
+    async def record_state():
+        states.append((router._cache, router._lock))
+        router._cache[("worker", None, None)] = FakeClient("127.0.0.1:1234")
+
+    asyncio.run(record_state())
+    asyncio.run(record_state())
+
+    first_cache, first_lock = states[0]
+    second_cache, second_lock = states[1]
+    assert second_cache is not first_cache
+    assert second_lock is not first_lock
+
+
 @pytest.mark.asyncio
 async def test_get_client_reuses_unchanged_route_and_closes_changed_route():
     router = Router([], None, {"worker": "127.0.0.1:1234"})
