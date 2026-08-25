@@ -74,9 +74,7 @@ async def test_get_client_reuses_unchanged_route_and_closes_changed_route():
 
     with mock.patch.object(Router, "_create_client", side_effect=create_client):
         first = await router.get_client("worker")
-        router.set_mapping(
-            {"worker": "127.0.0.1:1234", "other": "127.0.0.1:1235"}
-        )
+        router.set_mapping({"worker": "127.0.0.1:1234", "other": "127.0.0.1:1235"})
         assert await router.get_client("worker") is first
         assert first.close_count == 0
 
@@ -113,9 +111,7 @@ async def test_closing_stale_client_does_not_hold_router_lock():
 
     with mock.patch.object(Router, "_create_client", side_effect=create_client):
         await router.get_client("worker")
-        router.set_mapping(
-            {"worker": "127.0.0.1:4321", "other": "127.0.0.1:1235"}
-        )
+        router.set_mapping({"worker": "127.0.0.1:4321", "other": "127.0.0.1:1235"})
         changed_route = asyncio.create_task(router.get_client("worker"))
         await close_started.wait()
 
@@ -186,9 +182,7 @@ async def test_listener_cancellation_notifies_pending_futures():
     caller._listen_client(client)  # noqa: SLF001
     task = caller._clients[client]  # noqa: SLF001
     pending = asyncio.get_running_loop().create_future()
-    caller._client_to_message_futures[client][  # noqa: SLF001
-        b"message-id"
-    ] = pending
+    caller._client_to_message_futures[client][b"message-id"] = pending  # noqa: SLF001
 
     await asyncio.sleep(0)
     task.cancel()
