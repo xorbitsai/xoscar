@@ -42,13 +42,13 @@ def test_mapping_updates_preserve_other_thread_cache():
     updated = threading.Event()
     result = {}
 
-    def use_cache():
+    async def use_cache():
         result["before"] = router._cache
         ready.set()
         assert updated.wait(timeout=5)
         result["after"] = router._cache
 
-    thread = threading.Thread(target=use_cache)
+    thread = threading.Thread(target=lambda: asyncio.run(use_cache()))
     thread.start()
     assert ready.wait(timeout=5)
 
