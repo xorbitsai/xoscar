@@ -16,11 +16,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import multiprocessing
 import os
 import re
 import sys
+import threading
 import time
 from unittest import mock
 
@@ -59,6 +61,7 @@ from ...message import (
     ErrorMessage,
     HasActorMessage,
     MessageType,
+    ResultMessage,
     SendMessage,
     TellMessage,
     new_message_id,
@@ -928,6 +931,79 @@ async def test_auto_recover(auto_recover):
         else:
             with pytest.raises((ServerClosed, ConnectionError)):
                 await ctx.has_actor(actor_ref)
+
+
+@pytest.mark.asyncio
+async def test_recover_sub_pool_concurrent_create_actor():
+    # GH-48: recover_sub_pool() iterated self._allocated_actors[address]
+    # directly across an await; a concurrent create_actor() mutating that
+    # same dict raised "dictionary changed size during iteration".
+    pool = object.__new__(MainActorPool)
+    pool.external_address = "dummy://main"
+    pool._config = mock.Mock(get_process_index=mock.Mock(return_value=0))
+    pool.sub_processes = {}
+    pool._auto_recover = "actor"
+    pool._allocation_lock = threading.Lock()
+    pool.start_sub_pool = mock.AsyncMock(return_value=None)
+    pool.wait_sub_pools_ready = mock.AsyncMock(return_value=(["proc"], ["addr"]))
+
+    sub_address = "dummy://sub"
+    existing_message = CreateActorMessage(
+        new_message_id(),
+        TestActor,
+        b"existing",
+        (),
+        {},
+        allocate_strategy=AddressSpecified(sub_address),
+    )
+    pool._allocated_actors = {
+        sub_address: {b"existing": (AddressSpecified(sub_address), existing_message)}
+    }
+
+    reached_recover_call = asyncio.Event()
+    reached_create_call = asyncio.Event()
+    release_recover_call = asyncio.Event()
+    call_count = 0
+
+    async def fake_call(address, message):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # recover_sub_pool()'s call for the pre-existing actor
+            reached_recover_call.set()
+            await release_recover_call.wait()
+        else:
+            # the racing create_actor() call; hang so its placeholder
+            # entry stays in the dict while recover_sub_pool resumes
+            reached_create_call.set()
+            await asyncio.Event().wait()
+        return ResultMessage(new_message_id(), b"actor_ref")
+
+    pool.call = fake_call
+
+    recover_task = asyncio.create_task(pool.recover_sub_pool(sub_address))
+    await asyncio.wait_for(reached_recover_call.wait(), timeout=5)
+
+    new_message = CreateActorMessage(
+        new_message_id(),
+        TestActor,
+        b"new",
+        (),
+        {},
+        allocate_strategy=AddressSpecified(sub_address),
+    )
+    create_task_ = asyncio.create_task(pool.create_actor(new_message))
+    await asyncio.wait_for(reached_create_call.wait(), timeout=5)
+    # create_actor() has already inserted its placeholder into the same
+    # dict recover_sub_pool() is mid-iteration over
+    assert len(pool._allocated_actors[sub_address]) == 2
+
+    release_recover_call.set()
+    await asyncio.wait_for(recover_task, timeout=5)
+
+    create_task_.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await create_task_
 
 
 @pytest.mark.parametrize(

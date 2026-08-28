@@ -501,7 +501,10 @@ class MainActorPool(MainActorPoolBase):
 
         if self._auto_recover == "actor":
             # need to recover all created actors
-            for _, message in self._allocated_actors[address].values():
+            # copy to a list first: create_actor() mutates this same dict
+            # concurrently, and iterating it directly across the `await` below
+            # can raise "dictionary changed size during iteration"
+            for _, message in list(self._allocated_actors[address].values()):
                 create_actor_message: CreateActorMessage = message  # type: ignore
                 await self.call(address, create_actor_message)
 
