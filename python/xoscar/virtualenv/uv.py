@@ -24,7 +24,7 @@ import sysconfig
 import tempfile
 from importlib.metadata import distributions
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from packaging.requirements import Requirement
 from packaging.version import Version
@@ -34,6 +34,7 @@ from .utils import is_vcs_url, run_subprocess_with_logger
 
 UV_PATH = os.getenv("XOSCAR_UV_PATH")
 SKIP_INSTALLED = bool(int(os.getenv("XOSCAR_VIRTUAL_ENV_SKIP_INSTALLED", "0")))
+SourceOption = Optional[Union[str, list[str]]]
 logger = logging.getLogger(__name__)
 
 
@@ -115,6 +116,35 @@ class UVVirtualEnvManager(VirtualEnvManager):
         logger.info("Creating virtualenv via command: %s", cmd)
         subprocess.run(cmd, check=True)
 
+    @staticmethod
+    def _append_source_options(
+        command: list[str],
+        *,
+        index_url: str | None = None,
+        extra_index_url: SourceOption = None,
+        find_links: SourceOption = None,
+        trusted_host: SourceOption = None,
+        index_strategy: str | None = None,
+    ) -> None:
+        """Append uv package source options to an installation command."""
+        if index_url:
+            command.extend(["-i", index_url])
+
+        for value, option in (
+            (extra_index_url, "--extra-index-url"),
+            (find_links, "-f"),
+            (trusted_host, "--trusted-host"),
+        ):
+            if not value:
+                continue
+
+            values = [value] if isinstance(value, str) else value
+            for item in values:
+                command.extend([option, item])
+
+        if index_strategy:
+            command.extend(["--index-strategy", index_strategy])
+
     def _resolve_install_plan(
         self,
         specs: list[str],
@@ -122,6 +152,9 @@ class UVVirtualEnvManager(VirtualEnvManager):
         index_url: str | None = None,
         extra_index_url: str | list[str] | None = None,
         index_strategy: str | None = None,
+        *,
+        find_links: SourceOption = None,
+        trusted_host: SourceOption = None,
     ) -> list[str]:
         """
         Run uv --dry-run with pinned constraints and return
@@ -143,20 +176,14 @@ class UVVirtualEnvManager(VirtualEnvManager):
                 f.name,
             ]
 
-            # Add index URL parameters
-            if index_url:
-                cmd += ["-i", index_url]
-            if extra_index_url:
-                cmd += (
-                    ["--extra-index-url", extra_index_url]
-                    if isinstance(extra_index_url, str)
-                    else [
-                        opt for v in extra_index_url for opt in ("--extra-index-url", v)
-                    ]
-                )
-            if index_strategy:
-                cmd += ["--index-strategy", index_strategy]
-
+            self._append_source_options(
+                cmd,
+                index_url=index_url,
+                extra_index_url=extra_index_url,
+                find_links=find_links,
+                trusted_host=trusted_host,
+                index_strategy=index_strategy,
+            )
             cmd.extend(specs)
             try:
                 result = subprocess.run(cmd, check=True, text=True, capture_output=True)
@@ -252,6 +279,9 @@ class UVVirtualEnvManager(VirtualEnvManager):
         extra_index_url: str | list[str] | None = None,
         index_strategy: str | None = None,
         relax_names: frozenset[str] = frozenset(),
+        *,
+        find_links: SourceOption = None,
+        trusted_host: SourceOption = None,
     ) -> list[str]:
         """
         Filter out packages that are already installed with the same version.
@@ -272,7 +302,13 @@ class UVVirtualEnvManager(VirtualEnvManager):
 
         if to_resolve:
             resolved = self._resolve_install_plan(
-                to_resolve, pinned, index_url, extra_index_url, index_strategy
+                to_resolve,
+                pinned,
+                index_url,
+                extra_index_url,
+                index_strategy,
+                find_links=find_links,
+                trusted_host=trusted_host,
             )
             logger.debug(f"Resolved install list: {resolved}")
             if not keep and not resolved:
@@ -309,6 +345,8 @@ class UVVirtualEnvManager(VirtualEnvManager):
         skip_installed = kwargs.pop("skip_installed", SKIP_INSTALLED)
         index_url = kwargs.pop("index_url", None)
         extra_index_url = kwargs.pop("extra_index_url", None)
+        find_links = kwargs.pop("find_links", None)
+        trusted_host = kwargs.pop("trusted_host", None)
         index_strategy = kwargs.pop("index_strategy", None)
 
         # Process packages with variable substitution
@@ -330,6 +368,8 @@ class UVVirtualEnvManager(VirtualEnvManager):
                     extra_index_url,
                     index_strategy,
                     relax_names,
+                    find_links=find_links,
+                    trusted_host=trusted_host,
                 )
                 if not install_list:
                     logger.info("All required packages are already installed.")
@@ -343,7 +383,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
                     str(self.env_path),
                     "--color=always",
                     "--no-deps",
-                ] + install_list
+                ]
             else:
                 cmd = [
                     uv_path,
@@ -352,37 +392,19 @@ class UVVirtualEnvManager(VirtualEnvManager):
                     "-p",
                     str(self.env_path),
                     "--color=always",
-                ] + install_list
+                ]
 
-            if index_url:
-                cmd += ["-i", index_url]
-            param_and_option = [
-                (extra_index_url, "--extra-index-url"),
-                ("find_links" in kwargs and kwargs["find_links"], "-f"),
-                ("trusted_host" in kwargs and kwargs["trusted_host"], "--trusted-host"),
-            ]
-            for param, option in param_and_option:
-                if param:
-                    val = (
-                        param
-                        if not isinstance(param, bool)
-                        else kwargs.get(
-                            {"-f": "find_links", "--trusted-host": "trusted_host"}[
-                                option
-                            ]
-                        )
-                    )
-                    if val:
-                        cmd += (
-                            [option, val]
-                            if isinstance(val, str)
-                            else [opt for v in val for opt in (option, v)]
-                        )
-
-            if index_strategy:
-                cmd += ["--index-strategy", index_strategy]
+            self._append_source_options(
+                cmd,
+                index_url=index_url,
+                extra_index_url=extra_index_url,
+                find_links=find_links,
+                trusted_host=trusted_host,
+                index_strategy=index_strategy,
+            )
             if kwargs.get("no_build_isolation", False):
                 cmd += ["--no-build-isolation"]
+            cmd.extend(install_list)
 
             logger.info("Installing packages via command: %s", cmd)
             if not log:
