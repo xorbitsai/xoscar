@@ -681,3 +681,230 @@ def test_install_packages_no_retry_after_cancel(uv_manager):
             uv_manager.install_packages(["#system_numpy#", "vllm==0.21.0"])
 
     assert len(calls) == 1
+
+
+def test_append_source_options_supports_string_and_list_values():
+    command = ["uv", "pip", "install"]
+
+    UVVirtualEnvManager._append_source_options(
+        command,
+        index_url="https://pypi.example/simple",
+        extra_index_url=[
+            "https://extra-1.example/simple",
+            "https://extra-2.example/simple",
+        ],
+        find_links=["/wheels/base", "/wheels/model"],
+        trusted_host="mirror.example",
+        index_strategy="unsafe-best-match",
+    )
+
+    assert command == [
+        "uv",
+        "pip",
+        "install",
+        "-i",
+        "https://pypi.example/simple",
+        "--extra-index-url",
+        "https://extra-1.example/simple",
+        "--extra-index-url",
+        "https://extra-2.example/simple",
+        "-f",
+        "/wheels/base",
+        "-f",
+        "/wheels/model",
+        "--trusted-host",
+        "mirror.example",
+        "--index-strategy",
+        "unsafe-best-match",
+    ]
+
+
+def test_append_source_options_omits_unconfigured_sources():
+    command = ["uv", "pip", "install"]
+
+    UVVirtualEnvManager._append_source_options(command)
+
+    assert command == ["uv", "pip", "install"]
+
+
+def test_resolve_install_plan_forwards_find_links_and_trusted_host(
+    monkeypatch, tmp_path
+):
+    commands = []
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        assert kwargs == {"check": True, "text": True, "capture_output": True}
+        return mock.Mock(stderr="+ vllm==0.28.0+custom\n")
+
+    monkeypatch.setattr("xoscar.virtualenv.uv.subprocess.run", fake_run)
+    manager = UVVirtualEnvManager(tmp_path / "venv")
+
+    result = manager._resolve_install_plan(
+        ["vllm==0.28.0+custom"],
+        {"numpy": "2.3.5"},
+        index_url="https://pypi.example/simple",
+        extra_index_url=["https://extra.example/simple"],
+        index_strategy="unsafe-best-match",
+        find_links=["/wheels/base", "/wheels/model"],
+        trusted_host=["mirror-1.example", "mirror-2.example"],
+    )
+
+    assert result == ["vllm==0.28.0+custom"]
+    command = commands[0]
+    assert command[command.index("-f") + 1] == "/wheels/base"
+    second_find_links = command.index("-f", command.index("-f") + 1)
+    assert command[second_find_links + 1] == "/wheels/model"
+    assert command.count("--trusted-host") == 2
+    assert command[-1] == "vllm==0.28.0+custom"
+
+
+def test_filter_forwards_sources_to_resolver(monkeypatch, tmp_path):
+    monkeypatch.setattr("xoscar.virtualenv.uv.distributions", lambda: [])
+    manager = UVVirtualEnvManager(tmp_path / "venv")
+    captured = {}
+
+    def fake_resolve(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return ["custom-package==2.0"]
+
+    monkeypatch.setattr(manager, "_resolve_install_plan", fake_resolve)
+
+    result = manager._filter_packages_not_installed(
+        ["custom-package>=1"],
+        "https://pypi.example/simple",
+        ["https://extra.example/simple"],
+        "unsafe-best-match",
+        find_links=["/wheels/model"],
+        trusted_host="mirror.example",
+    )
+
+    assert result == ["custom-package==2.0"]
+    assert captured["args"] == (
+        ["custom-package>=1"],
+        {},
+        "https://pypi.example/simple",
+        ["https://extra.example/simple"],
+        "unsafe-best-match",
+    )
+    assert captured["kwargs"] == {
+        "find_links": ["/wheels/model"],
+        "trusted_host": "mirror.example",
+    }
+
+
+def test_install_uses_sources_for_filter_and_formal_install(monkeypatch, tmp_path):
+    commands = []
+    filter_calls = []
+
+    def fake_filter(*args, **kwargs):
+        filter_calls.append((args, kwargs))
+        return ["custom-package==2.0"]
+
+    monkeypatch.setattr(
+        "xoscar.virtualenv.uv.subprocess.Popen",
+        lambda command: commands.append(command) or mock.Mock(wait=lambda: 0),
+    )
+    manager = UVVirtualEnvManager(tmp_path / "venv")
+    monkeypatch.setattr(manager, "_filter_packages_not_installed", fake_filter)
+
+    manager.install_packages(
+        ["custom-package>=1"],
+        skip_installed=True,
+        index_url="https://pypi.example/simple",
+        extra_index_url=["https://extra.example/simple"],
+        find_links=["/wheels/base", "/wheels/model"],
+        trusted_host="mirror.example",
+        index_strategy="unsafe-best-match",
+    )
+
+    assert len(filter_calls) == 1
+    assert filter_calls[0][1] == {
+        "find_links": ["/wheels/base", "/wheels/model"],
+        "trusted_host": "mirror.example",
+    }
+    command = commands[0]
+    assert command.count("-f") == 2
+    assert command[command.index("-f") + 1] == "/wheels/base"
+    assert command.index("unsafe-best-match") < command.index("custom-package==2.0")
+    assert command[-1] == "custom-package==2.0"
+
+
+def test_install_without_skip_installed_keeps_find_links(monkeypatch, tmp_path):
+    commands = []
+
+    def fail_filter(*args, **kwargs):
+        raise AssertionError("dry-run filter should not run")
+
+    class SuccessfulProcess:
+        returncode = 0
+
+        def wait(self):
+            return self.returncode
+
+    monkeypatch.setattr(
+        "xoscar.virtualenv.uv.subprocess.Popen",
+        lambda command: commands.append(command) or SuccessfulProcess(),
+    )
+    manager = UVVirtualEnvManager(tmp_path / "venv")
+    monkeypatch.setattr(manager, "_filter_packages_not_installed", fail_filter)
+
+    manager.install_packages(
+        ["custom-package==2.0"],
+        skip_installed=False,
+        find_links="/wheels/model",
+    )
+
+    assert len(commands) == 1
+    assert commands[0].count("-f") == 1
+    assert commands[0][commands[0].index("-f") + 1] == "/wheels/model"
+    assert commands[0][-1] == "custom-package==2.0"
+
+
+def test_retry_preserves_sources_for_each_dry_run(monkeypatch, tmp_path):
+    class FakeDist:
+        metadata = {"Name": "numpy"}
+        version = "1.26.4"
+
+    resolve_calls = []
+    install_calls = []
+
+    def fake_resolve(self, specs, pinned, *args, **kwargs):
+        resolve_calls.append((list(specs), dict(pinned), kwargs))
+        return ["numpy==2.1.0", "vllm==0.21.0"]
+
+    class Process:
+        def __init__(self, returncode):
+            self.returncode = returncode
+
+        def wait(self):
+            return self.returncode
+
+    def fake_popen(command):
+        install_calls.append(command)
+        return Process(1 if len(install_calls) == 1 else 0)
+
+    monkeypatch.setattr("xoscar.virtualenv.uv.distributions", lambda: [FakeDist()])
+    monkeypatch.setattr(UVVirtualEnvManager, "_resolve_install_plan", fake_resolve)
+    monkeypatch.setattr("xoscar.virtualenv.uv.subprocess.Popen", fake_popen)
+    manager = UVVirtualEnvManager(tmp_path / "venv")
+
+    manager.install_packages(
+        ["#system_numpy#", "vllm==0.21.0"],
+        skip_installed=True,
+        find_links=["/wheels/model"],
+        trusted_host=["mirror.example"],
+    )
+
+    assert len(resolve_calls) == 2
+    assert all(
+        call[2]
+        == {
+            "find_links": ["/wheels/model"],
+            "trusted_host": ["mirror.example"],
+        }
+        for call in resolve_calls
+    )
+    assert len(install_calls) == 2
+    assert all("/wheels/model" in command for command in install_calls)
