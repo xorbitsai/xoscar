@@ -501,7 +501,24 @@ class MainActorPool(MainActorPoolBase):
 
         if self._auto_recover == "actor":
             # need to recover all created actors
-            for _, message in self._allocated_actors[address].values():
+            # copy to a list first: create_actor() mutates this same dict
+            # concurrently, and iterating it directly across the `await` below
+            # can raise "dictionary changed size during iteration"
+            #
+            # skip in-flight placeholder entries (keyed by None):
+            # MainActorPoolBase.create_actor() inserts one before awaiting
+            # the sub pool create and only pops it once that call returns,
+            # so a placeholder can still be sitting in the dict here if the
+            # sub pool died mid create. Replaying it would resend the
+            # caller's original, unfinished CreateActorMessage
+            # (from_main=False) straight to the sub pool, which duplicates
+            # the still-pending create and can raise ActorAlreadyExist or
+            # register the actor a second time via notify_main_pool_to_create.
+            for actor_ref, (_, message) in list(
+                self._allocated_actors[address].items()
+            ):
+                if actor_ref is None:
+                    continue
                 create_actor_message: CreateActorMessage = message  # type: ignore
                 await self.call(address, create_actor_message)
 
