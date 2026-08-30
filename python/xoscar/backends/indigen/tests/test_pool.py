@@ -1006,6 +1006,65 @@ async def test_recover_sub_pool_concurrent_create_actor():
         await create_task_
 
 
+@pytest.mark.asyncio
+async def test_recover_sub_pool_skips_in_flight_placeholder():
+    # GH-48 review follow-up: create_actor() inserts a placeholder under
+    # key None before awaiting the sub pool create and only removes it
+    # once that call returns; if the sub pool dies mid create, the
+    # placeholder is left behind holding the caller's original,
+    # unfinished CreateActorMessage. recover_sub_pool() must skip that
+    # placeholder rather than replay it, since replaying resends an
+    # unfinished create straight to the sub pool.
+    pool = object.__new__(MainActorPool)
+    pool.external_address = "dummy://main"
+    pool._config = mock.Mock(get_process_index=mock.Mock(return_value=0))
+    pool.sub_processes = {}
+    pool._auto_recover = "actor"
+    pool._allocation_lock = threading.Lock()
+    pool.start_sub_pool = mock.AsyncMock(return_value=None)
+    pool.wait_sub_pools_ready = mock.AsyncMock(return_value=(["proc"], ["addr"]))
+
+    sub_address = "dummy://sub"
+    existing_message = CreateActorMessage(
+        new_message_id(),
+        TestActor,
+        b"existing",
+        (),
+        {},
+        allocate_strategy=AddressSpecified(sub_address),
+    )
+    # a still in-flight create_actor() call left its placeholder (key
+    # None) behind because the sub pool died before it could be popped
+    placeholder_message = CreateActorMessage(
+        new_message_id(),
+        TestActor,
+        b"in-flight",
+        (),
+        {},
+        allocate_strategy=AddressSpecified(sub_address),
+    )
+    pool._allocated_actors = {
+        sub_address: {
+            b"existing": (AddressSpecified(sub_address), existing_message),
+            None: (AddressSpecified(sub_address), placeholder_message),
+        }
+    }
+
+    replayed_actor_ids = []
+
+    async def fake_call(address, message):
+        replayed_actor_ids.append(message.actor_id)
+        return ResultMessage(new_message_id(), b"actor_ref")
+
+    pool.call = fake_call
+
+    await pool.recover_sub_pool(sub_address)
+
+    # only the real, completed entry is replayed; the placeholder is
+    # skipped, never resent to the sub pool
+    assert replayed_actor_ids == [b"existing"]
+
+
 @pytest.mark.parametrize(
     "exception_config",
     [
