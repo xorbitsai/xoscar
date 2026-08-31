@@ -9,3 +9,4 @@ API Reference
 
    actor-pool
    actor
+   collective-communication

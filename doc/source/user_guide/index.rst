@@ -9,3 +9,4 @@ User Guide
 
    actor
    actor-pool
+   collective-communication
