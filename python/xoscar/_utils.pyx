@@ -48,6 +48,7 @@ def _reset_random_lock_after_fork():
     _rnd_is_seed_set = False
     for dispatcher in list(_type_dispatchers):
         (<TypeDispatcher>dispatcher)._lock = threading.RLock()
+        (<TypeDispatcher>dispatcher)._loading = threading.local()
 
 
 if hasattr(os, "register_at_fork"):
@@ -56,6 +57,7 @@ if hasattr(os, "register_at_fork"):
 cdef class TypeDispatcher:
     def __init__(self):
         self._lock = threading.RLock()
+        self._loading = threading.local()
         self._handlers = dict()
         self._lazy_handlers = dict()
         # store inherited handlers to facilitate unregistering
@@ -68,6 +70,7 @@ cdef class TypeDispatcher:
             self._register(type_, handler)
 
     cdef _register(self, object type_, object handler):
+        self._inherit_handlers.clear()
         if isinstance(type_, str):
             self._lazy_handlers[type_] = handler
         elif type(type_) is not NamedType and isinstance(type_, tuple):
@@ -91,11 +94,16 @@ cdef class TypeDispatcher:
 
     cdef _reload_lazy_handlers(self):
         missing = object()
-        for k in list(self._lazy_handlers):
-            v = self._lazy_handlers.pop(k, missing)
-            if v is missing:
-                # A nested or concurrent reload may have already consumed it.
+        active = getattr(self._loading, "keys", None)
+        if active is None:
+            active = self._loading.keys = set()
+        with self._lock:
+            pending = list(self._lazy_handlers.items())
+        for k, v in pending:
+            if k in active:
+                # Recursive imports in this thread must not load the same key.
                 continue
+            active.add(k)
             mod_name, obj_name = k.rsplit('.', 1)
             try:
                 with warnings.catch_warnings():
@@ -112,10 +120,29 @@ cdef class TypeDispatcher:
                 # incompatible.  Skip only that handler so unrelated actor-pool
                 # startup and serialization remain available.
                 logger.debug("Failed to load lazy handler %s", k, exc_info=True)
+                with self._lock:
+                    if self._lazy_handlers.get(k, missing) is v:
+                        self._lazy_handlers.pop(k)
                 continue
-            self.register(obj_type, v)
+            finally:
+                active.remove(k)
+            with self._lock:
+                # Another thread may have consumed/replaced/unregistered it.
+                # Keep pending keys visible during import so concurrent callers
+                # can resolve them too, rather than spuriously missing a handler.
+                if self._lazy_handlers.get(k, missing) is v:
+                    self._lazy_handlers.pop(k)
+                    self._handlers.setdefault(obj_type, v)
+                    self._inherit_handlers.clear()
 
     cpdef get_handler(self, object type_):
+        with self._lock:
+            if type_ in self._handlers:
+                return self._handlers[type_]
+            if type_ in self._inherit_handlers:
+                return self._inherit_handlers[type_]
+        # Never hold the dispatcher lock while acquiring Python module locks.
+        self._reload_lazy_handlers()
         with self._lock:
             return self._get_handler(type_)
 
@@ -128,7 +155,6 @@ cdef class TypeDispatcher:
         try:
             return self._inherit_handlers[type_]
         except KeyError:
-            self._reload_lazy_handlers()
             if type(type_) is NamedType:
                 named_type = partial(NamedType, type_.name)
                 mro = itertools.chain(
@@ -141,7 +167,8 @@ cdef class TypeDispatcher:
                 # only lookup self._handlers for mro clz
                 handler = self._handlers.get(clz)
                 if handler is not None:
-                    self._inherit_handlers[type_] = handler
+                    if not self._lazy_handlers:
+                        self._inherit_handlers[type_] = handler
                     return handler
             raise KeyError(f'Cannot dispatch type {type_}')
 
@@ -152,8 +179,7 @@ cdef class TypeDispatcher:
     def reload_all_lazy_handlers():
         cdef TypeDispatcher dispatcher
         for dispatcher in list(_type_dispatchers):
-            with dispatcher._lock:
-                dispatcher._reload_lazy_handlers()
+            dispatcher._reload_lazy_handlers()
 
 
 cpdef str to_str(s, encoding='utf-8'):

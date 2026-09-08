@@ -19,6 +19,7 @@ cdef class TypeDispatcher:
     cdef dict _inherit_handlers
     cdef object __weakref__
     cdef object _lock
+    cdef object _loading
 
     cpdef void register(self, object type_, object handler)
     cpdef void unregister(self, object type_)

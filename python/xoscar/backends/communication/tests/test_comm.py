@@ -41,6 +41,43 @@ from .. import (
 )
 from ..ucx import UCXInitializer
 
+
+@pytest.mark.asyncio
+async def test_dummy_cross_thread_queue_ownership():
+    server_loop = asyncio.get_running_loop()
+    handled = asyncio.Event()
+
+    async def handle(channel):
+        assert asyncio.get_running_loop() is server_loop
+        message = await channel.recv()
+        await channel.send(message)
+        handled.set()
+
+    server = await DummyServer.create(
+        {"address": "dummy://cross-thread-ownership", "handle_channel": handle}
+    )
+
+    async def client_main():
+        asyncio.get_running_loop().set_debug(True)
+        client = await DummyClient.connect(server.address)
+        try:
+            # Let the server enter its empty-queue wait before sending.
+            await asyncio.sleep(0.05)
+            await client.channel.send("hello")
+            assert await client.channel.recv() == "hello"
+        finally:
+            await client.close()
+
+    old_debug = server_loop.get_debug()
+    server_loop.set_debug(True)
+    try:
+        await asyncio.wait_for(asyncio.to_thread(asyncio.run, client_main()), 10)
+        await asyncio.wait_for(handled.wait(), 10)
+    finally:
+        await server.stop()
+        server_loop.set_debug(old_debug)
+
+
 test_data = np.random.RandomState(0).rand(10, 10)
 port = get_next_port()
 cupy = lazy_import("cupy")
