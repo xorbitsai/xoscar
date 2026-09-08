@@ -287,6 +287,7 @@ class CMakeBuild(build_ext):
         cmake_args = [
             f"-DBUILD_TMP_DIR={build_temp}",
             f"-DPYTHON_PATH={sys.executable}",
+            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={Path(self.build_lib).resolve() / 'xoscar' / 'collective'}",
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
             "-DCMAKE_POLICY_VERSION_MINIMUM=3.10",
         ]

@@ -33,4 +33,5 @@ dependencies:
   - pip
 
   - pip:
-    - uvloop>=0.21.0; sys.platform!="win32"
+    - uvloop>=0.21.0; sys_platform!="win32" and python_version<"3.14"
+    - uvloop>=0.22.1; sys_platform!="win32" and python_version>="3.14"
