@@ -25,8 +25,8 @@ jobs:
           - os: ubuntu-latest
             arch: auto
             platform-id: manylinux_x86_64
-            python: 39
-            requires-python: ">=3.9,<3.10"
+            python: 314
+            requires-python: ">=3.14,<3.15"
           - os: ubuntu-latest
             arch: auto
             platform-id: manylinux_x86_64
@@ -52,8 +52,8 @@ jobs:
           - os: ubuntu-latest
             arch: aarch64
             platform-id: manylinux_aarch64
-            python: 39
-            requires-python: ">=3.9,<3.10"
+            python: 314
+            requires-python: ">=3.14,<3.15"
           - os: ubuntu-latest
             arch: aarch64
             platform-id: manylinux_aarch64
@@ -79,8 +79,8 @@ jobs:
           - os: macos-15-intel
             arch: x86_64
             platform-id: macosx_x86_64
-            python: 39
-            requires-python: ">=3.9,<3.10"
+            python: 314
+            requires-python: ">=3.14,<3.15"
           - os: macos-15-intel
             arch: x86_64
             platform-id: macosx_x86_64
@@ -106,8 +106,8 @@ jobs:
           - os: macos-latest
             arch: arm64
             platform-id: macosx_arm64
-            python: 39
-            requires-python: ">=3.9,<3.10"
+            python: 314
+            requires-python: ">=3.14,<3.15"
           - os: macos-latest
             arch: arm64
             platform-id: macosx_arm64
@@ -133,8 +133,8 @@ jobs:
           - os: windows-latest
             arch: auto
             platform-id: win_amd64
-            python: 39
-            requires-python: ">=3.9,<3.10"
+            python: 314
+            requires-python: ">=3.14,<3.15"
           - os: windows-latest
             arch: auto
             platform-id: win_amd64
@@ -178,7 +178,7 @@ jobs:
           id: qemu
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.1.0
+        uses: pypa/cibuildwheel@v3.3.1
         env:
           CIBW_ARCHS: ${{ matrix.arch }}
           CIBW_PROJECT_REQUIRES_PYTHON: ${{ matrix.requires-python }}

@@ -1,11 +1,11 @@
-cmake_minimum_required(VERSION 3.11...3.21)
+cmake_minimum_required(VERSION 3.18...3.21)
 
 project(XoscarCollective)
-if(NOT DEFINED PYTHON_PATH)
-  find_package(Python COMPONENTS Interpreter Development)
-else()
-  set(PYTHON_EXECUTABLE ${PYTHON_PATH})
+if(DEFINED PYTHON_PATH)
+  set(Python_EXECUTABLE "${PYTHON_PATH}")
 endif()
+find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
+set(PYBIND11_FINDPYTHON ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
@@ -22,12 +22,8 @@ if(MSVC)
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR})
-#find python3 include dir
-execute_process(COMMAND python -c "import sysconfig; print(sysconfig.get_path('include'))"
-                OUTPUT_VARIABLE PYTHON_INCLUDE_PATH)
-
 # Set include directories
-include_directories(${PYTHON_INCLUDE_PATH})
+include_directories(${Python_INCLUDE_DIRS})
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
   set(libuv_dir ${CMAKE_SOURCE_DIR}/third_party/libuv/build/uvlib)
   if(NOT EXISTS ${libuv_dir})

@@ -13,10 +13,20 @@ Xoscar can be installed via pip from `PyPI <https://pypi.org/project/xoscar>`__.
 Python version support
 ----------------------
 
-Officially Python 3.9, 3.10, 3.11, 3.12 and 3.13.
+Officially Python 3.10, 3.11, 3.12, 3.13 and 3.14.
+
+Python 3.9 is no longer supported. Python 3.14 support covers the standard
+GIL-enabled CPython build. The free-threaded build (``3.14t``) is not currently
+supported; it requires separate native-extension and thread-safety validation.
 
 .. versionadded:: v0.8.0
     Python 3.13 is supported since v0.8.0.
+
+.. versionadded:: next release
+    Support for standard GIL-enabled Python 3.14.
+
+.. versionchanged:: next release
+    Python 3.9 is no longer supported; Python 3.10 is the minimum version.
 
 
 Dependencies
@@ -36,6 +46,8 @@ uvloop (for systems other than win32)                            0.21.0
 
 Event loop selection
 --------------------
+
+Python 3.14 requires uvloop 0.22.1 or newer on non-Windows platforms.
 
 Actor pool subprocesses use uvloop when it is installed by default. Set
 ``XOSCAR_USE_UVLOOP=0`` (or ``false``) to use asyncio's default event loop,

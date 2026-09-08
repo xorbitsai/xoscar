@@ -58,7 +58,7 @@ The source code is currently hosted on GitHub at: https://github.com/xorbitsai/x
 
 Building from source requires that you have cmake and gcc installed on your system.
 
-- cmake >= 3.11
+- cmake >= 3.18
 - gcc >= 8
 
 ```shell
