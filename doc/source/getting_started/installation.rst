@@ -30,13 +30,13 @@ Optional third-party extensions may re-enable the GIL; check
 .. versionadded:: v0.8.0
     Python 3.13 is supported since v0.8.0.
 
-.. versionadded:: next release
+.. versionadded:: 0.10.0
     Support for standard GIL-enabled Python 3.14.
 
-.. versionadded:: next release
+.. versionadded:: 0.10.0
     Experimental support for free-threaded Python 3.14 (``3.14t``).
 
-.. versionchanged:: next release
+.. versionchanged:: 0.10.0
     Python 3.9 is no longer supported; Python 3.10 is the minimum version.
 
 
