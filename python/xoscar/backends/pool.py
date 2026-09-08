@@ -1566,7 +1566,7 @@ async def create_actor_pool(
             use_uvloop = True
         elif env_use_uvloop in ("0", "false"):
             use_uvloop = False
-        elif env_use_uvloop != "auto":
+        elif env_use_uvloop not in ("", "auto"):
             raise ValueError(
                 "XOSCAR_USE_UVLOOP must be one of: auto, 1, 0, true, false"
             )

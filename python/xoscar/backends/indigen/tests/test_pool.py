@@ -97,6 +97,9 @@ class TestActor(Actor):
 
     async def loop_info(self):
         loop = asyncio.get_running_loop()
+        callback_loop = loop.create_future()
+        loop.call_soon(lambda: callback_loop.set_result(asyncio.get_event_loop()))
+        assert await callback_loop is loop
         return os.getpid(), type(loop).__module__.split(".")[0]
 
     async def add_other(self, ref, val):
@@ -480,6 +483,8 @@ async def test_main_actor_pool():
         (True, None, "uvloop"),
         ("auto", None, "uvloop"),
         ("auto", "auto", "uvloop"),
+        ("auto", "", "uvloop"),
+        ("auto", "  ", "uvloop"),
         ("auto", "0", "asyncio"),
         ("auto", " FALSE ", "asyncio"),
         ("auto", "1", "uvloop"),
