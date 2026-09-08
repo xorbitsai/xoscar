@@ -1561,6 +1561,16 @@ async def create_actor_pool(
             f"True or False, got {auto_recover}"
         )
     if use_uvloop == "auto":
+        env_use_uvloop = os.environ.get("XOSCAR_USE_UVLOOP", "auto").strip().lower()
+        if env_use_uvloop in ("1", "true"):
+            use_uvloop = True
+        elif env_use_uvloop in ("0", "false"):
+            use_uvloop = False
+        elif env_use_uvloop not in ("", "auto"):
+            raise ValueError(
+                "XOSCAR_USE_UVLOOP must be one of: auto, 1, 0, true, false"
+            )
+    if use_uvloop == "auto":
         try:
             import uvloop  # noqa: F401 # pylint: disable=unused-variable
 
