@@ -22,6 +22,12 @@ supported; it requires separate native-extension and thread-safety validation.
 .. versionadded:: v0.8.0
     Python 3.13 is supported since v0.8.0.
 
+.. versionadded:: next release
+    Support for standard GIL-enabled Python 3.14.
+
+.. versionchanged:: next release
+    Python 3.9 is no longer supported; Python 3.10 is the minimum version.
+
 
 Dependencies
 ------------
