@@ -227,12 +227,22 @@ class MainActorPool(MainActorPoolBase):
             if use_uvloop:
                 import uvloop
 
-                asyncio.set_event_loop(uvloop.new_event_loop())
-            else:
-                asyncio.set_event_loop(asyncio.new_event_loop())
-
             coro = cls._create_sub_pool(actor_config, process_index, main_pool_pid, shm)
-            asyncio.run(coro)
+            if use_uvloop:
+                if sys.version_info >= (3, 11):
+                    with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:
+                        runner.run(coro)
+                else:
+                    # asyncio.run() creates its own loop; configure its factory
+                    # through the policy on Python versions without Runner.
+                    policy = asyncio.get_event_loop_policy()
+                    try:
+                        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+                        asyncio.run(coro)
+                    finally:
+                        asyncio.set_event_loop_policy(policy)
+            else:
+                asyncio.run(coro)
         finally:
             shm.close()
 

@@ -95,6 +95,10 @@ class TestActor(Actor):
         self.value += val
         return self.value
 
+    async def loop_info(self):
+        loop = asyncio.get_running_loop()
+        return os.getpid(), type(loop).__module__.split(".")[0]
+
     async def add_other(self, ref, val):
         self.value += await ref.add(val)
         return self.value
@@ -466,6 +470,81 @@ async def test_main_actor_pool():
         assert config.as_dict() == config2.as_dict()
 
     assert pool.stopped
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "option,env,expected",
+    [
+        (False, None, "asyncio"),
+        (True, None, "uvloop"),
+        ("auto", None, "uvloop"),
+        ("auto", "auto", "uvloop"),
+        ("auto", "0", "asyncio"),
+        ("auto", " FALSE ", "asyncio"),
+        ("auto", "1", "uvloop"),
+        ("auto", "True", "uvloop"),
+        (True, "0", "uvloop"),
+        (False, "1", "asyncio"),
+        (False, "invalid", "asyncio"),
+    ],
+)
+async def test_actor_pool_uvloop(monkeypatch, option, env, expected):
+    if expected == "uvloop":
+        pytest.importorskip("uvloop")
+    if env is None:
+        monkeypatch.delenv("XOSCAR_USE_UVLOOP", raising=False)
+    else:
+        monkeypatch.setenv("XOSCAR_USE_UVLOOP", env)
+    main_loop = asyncio.get_running_loop()
+    pool = await xoscar.create_actor_pool("127.0.0.1", n_process=1, use_uvloop=option)
+    async with pool:
+        ref = await create_actor(
+            TestActor,
+            address=pool.external_address,
+            allocate_strategy=RandomSubPool(),
+        )
+        pid, loop_module = await ref.loop_info()
+        assert pid != os.getpid()
+        assert loop_module == expected
+        assert asyncio.get_running_loop() is main_loop
+
+
+@pytest.mark.asyncio
+async def test_actor_pool_uvloop_invalid_env(monkeypatch):
+    monkeypatch.setenv("XOSCAR_USE_UVLOOP", "invalid")
+    with pytest.raises(ValueError, match="XOSCAR_USE_UVLOOP"):
+        await xoscar.create_actor_pool("127.0.0.1", n_process=1)
+
+
+@pytest.mark.asyncio
+async def test_actor_pool_uvloop_unavailable(monkeypatch):
+    monkeypatch.delenv("XOSCAR_USE_UVLOOP", raising=False)
+    monkeypatch.setitem(sys.modules, "uvloop", None)
+    pool = await xoscar.create_actor_pool("127.0.0.1", n_process=1)
+    async with pool:
+        ref = await create_actor(
+            TestActor,
+            address=pool.external_address,
+            allocate_strategy=RandomSubPool(),
+        )
+        assert (await ref.loop_info())[1] == "asyncio"
+
+
+@pytest.mark.asyncio
+async def test_append_sub_pool_uvloop(monkeypatch):
+    pytest.importorskip("uvloop")
+    monkeypatch.setenv("XOSCAR_USE_UVLOOP", "1")
+    pool = await xoscar.create_actor_pool("127.0.0.1", n_process=0)
+    async with pool:
+        for option, expected in [(None, "uvloop"), (False, "asyncio")]:
+            address = await pool.append_sub_pool(use_uvloop=option)
+            ref = await create_actor(
+                TestActor,
+                address=address,
+                allocate_strategy=AddressSpecified(address),
+            )
+            assert (await ref.loop_info())[1] == expected
 
 
 @pytest.mark.asyncio

@@ -34,3 +34,18 @@ psutil                                                           5.9.0
 uvloop (for systems other than win32)                            0.14.0
 ================================================================ ==========================
 
+Event loop selection
+--------------------
+
+Actor pool subprocesses use uvloop when it is installed by default. Set
+``XOSCAR_USE_UVLOOP=0`` (or ``false``) to use asyncio's default event loop,
+or ``XOSCAR_USE_UVLOOP=1`` (or ``true``) to require uvloop. The default value,
+``auto``, detects whether uvloop is available. Values are case-insensitive;
+invalid values raise ``ValueError``.
+
+An explicit ``create_actor_pool(..., use_uvloop=True)`` or ``use_uvloop=False``
+takes precedence over the environment variable. The default
+``use_uvloop="auto"`` reads the environment variable when creating the pool.
+New subprocesses added with ``append_sub_pool`` inherit the pool's resolved
+setting unless explicitly overridden. These settings do not change the main
+process's existing event loop, which is controlled by the calling application.
