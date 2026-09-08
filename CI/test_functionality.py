@@ -6,6 +6,7 @@ import xoscar as mo
 
 import platform
 import sys
+import sysconfig
 
 
 class MyActor(mo.Actor):
@@ -18,6 +19,9 @@ class MyActor(mo.Actor):
 
     def get(self) -> int:
         return self.i
+
+    def gil_enabled(self) -> bool:
+        return sys._is_gil_enabled()
 
     async def add_from(self, ref: mo.ActorRefType["MyActor"]) -> int:
         self.i += await ref.get()
@@ -51,6 +55,10 @@ async def test_basic_cases():
             assert await ref2.add(2) == 2
 
             assert await ref1.add_from(ref2) == 3
+            if sysconfig.get_config_var("Py_GIL_DISABLED"):
+                assert not sys._is_gil_enabled()
+                assert not await ref1.gil_enabled()
+                assert not await ref2.gil_enabled()
     except Exception as e:
         raise
     finally:

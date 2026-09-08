@@ -18,6 +18,8 @@ import collections
 import importlib
 import itertools
 import logging
+import os
+import threading
 import time
 import warnings
 from functools import partial
@@ -34,12 +36,26 @@ from .libcpp cimport mt19937_64
 
 cdef mt19937_64 _rnd_gen
 cdef bint _rnd_is_seed_set = False
+_rnd_lock = threading.RLock()
 NamedType = collections.namedtuple("NamedType", ["name", "type_"])
 _type_dispatchers = WeakSet()
 logger = logging.getLogger(__name__)
 
+
+def _reset_random_lock_after_fork():
+    global _rnd_lock, _rnd_is_seed_set
+    _rnd_lock = threading.RLock()
+    _rnd_is_seed_set = False
+    for dispatcher in list(_type_dispatchers):
+        (<TypeDispatcher>dispatcher)._lock = threading.RLock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_random_lock_after_fork)
+
 cdef class TypeDispatcher:
     def __init__(self):
+        self._lock = threading.RLock()
         self._handlers = dict()
         self._lazy_handlers = dict()
         # store inherited handlers to facilitate unregistering
@@ -48,6 +64,10 @@ cdef class TypeDispatcher:
         _type_dispatchers.add(self)
 
     cpdef void register(self, object type_, object handler):
+        with self._lock:
+            self._register(type_, handler)
+
+    cdef _register(self, object type_, object handler):
         if isinstance(type_, str):
             self._lazy_handlers[type_] = handler
         elif type(type_) is not NamedType and isinstance(type_, tuple):
@@ -57,6 +77,10 @@ cdef class TypeDispatcher:
             self._handlers[type_] = handler
 
     cpdef void unregister(self, object type_):
+        with self._lock:
+            self._unregister(type_)
+
+    cdef _unregister(self, object type_):
         if type(type_) is not NamedType and isinstance(type_, tuple):
             for t in type_:
                 self.unregister(t)
@@ -92,6 +116,10 @@ cdef class TypeDispatcher:
             self.register(obj_type, v)
 
     cpdef get_handler(self, object type_):
+        with self._lock:
+            return self._get_handler(type_)
+
+    cdef _get_handler(self, object type_):
         try:
             return self._handlers[type_]
         except KeyError:
@@ -122,8 +150,10 @@ cdef class TypeDispatcher:
 
     @staticmethod
     def reload_all_lazy_handlers():
-        for dispatcher in _type_dispatchers:
-            (<TypeDispatcher>dispatcher)._reload_lazy_handlers()
+        cdef TypeDispatcher dispatcher
+        for dispatcher in list(_type_dispatchers):
+            with dispatcher._lock:
+                dispatcher._reload_lazy_handlers()
 
 
 cpdef str to_str(s, encoding='utf-8'):
@@ -156,9 +186,10 @@ cpdef void reset_id_random_seed() except *:
     cdef bytes seed_bytes
     global _rnd_is_seed_set
 
-    seed_bytes = getrandbits(64).to_bytes(8, "little")
-    _rnd_gen.seed((<uint_fast64_t *><char *>seed_bytes)[0])
-    _rnd_is_seed_set = True
+    with _rnd_lock:
+        seed_bytes = getrandbits(64).to_bytes(8, "little")
+        _rnd_gen.seed((<uint_fast64_t *><char *>seed_bytes)[0])
+        _rnd_is_seed_set = True
 
 
 cpdef bytes new_random_id(int byte_len):
@@ -166,9 +197,6 @@ cpdef bytes new_random_id(int byte_len):
     cdef uint_fast64_t res_data[4]
     cdef int i, qw_num = byte_len >> 3
     cdef bytes res
-
-    if not _rnd_is_seed_set:
-        reset_id_random_seed()
 
     if (qw_num << 3) < byte_len:
         qw_num += 1
@@ -180,8 +208,11 @@ cpdef bytes new_random_id(int byte_len):
         res_ptr = <uint_fast64_t *>malloc(qw_num << 3)
 
     try:
-        for i in range(qw_num):
-            res_ptr[i] = _rnd_gen()
+        with _rnd_lock:
+            if not _rnd_is_seed_set:
+                reset_id_random_seed()
+            for i in range(qw_num):
+                res_ptr[i] = _rnd_gen()
         return <bytes>((<char *>&(res_ptr[0]))[:byte_len])
     finally:
         # free memory if allocated by malloc

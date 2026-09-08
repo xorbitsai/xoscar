@@ -78,10 +78,13 @@ os.chdir(repo_root)
 
 cythonize_kw = dict(language_level=sys.version_info[0])
 define_macros = []
+if sysconfig.get_config_var("Py_GIL_DISABLED"):
+    define_macros.append(("Py_GIL_DISABLED", "1"))
+    define_macros.append(("CYTHON_FREETHREADING_COMPATIBLE", "1"))
 if os.environ.get("CYTHON_TRACE"):
     define_macros.append(("CYTHON_TRACE_NOGIL", "1"))
     define_macros.append(("CYTHON_TRACE", "1"))
-    cythonize_kw["compiler_directives"] = {"linetrace": True}
+    cythonize_kw.setdefault("compiler_directives", {})["linetrace"] = True
 
 # Fixes Python 3.11 compatibility issue
 #
@@ -175,6 +178,8 @@ def get_platform():
 
 
 plat_specifier = ".{}-{}".format(get_platform(), sys.implementation.cache_tag)
+if sysconfig.get_config_var("Py_GIL_DISABLED"):
+    plat_specifier += "t"
 
 
 def get_build_lib():
@@ -292,6 +297,8 @@ class CMakeBuild(build_ext):
             "-DCMAKE_POLICY_VERSION_MINIMUM=3.10",
         ]
         build_args = []
+        if sysconfig.get_config_var("Py_GIL_DISABLED"):
+            cmake_args += ["-DPython_FIND_ABI=ANY;ANY;ANY;ON"]
         # Adding CMake arguments set as environment variable
         # (needed e.g. to build for ARM OSx on conda-forge)
         if "CMAKE_ARGS" in os.environ:

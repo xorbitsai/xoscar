@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures as futures
 import logging
+import threading
 import weakref
 from typing import Any, Callable, Coroutine, Dict, Optional, Type
 from urllib.parse import urlparse
@@ -38,7 +39,7 @@ class DummyChannel(Channel):
     Channel for communications in same process.
     """
 
-    __slots__ = "__weakref__", "_in_queue", "_out_queue", "_closed"
+    __slots__ = "__weakref__", "_in_queue", "_out_queue", "_closed", "_out_loop"
 
     name = "dummy"
 
@@ -46,10 +47,11 @@ class DummyChannel(Channel):
         self,
         in_queue: asyncio.Queue,
         out_queue: asyncio.Queue,
-        closed: asyncio.Event,
+        closed: asyncio.Event | threading.Event,
         local_address: str | None = None,
         dest_address: str | None = None,
         compression: str | None = None,
+        out_loop: asyncio.AbstractEventLoop | None = None,
     ):
         super().__init__(
             local_address=local_address,
@@ -59,6 +61,7 @@ class DummyChannel(Channel):
         self._in_queue = in_queue
         self._out_queue = out_queue
         self._closed = closed
+        self._out_loop = out_loop or asyncio.get_running_loop()
 
     @property
     @implements(Channel.type)
@@ -70,7 +73,10 @@ class DummyChannel(Channel):
         if self._closed.is_set():  # pragma: no cover
             raise ChannelClosed("Channel already closed, cannot send message")
         # put message directly into queue
-        self._out_queue.put_nowait(message)
+        if asyncio.get_running_loop() is self._out_loop:
+            self._out_queue.put_nowait(message)
+        else:
+            self._out_loop.call_soon_threadsafe(self._out_queue.put_nowait, message)
 
     @implements(Channel.recv)
     async def recv(self):
@@ -95,7 +101,7 @@ class DummyChannel(Channel):
 @register_server
 class DummyServer(Server):
     __slots__ = (
-        ("_closed", "_channels", "_tasks") + ("__weakref__",)
+        ("_closed", "_channels", "_tasks", "_loop") + ("__weakref__",)
         if abc_type_require_weakref_slot
         else tuple()
     )
@@ -116,6 +122,7 @@ class DummyServer(Server):
         self._closed = asyncio.Event()
         self._channels = weakref.WeakSet()
         self._tasks = set()
+        self._loop = asyncio.get_running_loop()
 
     @classmethod
     def get_instance(cls, address: str):
@@ -182,7 +189,14 @@ class DummyServer(Server):
                 f'arguments: {",".join(kwargs)}'
             )
         self._channels.add(channel)
-        await self.channel_handler(channel)
+        task = asyncio.current_task()
+        self._tasks.add(task)
+        try:
+            await self.channel_handler(channel)
+        finally:
+            self._tasks.discard(task)
+            self._channels.discard(channel)
+            logger.info("Channel exit: %s", channel.info)
 
     @implements(Server.stop)
     async def stop(self):
@@ -206,7 +220,7 @@ class DummyClient(Client):
         self, local_address: str | None, dest_address: str | None, channel: Channel
     ):
         super().__init__(local_address, dest_address, channel)
-        self._task: Optional[asyncio.Task] = None
+        self._task: Optional[asyncio.Task | futures.Future] = None
 
     @staticmethod
     @implements(Client.connect)
@@ -228,21 +242,23 @@ class DummyClient(Client):
 
         q1: asyncio.Queue = asyncio.Queue()
         q2: asyncio.Queue = asyncio.Queue()
-        closed = asyncio.Event()
-        client_channel = DummyChannel(q1, q2, closed, local_address=local_address)
-        server_channel = DummyChannel(q2, q1, closed, dest_address=local_address)
+        closed = threading.Event()
+        loop = asyncio.get_running_loop()
+        client_channel = DummyChannel(
+            q1, q2, closed, local_address=local_address, out_loop=server._loop
+        )
+        server_channel = DummyChannel(
+            q2, q1, closed, dest_address=local_address, out_loop=loop
+        )
 
         conn_coro = server.on_connected(server_channel)
-        task = asyncio.create_task(conn_coro)
+        task: asyncio.Task | futures.Future
+        if loop is server._loop:
+            task = asyncio.create_task(conn_coro)
+        else:
+            task = asyncio.run_coroutine_threadsafe(conn_coro, server._loop)
         client = DummyClient(local_address, dest_address, client_channel)
         client._task = task
-        server._tasks.add(task)
-
-        def _discard(t):
-            server._tasks.discard(t)
-            logger.info("Channel exit: %s", server_channel.info)
-
-        task.add_done_callback(_discard)
         return client
 
     @implements(Client.close)
