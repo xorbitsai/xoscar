@@ -94,6 +94,7 @@ cdef class TypeDispatcher:
 
     cdef _reload_lazy_handlers(self):
         missing = object()
+        invalidated = False
         active = getattr(self._loading, "keys", None)
         if active is None:
             active = self._loading.keys = set()
@@ -134,6 +135,9 @@ cdef class TypeDispatcher:
                     self._lazy_handlers.pop(k)
                     self._handlers.setdefault(obj_type, v)
                     self._inherit_handlers.clear()
+                elif self._lazy_handlers.get(k, missing) is not missing:
+                    invalidated = True
+        return invalidated
 
     cpdef get_handler(self, object type_):
         with self._lock:
@@ -142,7 +146,10 @@ cdef class TypeDispatcher:
             if type_ in self._inherit_handlers:
                 return self._inherit_handlers[type_]
         # Never hold the dispatcher lock while acquiring Python module locks.
-        self._reload_lazy_handlers()
+        if self._reload_lazy_handlers():
+            # A module replaced a pending handler during import. Retry once,
+            # without spinning indefinitely under continuous registration.
+            self._reload_lazy_handlers()
         with self._lock:
             return self._get_handler(type_)
 

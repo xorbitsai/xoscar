@@ -76,7 +76,12 @@ class DummyChannel(Channel):
         if asyncio.get_running_loop() is self._out_loop:
             self._out_queue.put_nowait(message)
         else:
-            self._out_loop.call_soon_threadsafe(self._out_queue.put_nowait, message)
+            try:
+                self._out_loop.call_soon_threadsafe(self._out_queue.put_nowait, message)
+            except RuntimeError as ex:
+                if self._out_loop.is_closed():
+                    raise ChannelClosed("Peer event loop closed") from ex
+                raise
 
     @implements(Channel.recv)
     async def recv(self):

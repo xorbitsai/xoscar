@@ -259,9 +259,36 @@ def test_type_dispatcher_preserves_replacement_during_import(monkeypatch):
 
     dispatcher.register("optional.Type", "original")
     monkeypatch.setattr(importlib, "import_module", import_module)
+    assert dispatcher.get_handler(ImportedType) == "replacement"
+
+
+def test_type_dispatcher_eager_handler_wins_over_lazy():
+    dispatcher = utils.TypeDispatcher()
+    dispatcher.register("builtins.int", "lazy")
+    dispatcher.register(int, "eager")
+    dispatcher.register("builtins.str", "string")
+    # A different type lookup forces the pending int entry to be loaded.
+    assert dispatcher.get_handler(str) == "string"
+    assert dispatcher.get_handler(int) == "eager"
+
+
+def test_type_dispatcher_replacement_retry_is_bounded(monkeypatch):
+    dispatcher = utils.TypeDispatcher()
+    calls = []
+
+    class ImportedType:
+        pass
+
+    def import_module(name, package=None):
+        calls.append(name)
+        dispatcher.register("optional.Type", object())
+        return type("Module", (), {"Type": ImportedType})
+
+    dispatcher.register("optional.Type", object())
+    monkeypatch.setattr(importlib, "import_module", import_module)
     with pytest.raises(KeyError):
         dispatcher.get_handler(ImportedType)
-    assert dispatcher.get_handler(ImportedType) == "replacement"
+    assert len(calls) == 2
 
 
 def test_timer():

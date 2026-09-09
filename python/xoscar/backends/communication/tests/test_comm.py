@@ -78,6 +78,19 @@ async def test_dummy_cross_thread_queue_ownership():
         server_loop.set_debug(old_debug)
 
 
+@pytest.mark.asyncio
+async def test_dummy_send_to_closed_peer_loop():
+    from ..errors import ChannelClosed
+
+    peer_loop = asyncio.new_event_loop()
+    peer_loop.close()
+    channel = DummyChannel(
+        asyncio.Queue(), asyncio.Queue(), asyncio.Event(), out_loop=peer_loop
+    )
+    with pytest.raises(ChannelClosed, match="Peer event loop closed"):
+        await channel.send("message")
+
+
 test_data = np.random.RandomState(0).rand(10, 10)
 port = get_next_port()
 cupy = lazy_import("cupy")
