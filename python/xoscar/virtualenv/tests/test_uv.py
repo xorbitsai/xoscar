@@ -44,15 +44,17 @@ def test_uv_virtialenv_manager():
             manager.create_env(python_path=Path(sys.executable))
             assert os.path.exists(path)
             manager.install_packages(
-                ["transformers==4.50.0"],
+                # Exercise installation without requiring a Rust extension
+                # that has no wheel for the free-threaded interpreter.
+                ["humanize==4.12.0"],
                 index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
             )
 
             sys.path.insert(0, manager.get_lib_path())
 
-            import transformers
+            import humanize
 
-            assert transformers.__version__ == "4.50.0"
+            assert humanize.__version__ == "4.12.0"
 
             manager.remove_env()
             assert not os.path.exists(path)
@@ -238,9 +240,9 @@ def test_uv_virtualenv_manager_skip_system_package(caplog):
 
             caplog.set_level(logging.INFO)
 
-            # Install transformers and system numpy with skip_installed=True
+            # Install a pure-Python package and reuse the system numpy.
             manager.install_packages(
-                ["transformers==4.50.0", "#system_numpy#"],
+                ["humanize==4.12.0", "#system_numpy#"],
                 index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
                 skip_installed=True,
                 log=True,
@@ -248,18 +250,18 @@ def test_uv_virtualenv_manager_skip_system_package(caplog):
 
             sys.path.insert(0, manager.get_lib_path())
 
-            # Import and verify versions of transformers and numpy
+            # Import and verify versions of humanize and numpy
+            import humanize
             import numpy as numpy_in_env
-            import transformers
 
-            assert transformers.__version__ == "4.50.0"
+            assert humanize.__version__ == "4.12.0"
             assert numpy_in_env.__version__ == system_numpy_version
 
             caplog.clear()
 
             # Confirm numpy is skipped (no installation needed)
             manager.install_packages(
-                ["transformers>=4.50.0", "#system_numpy#"],
+                ["humanize>=4.12.0", "#system_numpy#"],
                 index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
                 skip_installed=True,
                 log=True,

@@ -12,6 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
+import threading
 from typing import Any, List, Optional, Union
 from urllib.parse import urlparse
 
@@ -22,6 +24,17 @@ from .core cimport ActorRef, BufferRef, FileObjectRef
 cdef dict _backend_context_cls = dict()
 
 cdef object _context = None
+
+_context_lock = threading.RLock()
+
+
+def _reset_context_lock_after_fork():
+    global _context_lock
+    _context_lock = threading.RLock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_context_lock_after_fork)
 
 
 cdef class BaseActorContext:
@@ -260,12 +273,13 @@ cdef class ClientActorContext(BaseActorContext):
             scheme = None
         else:
             scheme = urlparse(address).scheme or None
-        try:
-            return self._backend_contexts[scheme]
-        except KeyError:
-            context = self._backend_contexts[scheme] = \
-                _backend_context_cls[scheme](address)
-            return context
+        with _context_lock:
+            try:
+                return self._backend_contexts[scheme]
+            except KeyError:
+                context = self._backend_contexts[scheme] = \
+                    _backend_context_cls[scheme](address)
+                return context
 
     def create_actor(
         self,
@@ -363,6 +377,7 @@ cpdef get_context():
     ClientActorContext will be used
     """
     global _context
-    if _context is None:
-        _context = ClientActorContext()
-    return _context
+    with _context_lock:
+        if _context is None:
+            _context = ClientActorContext()
+        return _context

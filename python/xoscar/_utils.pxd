@@ -18,11 +18,16 @@ cdef class TypeDispatcher:
     cdef dict _lazy_handlers
     cdef dict _inherit_handlers
     cdef object __weakref__
+    cdef object _lock
+    cdef object _loading
 
     cpdef void register(self, object type_, object handler)
     cpdef void unregister(self, object type_)
     cdef _reload_lazy_handlers(self)
     cpdef get_handler(self, object type_)
+    cdef _get_handler(self, object type_)
+    cdef _register(self, object type_, object handler)
+    cdef _unregister(self, object type_)
 
 cpdef str to_str(s, encoding=*)
 cpdef bytes to_binary(s, encoding=*)

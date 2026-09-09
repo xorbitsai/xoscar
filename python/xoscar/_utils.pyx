@@ -18,6 +18,8 @@ import collections
 import importlib
 import itertools
 import logging
+import os
+import threading
 import time
 import warnings
 from functools import partial
@@ -34,12 +36,28 @@ from .libcpp cimport mt19937_64
 
 cdef mt19937_64 _rnd_gen
 cdef bint _rnd_is_seed_set = False
+_rnd_lock = threading.RLock()
 NamedType = collections.namedtuple("NamedType", ["name", "type_"])
 _type_dispatchers = WeakSet()
 logger = logging.getLogger(__name__)
 
+
+def _reset_random_lock_after_fork():
+    global _rnd_lock, _rnd_is_seed_set
+    _rnd_lock = threading.RLock()
+    _rnd_is_seed_set = False
+    for dispatcher in list(_type_dispatchers):
+        (<TypeDispatcher>dispatcher)._lock = threading.RLock()
+        (<TypeDispatcher>dispatcher)._loading = threading.local()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_random_lock_after_fork)
+
 cdef class TypeDispatcher:
     def __init__(self):
+        self._lock = threading.RLock()
+        self._loading = threading.local()
         self._handlers = dict()
         self._lazy_handlers = dict()
         # store inherited handlers to facilitate unregistering
@@ -48,6 +66,11 @@ cdef class TypeDispatcher:
         _type_dispatchers.add(self)
 
     cpdef void register(self, object type_, object handler):
+        with self._lock:
+            self._register(type_, handler)
+
+    cdef _register(self, object type_, object handler):
+        self._inherit_handlers.clear()
         if isinstance(type_, str):
             self._lazy_handlers[type_] = handler
         elif type(type_) is not NamedType and isinstance(type_, tuple):
@@ -57,6 +80,10 @@ cdef class TypeDispatcher:
             self._handlers[type_] = handler
 
     cpdef void unregister(self, object type_):
+        with self._lock:
+            self._unregister(type_)
+
+    cdef _unregister(self, object type_):
         if type(type_) is not NamedType and isinstance(type_, tuple):
             for t in type_:
                 self.unregister(t)
@@ -67,11 +94,17 @@ cdef class TypeDispatcher:
 
     cdef _reload_lazy_handlers(self):
         missing = object()
-        for k in list(self._lazy_handlers):
-            v = self._lazy_handlers.pop(k, missing)
-            if v is missing:
-                # A nested or concurrent reload may have already consumed it.
+        invalidated = False
+        active = getattr(self._loading, "keys", None)
+        if active is None:
+            active = self._loading.keys = set()
+        with self._lock:
+            pending = list(self._lazy_handlers.items())
+        for k, v in pending:
+            if k in active:
+                # Recursive imports in this thread must not load the same key.
                 continue
+            active.add(k)
             mod_name, obj_name = k.rsplit('.', 1)
             try:
                 with warnings.catch_warnings():
@@ -88,10 +121,39 @@ cdef class TypeDispatcher:
                 # incompatible.  Skip only that handler so unrelated actor-pool
                 # startup and serialization remain available.
                 logger.debug("Failed to load lazy handler %s", k, exc_info=True)
+                with self._lock:
+                    if self._lazy_handlers.get(k, missing) is v:
+                        self._lazy_handlers.pop(k)
                 continue
-            self.register(obj_type, v)
+            finally:
+                active.remove(k)
+            with self._lock:
+                # Another thread may have consumed/replaced/unregistered it.
+                # Keep pending keys visible during import so concurrent callers
+                # can resolve them too, rather than spuriously missing a handler.
+                if self._lazy_handlers.get(k, missing) is v:
+                    self._lazy_handlers.pop(k)
+                    self._handlers.setdefault(obj_type, v)
+                    self._inherit_handlers.clear()
+                elif self._lazy_handlers.get(k, missing) is not missing:
+                    invalidated = True
+        return invalidated
 
     cpdef get_handler(self, object type_):
+        with self._lock:
+            if type_ in self._handlers:
+                return self._handlers[type_]
+            if type_ in self._inherit_handlers:
+                return self._inherit_handlers[type_]
+        # Never hold the dispatcher lock while acquiring Python module locks.
+        if self._reload_lazy_handlers():
+            # A module replaced a pending handler during import. Retry once,
+            # without spinning indefinitely under continuous registration.
+            self._reload_lazy_handlers()
+        with self._lock:
+            return self._get_handler(type_)
+
+    cdef _get_handler(self, object type_):
         try:
             return self._handlers[type_]
         except KeyError:
@@ -100,7 +162,6 @@ cdef class TypeDispatcher:
         try:
             return self._inherit_handlers[type_]
         except KeyError:
-            self._reload_lazy_handlers()
             if type(type_) is NamedType:
                 named_type = partial(NamedType, type_.name)
                 mro = itertools.chain(
@@ -113,7 +174,8 @@ cdef class TypeDispatcher:
                 # only lookup self._handlers for mro clz
                 handler = self._handlers.get(clz)
                 if handler is not None:
-                    self._inherit_handlers[type_] = handler
+                    if not self._lazy_handlers:
+                        self._inherit_handlers[type_] = handler
                     return handler
             raise KeyError(f'Cannot dispatch type {type_}')
 
@@ -122,8 +184,9 @@ cdef class TypeDispatcher:
 
     @staticmethod
     def reload_all_lazy_handlers():
-        for dispatcher in _type_dispatchers:
-            (<TypeDispatcher>dispatcher)._reload_lazy_handlers()
+        cdef TypeDispatcher dispatcher
+        for dispatcher in list(_type_dispatchers):
+            dispatcher._reload_lazy_handlers()
 
 
 cpdef str to_str(s, encoding='utf-8'):
@@ -156,9 +219,10 @@ cpdef void reset_id_random_seed() except *:
     cdef bytes seed_bytes
     global _rnd_is_seed_set
 
-    seed_bytes = getrandbits(64).to_bytes(8, "little")
-    _rnd_gen.seed((<uint_fast64_t *><char *>seed_bytes)[0])
-    _rnd_is_seed_set = True
+    with _rnd_lock:
+        seed_bytes = getrandbits(64).to_bytes(8, "little")
+        _rnd_gen.seed((<uint_fast64_t *><char *>seed_bytes)[0])
+        _rnd_is_seed_set = True
 
 
 cpdef bytes new_random_id(int byte_len):
@@ -166,9 +230,6 @@ cpdef bytes new_random_id(int byte_len):
     cdef uint_fast64_t res_data[4]
     cdef int i, qw_num = byte_len >> 3
     cdef bytes res
-
-    if not _rnd_is_seed_set:
-        reset_id_random_seed()
 
     if (qw_num << 3) < byte_len:
         qw_num += 1
@@ -180,8 +241,11 @@ cpdef bytes new_random_id(int byte_len):
         res_ptr = <uint_fast64_t *>malloc(qw_num << 3)
 
     try:
-        for i in range(qw_num):
-            res_ptr[i] = _rnd_gen()
+        with _rnd_lock:
+            if not _rnd_is_seed_set:
+                reset_id_random_seed()
+            for i in range(qw_num):
+                res_ptr[i] = _rnd_gen()
         return <bytes>((<char *>&(res_ptr[0]))[:byte_len])
     finally:
         # free memory if allocated by malloc

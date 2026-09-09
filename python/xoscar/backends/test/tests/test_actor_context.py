@@ -116,7 +116,7 @@ async def test_channel_cleanup(actor_pool_context):
         futures.append(fut)
 
     for fut in futures:
-        fut.result()
+        await asyncio.wrap_future(fut)
 
     while True:
         if await actor_ref.add(0) == 100:
@@ -143,3 +143,4 @@ async def test_channel_cleanup(actor_pool_context):
         #   2. from current main thread to the actor.
         if len(dummy_server._channels) == 2 and len(dummy_server._tasks) == 2:
             break
+        await asyncio.sleep(0)

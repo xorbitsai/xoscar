@@ -18,6 +18,9 @@ pull_request_rules:
       - check-success=build_test_job (macos-latest, 3.14, xoscar)
       - check-success=build_test_job (windows-latest, 3.10, xoscar)
       - check-success=build_test_job (windows-latest, 3.14, xoscar)
+      - check-success=Free-threaded Python 3.14 (ubuntu-latest)
+      - check-success=Free-threaded Python 3.14 (macos-latest)
+      - check-success=Free-threaded Python 3.14 (windows-latest)
       - check-success=codecov/project
       # - check-success=docs/readthedocs.org:xoscar
       - base=main

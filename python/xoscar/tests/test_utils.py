@@ -19,6 +19,7 @@ import shutil
 import sys
 import tempfile
 import textwrap
+import threading
 import time
 
 import pandas as pd
@@ -213,6 +214,81 @@ def test_type_dispatcher_handles_reentrant_lazy_reload(monkeypatch):
     assert dispatcher(ImportedType()) == "Imported"
     assert reentrant_results == ["String"]
     assert dispatcher("value") == "String"
+
+
+def test_type_dispatcher_does_not_hold_lock_during_import(monkeypatch):
+    dispatcher = utils.TypeDispatcher()
+    registered = threading.Event()
+    workers = []
+
+    class ImportedType:
+        pass
+
+    def import_module(name, package=None):
+        def register():
+            dispatcher.register(int, "integer")
+            registered.set()
+
+        worker = threading.Thread(target=register, daemon=True)
+        workers.append(worker)
+        worker.start()
+        # Models an importing thread that must register before its module can
+        # finish loading. A dispatcher lock around import deadlocks this edge.
+        assert registered.wait(5), "dispatcher lock held during module import"
+        return type("Module", (), {"Type": ImportedType})
+
+    monkeypatch.setattr(importlib, "import_module", import_module)
+    dispatcher.register("optional.Type", "imported")
+    try:
+        assert dispatcher.get_handler(ImportedType) == "imported"
+        assert dispatcher.get_handler(int) == "integer"
+    finally:
+        for worker in workers:
+            worker.join(timeout=5)
+
+
+def test_type_dispatcher_preserves_replacement_during_import(monkeypatch):
+    dispatcher = utils.TypeDispatcher()
+
+    class ImportedType:
+        pass
+
+    def import_module(name, package=None):
+        dispatcher.register("optional.Type", "replacement")
+        return type("Module", (), {"Type": ImportedType})
+
+    dispatcher.register("optional.Type", "original")
+    monkeypatch.setattr(importlib, "import_module", import_module)
+    assert dispatcher.get_handler(ImportedType) == "replacement"
+
+
+def test_type_dispatcher_eager_handler_wins_over_lazy():
+    dispatcher = utils.TypeDispatcher()
+    dispatcher.register("builtins.int", "lazy")
+    dispatcher.register(int, "eager")
+    dispatcher.register("builtins.str", "string")
+    # A different type lookup forces the pending int entry to be loaded.
+    assert dispatcher.get_handler(str) == "string"
+    assert dispatcher.get_handler(int) == "eager"
+
+
+def test_type_dispatcher_replacement_retry_is_bounded(monkeypatch):
+    dispatcher = utils.TypeDispatcher()
+    calls = []
+
+    class ImportedType:
+        pass
+
+    def import_module(name, package=None):
+        calls.append(name)
+        dispatcher.register("optional.Type", object())
+        return type("Module", (), {"Type": ImportedType})
+
+    dispatcher.register("optional.Type", object())
+    monkeypatch.setattr(importlib, "import_module", import_module)
+    with pytest.raises(KeyError):
+        dispatcher.get_handler(ImportedType)
+    assert len(calls) == 2
 
 
 def test_timer():

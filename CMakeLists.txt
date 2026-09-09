@@ -1,8 +1,15 @@
 cmake_minimum_required(VERSION 3.18...3.21)
+if(Python_FIND_ABI MATCHES "ON$")
+  cmake_minimum_required(VERSION 3.30)
+endif()
 
 project(XoscarCollective)
 if(DEFINED PYTHON_PATH)
   set(Python_EXECUTABLE "${PYTHON_PATH}")
+endif()
+if(Python_FIND_ABI MATCHES "ON$")
+  # Windows headers do not define this for the free-threaded build.
+  add_compile_definitions(Py_GIL_DISABLED=1)
 endif()
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 set(PYBIND11_FINDPYTHON ON)

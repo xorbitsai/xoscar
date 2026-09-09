@@ -15,17 +15,28 @@ Python version support
 
 Officially Python 3.10, 3.11, 3.12, 3.13 and 3.14.
 
-Python 3.9 is no longer supported. Python 3.14 support covers the standard
-GIL-enabled CPython build. The free-threaded build (``3.14t``) is not currently
-supported; it requires separate native-extension and thread-safety validation.
+Python 3.9 is no longer supported. Python 3.14 supports both the standard
+GIL-enabled build and, experimentally, the free-threaded build (``3.14t``).
+Free-threaded source builds require Cython 3.2 or newer and CMake 3.30 or newer.
+Install with the free-threaded interpreter to select the matching ``cp314t``
+wheel; regular ``cp314`` extension wheels are not ABI-compatible.
+
+Actor and asyncio objects remain confined to their owning event loop. This
+does not make sharing mutable actors, serialization inputs, or collective
+contexts across threads safe without application-level synchronization.
+Optional third-party extensions may re-enable the GIL; check
+``sys._is_gil_enabled()`` after importing your application's dependencies.
 
 .. versionadded:: v0.8.0
     Python 3.13 is supported since v0.8.0.
 
-.. versionadded:: next release
+.. versionadded:: 0.10.0
     Support for standard GIL-enabled Python 3.14.
 
-.. versionchanged:: next release
+.. versionadded:: 0.10.0
+    Experimental support for free-threaded Python 3.14 (``3.14t``).
+
+.. versionchanged:: 0.10.0
     Python 3.9 is no longer supported; Python 3.10 is the minimum version.
 
 

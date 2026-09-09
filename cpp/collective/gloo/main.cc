@@ -29,7 +29,7 @@ bool transport_tcp_available() { return GLOO_HAVE_TRANSPORT_TCP; }
 bool transport_uv_available() { return GLOO_HAVE_TRANSPORT_UV; }
 }  // namespace xoscar
 PYBIND11_MAKE_OPAQUE(std::vector<std::string>);
-PYBIND11_MODULE(xoscar_pygloo, m) {
+PYBIND11_MODULE(xoscar_pygloo, m, pybind11::mod_gil_not_used()) {
     m.doc() = "binding gloo from c to python";  // optional module docstring
 
     m.def("transport_tcp_available",
