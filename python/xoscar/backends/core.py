@@ -361,9 +361,11 @@ class ActorCaller:
                 # shared epoll instance before the subprocess calls exec.
                 if os.getpid() != owner_pid:
                     return
-                self._ensure_initialized()
+                ActorCaller._ensure_initialized()
                 # Use the background thread for cleanup
-                asyncio.run_coroutine_threadsafe(actor_caller.stop(), self._close_loop)
+                asyncio.run_coroutine_threadsafe(
+                    actor_caller.stop(), ActorCaller._close_loop
+                )
                 logger.debug(
                     "Clean up the actor caller due to thread exit: %s", thread_info
                 )

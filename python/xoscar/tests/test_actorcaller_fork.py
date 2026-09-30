@@ -72,3 +72,50 @@ def test_forked_child_does_not_clean_up_parent_thread_caller():
         """
     )
     subprocess.run([sys.executable, "-c", program], check=True, timeout=15)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="requires Linux test runtime")
+def test_caller_cleanup_does_not_keep_instance_alive():
+    """Dropping a caller cleans its clients while the creating thread is alive."""
+    program = textwrap.dedent(
+        """
+        import gc
+        import os
+        import select
+        import threading
+
+        from xoscar.backends.core import ActorCaller, ActorCallerThreadLocal
+
+        read_fd, write_fd = os.pipe()
+        original_stop = ActorCallerThreadLocal.stop
+
+        async def traced_stop(self):
+            os.write(write_fd, b"stopped")
+            return await original_stop(self)
+
+        ActorCallerThreadLocal.stop = traced_stop
+        ready = threading.Event()
+        release = threading.Event()
+
+        def worker():
+            caller = ActorCaller()
+            caller.cancel_tasks()
+            del caller
+            gc.collect()
+            ready.set()
+            release.wait()
+
+        thread = threading.Thread(target=worker)
+        thread.start()
+        try:
+            assert ready.wait(5)
+            assert select.select([read_fd], [], [], 5)[0], (
+                "caller cleanup waited for the creating thread to exit"
+            )
+        finally:
+            release.set()
+            thread.join(timeout=5)
+        assert not thread.is_alive()
+        """
+    )
+    subprocess.run([sys.executable, "-c", program], check=True, timeout=15)
