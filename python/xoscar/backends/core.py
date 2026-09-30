@@ -19,6 +19,7 @@ import asyncio
 import atexit
 import copy
 import logging
+import os
 import threading
 import weakref
 from typing import Type, Union
@@ -351,8 +352,15 @@ class ActorCaller:
             actor_caller = self._thread_local.actor_caller = ActorCallerThreadLocal()
             ref = self._thread_local.ref = ActorCaller._RefHolder()
             # If the thread exit, we clean the related actor callers and channels.
+            owner_pid = os.getpid()
 
             def _cleanup():
+                # A forked subprocess inherits the finalizer and the clients
+                # of threads that no longer exist in the child. Closing those
+                # clients there can remove their sockets from the parent's
+                # shared epoll instance before the subprocess calls exec.
+                if os.getpid() != owner_pid:
+                    return
                 self._ensure_initialized()
                 # Use the background thread for cleanup
                 asyncio.run_coroutine_threadsafe(actor_caller.stop(), self._close_loop)
