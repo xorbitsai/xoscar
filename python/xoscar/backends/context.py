@@ -110,12 +110,22 @@ class IndigenActorContext(BaseActorContext):
         else:
             raise message.as_instanceof_cause()
 
-    async def _wait(self, future: asyncio.Future, address: str, message: _MessageBase):
+    async def _wait(
+        self,
+        future: asyncio.Future,
+        address: str,
+        message: _MessageBase,
+        proxy_addresses: list[str] | None = None,
+    ):
         try:
             await asyncio.shield(future)
         except asyncio.CancelledError:
             try:
-                await self.cancel(address, message.message_id)
+                # Follow the original RPC route so cancellation cannot bypass
+                # a proxy that is still forwarding the request.
+                await self.cancel(
+                    address, message.message_id, proxy_addresses=proxy_addresses
+                )
             except CannotCancelTask:
                 # cancel failed, already finished
                 raise asyncio.CancelledError
@@ -161,7 +171,12 @@ class IndigenActorContext(BaseActorContext):
             wait=False,
             proxy_addresses=actor_ref.proxy_addresses,
         )
-        result = await self._wait(future, actor_ref.address, message)  # type: ignore
+        result = await self._wait(
+            future,  # type: ignore
+            actor_ref.address,
+            message,
+            proxy_addresses=actor_ref.proxy_addresses,
+        )
         return self._process_result_message(result)
 
     async def destroy_actor(self, actor_ref: ActorRef):
@@ -174,7 +189,12 @@ class IndigenActorContext(BaseActorContext):
             wait=False,
             proxy_addresses=actor_ref.proxy_addresses,
         )
-        result = await self._wait(future, actor_ref.address, message)  # type: ignore
+        result = await self._wait(
+            future,  # type: ignore
+            actor_ref.address,
+            message,
+            proxy_addresses=actor_ref.proxy_addresses,
+        )
         return self._process_result_message(result)
 
     async def kill_actor(self, actor_ref: ActorRef, force: bool = True):
@@ -221,7 +241,12 @@ class IndigenActorContext(BaseActorContext):
             wait=False,
             proxy_addresses=actor_ref.proxy_addresses,
         )
-        result = await self._wait(future, actor_ref.address, message)
+        result = await self._wait(
+            future,
+            actor_ref.address,
+            message,
+            proxy_addresses=actor_ref.proxy_addresses,
+        )
         res = self._process_result_message(result)
         if res.address != connect_addr:
             res.address = fix_all_zero_ip(res.address, connect_addr)
@@ -258,16 +283,26 @@ class IndigenActorContext(BaseActorContext):
                 proxy_addresses=actor_ref.proxy_addresses,
             )
             if wait_response:
-                result = await self._wait(future, actor_ref.address, send_message)  # type: ignore
+                result = await self._wait(
+                    future,  # type: ignore
+                    actor_ref.address,
+                    send_message,
+                    proxy_addresses=actor_ref.proxy_addresses,
+                )
                 return self._process_result_message(result)
             else:
                 return future
 
-    async def cancel(self, address: str, cancel_message_id: bytes):
+    async def cancel(
+        self,
+        address: str,
+        cancel_message_id: bytes,
+        proxy_addresses: list[str] | None = None,
+    ):
         message = CancelMessage(
             new_message_id(), address, cancel_message_id, protocol=DEFAULT_PROTOCOL
         )
-        result = await self._call(address, message)
+        result = await self._call(address, message, proxy_addresses=proxy_addresses)
         return self._process_result_message(result)  # type: ignore
 
     async def wait_actor_pool_recovered(

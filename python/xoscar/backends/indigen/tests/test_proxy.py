@@ -14,13 +14,15 @@
 
 import asyncio
 import multiprocessing
+import socket
+from contextlib import ExitStack
 
 import psutil
 import pytest
 
 import xoscar as xo
 
-from ....utils import get_next_port
+from ...context import IndigenActorContext
 from ...router import Router
 
 
@@ -41,7 +43,14 @@ def _run_in_process(started, address, proxy_config):
 
 @pytest.fixture
 async def actor_pools():
-    addrs = addr1, addr2, addr3 = [f"127.0.0.1:{get_next_port()}" for _ in range(3)]
+    # Binding port 0 avoids Windows reserved ranges that netstat cannot see.
+    with ExitStack() as stack:
+        sockets = [stack.enter_context(socket.socket()) for _ in range(3)]
+        for sock in sockets:
+            sock.bind(("127.0.0.1", 0))
+        addrs = addr1, addr2, addr3 = [
+            f"127.0.0.1:{sock.getsockname()[1]}" for sock in sockets
+        ]
     processes = []
     try:
         for addr in addrs:
@@ -57,11 +66,12 @@ async def actor_pools():
                 target=_run_in_process, args=(s, addr, proxy_conf)
             )
             p.start()
-            s.wait()
-
-            ps = psutil.Process(p.pid).children()
-            processes.append(psutil.Process(p.pid))
-            processes.extend(ps)
+            process = psutil.Process(p.pid)
+            processes.append(process)
+            assert await asyncio.to_thread(
+                s.wait, 60
+            ), f"Actor pool at {addr} failed to start (exit code: {p.exitcode})"
+            processes.extend(process.children())
 
         yield addr1, addr3
     finally:
@@ -202,3 +212,55 @@ async def test_actor_ref_with_parameters():
         assert await xo.has_actor(actor_ref_from_actor_ref_func)
         assert await original_actor_ref.get_values() == (1, 2)
         assert await actor_ref_from_actor_ref_func.get_values() == (1, 2)
+
+
+@pytest.mark.asyncio
+async def test_cancel_does_not_overtake_proxied_call(monkeypatch):
+    remote_started = asyncio.Event()
+    remote_cancelled = asyncio.Event()
+    forwarding_started = asyncio.Event()
+
+    class BlockingActor(xo.Actor):
+        async def long_running(self):
+            remote_started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                remote_cancelled.set()
+
+        def run(self):
+            return True
+
+    target = await xo.create_actor_pool("127.0.0.1:0", n_process=0)
+    proxy = await xo.create_actor_pool("127.0.0.1:0", n_process=0)
+    async with target, proxy:
+        ref = await xo.create_actor(BlockingActor, address=target.external_address)
+        ref.proxy_addresses = [proxy.external_address]
+        # Exercise an external client, which has no local address mappings.
+        monkeypatch.setattr(Router, "_instance", Router([], None))
+        original_create_client = Router._create_client
+
+        async def delayed_create_client(router, client_type, address, **kwargs):
+            if router is proxy.router and address == target.external_address:
+                forwarding_started.set()
+                await asyncio.sleep(0.2)
+            return await original_create_client(router, client_type, address, **kwargs)
+
+        monkeypatch.setattr(Router, "_create_client", delayed_create_client)
+        ctx = IndigenActorContext()
+        task = asyncio.create_task(ctx.send(ref, ("long_running", 0, (), {})))
+        try:
+            await asyncio.wait_for(forwarding_started.wait(), timeout=2)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(task, timeout=2)
+            await asyncio.wait_for(remote_started.wait(), timeout=2)
+            assert remote_cancelled.is_set()
+            # The cancelled method must release the actor lock for the next RPC.
+            assert await asyncio.wait_for(ctx.send(ref, ("run", 0, (), {})), timeout=2)
+        finally:
+            # Also clean up the remote call when running against the broken code.
+            for process_task in list(target._process_messages.values()):
+                if process_task is not None:
+                    process_task.cancel()
+            await ctx._caller.stop()
