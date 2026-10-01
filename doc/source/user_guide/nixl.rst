@@ -16,7 +16,7 @@ NIXL requires Linux. Install the optional dependency on each worker:
 
    pip install 'xoscar[nixl]'
 
-The initial implementation supports NIXL 1.5.x, using its UCX plugin. Install
+The implementation was tested with NIXL 1.5.x, using its UCX plugin. Install
 CuPy separately if your application uses CuPy or RMM buffers. GPU peer access
 and cross-host RDMA depend on the CUDA/UCX installation and hardware.
 
@@ -65,11 +65,18 @@ Buffer and completion semantics
 * ``await copy_to(...)`` waits for data transfer and a target acknowledgement.
   CUDA devices are synchronized before transfer and before acknowledging the
   destination. This covers non-default streams but introduces a device-wide
-  fence; stream-ordered overlap is not implemented.
-* Cancelling a copy waits for the active transfer and acknowledgement before
+  fence; stream-ordered overlap is not implemented. CUDA synchronization and
+  memory registration/deregistration currently run synchronously on the pool's
+  event loop, so long-running kernels or registration calls can delay other
+  actor RPCs. Agent initialization runs in a worker thread.
+* A copy cancelled while queued returns without starting a transfer.
+  Cancelling an active copy waits for the transfer and acknowledgement before
   propagating cancellation. A cancellation request is not a guarantee of
   immediate return. A failed copy may have modified some destination bytes;
   it is not an atomic transaction and is not retried automatically.
+  Completion polling backs off to 1 ms. There is no transfer deadline: a stalled
+  backend that never reports a terminal state can delay cancellation and channel
+  shutdown. The process must be terminated if the backend cannot recover.
 * Registrations and metadata are reused for the most recent buffer batch on
   each connection. A batch of at most 256 MiB is retained until replacement
   or connection close; larger batches are deregistered after each copy.

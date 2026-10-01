@@ -236,31 +236,36 @@ async def test_cancel_does_not_overtake_proxied_call(monkeypatch):
     async with target, proxy:
         ref = await xo.create_actor(BlockingActor, address=target.external_address)
         ref.proxy_addresses = [proxy.external_address]
-        # Exercise an external client, which has no local address mappings.
-        monkeypatch.setattr(Router, "_instance", Router([], None))
-        original_create_client = Router._create_client
+        with monkeypatch.context() as patch:
+            # Exercise an external client, which has no local address mappings.
+            patch.setattr(Router, "_instance", Router([], None))
+            original_create_client = Router._create_client
 
-        async def delayed_create_client(router, client_type, address, **kwargs):
-            if router is proxy.router and address == target.external_address:
-                forwarding_started.set()
-                await asyncio.sleep(0.2)
-            return await original_create_client(router, client_type, address, **kwargs)
+            async def delayed_create_client(router, client_type, address, **kwargs):
+                if router is proxy.router and address == target.external_address:
+                    forwarding_started.set()
+                    await asyncio.sleep(0.2)
+                return await original_create_client(
+                    router, client_type, address, **kwargs
+                )
 
-        monkeypatch.setattr(Router, "_create_client", delayed_create_client)
-        ctx = IndigenActorContext()
-        task = asyncio.create_task(ctx.send(ref, ("long_running", 0, (), {})))
-        try:
-            await asyncio.wait_for(forwarding_started.wait(), timeout=2)
-            task.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await asyncio.wait_for(task, timeout=2)
-            await asyncio.wait_for(remote_started.wait(), timeout=2)
-            assert remote_cancelled.is_set()
-            # The cancelled method must release the actor lock for the next RPC.
-            assert await asyncio.wait_for(ctx.send(ref, ("run", 0, (), {})), timeout=2)
-        finally:
-            # Also clean up the remote call when running against the broken code.
-            for process_task in list(target._process_messages.values()):
-                if process_task is not None:
-                    process_task.cancel()
-            await ctx._caller.stop()
+            patch.setattr(Router, "_create_client", delayed_create_client)
+            ctx = IndigenActorContext()
+            task = asyncio.create_task(ctx.send(ref, ("long_running", 0, (), {})))
+            try:
+                await asyncio.wait_for(forwarding_started.wait(), timeout=2)
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(task, timeout=2)
+                await asyncio.wait_for(remote_started.wait(), timeout=2)
+                assert remote_cancelled.is_set()
+                # The cancelled method must release the actor lock for the next RPC.
+                assert await asyncio.wait_for(
+                    ctx.send(ref, ("run", 0, (), {})), timeout=2
+                )
+            finally:
+                # Also clean up the remote call when running against the broken code.
+                for process_task in list(target._process_messages.values()):
+                    if process_task is not None:
+                        process_task.cancel()
+                await ctx._caller.stop()

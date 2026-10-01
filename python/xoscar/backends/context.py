@@ -384,8 +384,7 @@ class IndigenActorContext(BaseActorContext):
             return await self._caller.get_client_via_type(router, address, client_type)
 
     async def _get_client(self, address: str) -> Client:
-        router = Router.get_instance()
-        assert router is not None, "`copy_to` can only be used inside pools"
+        router = Router.get_instance_or_empty()
         if router.get_proxy(address):
             raise RuntimeError("Cannot run `copy_to` when enabling proxy")
         return await self._get_copy_to_client(router, address)

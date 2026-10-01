@@ -94,6 +94,18 @@ def _synchronize(buffers):
             cupy.cuda.runtime.deviceSynchronize()
 
 
+async def _wait_until_done(task):
+    cancelled = None
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError as ex:
+            cancelled = ex
+        except Exception:
+            break
+    return cancelled
+
+
 class NixlChannel(SocketChannel):
     name = "nixl"
 
@@ -157,8 +169,9 @@ class NixlChannel(SocketChannel):
         self._buffers.clear()
         self._descriptions.clear()
 
-    def _register(self, buffers, writable=False):
-        descriptions = [_describe_buffer(b, writable) for b in buffers]
+    def _register(self, buffers, descriptions=None):
+        if descriptions is None:
+            descriptions = [_describe_buffer(b) for b in buffers]
         _synchronize(buffers)
         if (
             len(buffers) == len(self._buffers)
@@ -204,13 +217,13 @@ class NixlChannel(SocketChannel):
             ):
                 raise ValueError("NIXL source and target buffer sizes must match")
             await self._ensure_agent()
-            self._register(buffers, writable=True)
-            self._pending = token
+            self._register(buffers, descriptions)
             metadata = (
                 self.agent.get_agent_metadata()
                 if known_generation != self._generation
                 else None
             )
+            self._pending = token
             return self._generation, metadata, descriptions
         if operation == "finish":
             if token != self._pending:
@@ -242,11 +255,13 @@ class NixlChannel(SocketChannel):
             )
             try:
                 state = agent.transfer(handle)
+                poll_delay = 0
                 while state == "PROC":
                     # Even after control-channel EOF, wait for a terminal
                     # transport state before deregistering memory. The UCX
                     # backend's default peer error handling reports peer loss.
-                    await asyncio.sleep(0)
+                    await asyncio.sleep(poll_delay)
+                    poll_delay = min(poll_delay * 2 or 0.0001, 0.001)
                     state = agent.check_xfer_state(handle)
                 if state != "DONE":
                     raise RuntimeError(f"NIXL transfer failed: {state}")
@@ -254,80 +269,89 @@ class NixlChannel(SocketChannel):
                 agent.release_xfer_handle(handle)
 
     async def copy_buffers(self, buffers, refs, call):
-        # Cancellation must not release memory while a WRITE is still running.
-        task = asyncio.create_task(self._copy_buffers(buffers, refs, call))
-        try:
-            return await asyncio.shield(task)
-        except asyncio.CancelledError:
-            # Complete the protocol (including the remote acknowledgement) first.
+        # Queued copies can be cancelled before they acquire any registrations.
+        async with self._copy_lock:
+            task = asyncio.create_task(self._copy_buffers(buffers, refs, call))
             try:
-                await asyncio.shield(task)
-            finally:
+                return await asyncio.shield(task)
+            except asyncio.CancelledError:
+                # Repeated cancellation cannot abandon an active WRITE or ack.
+                await _wait_until_done(task)
+                try:
+                    task.result()
+                except BaseException:
+                    pass
                 raise
 
     async def _copy_buffers(self, buffers, refs, call):
-        async with self._copy_lock:
-            token = new_message_id()
+        token = new_message_id()
+        prepare_rejected = False
 
-            async def command(operation, payload=None):
-                message = ControlMessage(
-                    message_id=new_message_id(),
-                    control_message_type=ControlMessageType.switch_to_copy_to,
-                    content=(operation, token, payload),
-                )
-                result = await call(message)
-                if isinstance(result, ErrorMessage):
-                    raise result.as_instanceof_cause()
-                return result.result
+        async def command(operation, payload=None):
+            nonlocal prepare_rejected
+            message = ControlMessage(
+                message_id=new_message_id(),
+                control_message_type=ControlMessageType.switch_to_copy_to,
+                content=(operation, token, payload),
+            )
+            result = await call(message)
+            if isinstance(result, ErrorMessage):
+                prepare_rejected = operation == "prepare"
+                raise result.as_instanceof_cause()
+            return result.result
 
-            await self._ensure_agent()
-            descriptions = self._register(buffers)
-            try:
-                generation, metadata, remote = await command(
-                    "prepare",
-                    (
-                        [(ref.address, ref.uid) for ref in refs],
-                        [desc[1] for _, desc in descriptions],
-                        self._remote_generation,
-                    ),
-                )
-                if metadata is not None:
-                    if self._remote_agent is not None:
-                        self.agent.remove_remote_agent(self._remote_agent)
-                    self._remote_agent = self.agent.add_remote_agent(metadata)
-                self._remote_generation = generation
-                self._inflight = asyncio.create_task(self._write(descriptions, remote))
-                await asyncio.shield(self._inflight)
-                await command("finish")
-                self._trim_registration_cache()
-            except BaseException:
+        await self._ensure_agent()
+        descriptions = self._register(buffers)
+        try:
+            generation, metadata, remote = await command(
+                "prepare",
+                (
+                    [(ref.address, ref.uid) for ref in refs],
+                    [desc[1] for _, desc in descriptions],
+                    self._remote_generation,
+                ),
+            )
+            if metadata is not None:
+                if self._remote_agent is not None:
+                    self.agent.remove_remote_agent(self._remote_agent)
+                self._remote_agent = self.agent.add_remote_agent(metadata)
+            self._remote_generation = generation
+            self._inflight = asyncio.create_task(self._write(descriptions, remote))
+            await asyncio.shield(self._inflight)
+            await command("finish")
+            self._trim_registration_cache()
+        except BaseException:
+            # A rejected prepare has not started a transfer. The connection
+            # also carries actor RPCs, so leave it usable for those callers.
+            if not prepare_rejected:
                 await self.close()
-                raise
-            finally:
-                self._inflight = None
+            raise
+        finally:
+            self._inflight = None
 
     async def close(self):
         if self._closing:
             return
         self._closing = True
+        cancelled = None
         try:
-            if self._agent_init is not None:
-                try:
-                    await asyncio.shield(self._agent_init)
-                except Exception:
-                    pass
-            if self._inflight is not None:
-                try:
-                    await asyncio.shield(self._inflight)
-                except Exception:
-                    pass
+            for task in (self._agent_init, self._inflight):
+                if task is not None:
+                    cancellation = await _wait_until_done(task)
+                    cancelled = cancelled or cancellation
+                    try:
+                        task.result()
+                    except BaseException:
+                        pass
             # Deregister explicitly: an exception traceback can still retain
             # the Python agent wrapper, so dropping our reference is not enough.
             self._deregister()
+        finally:
             self._agent = None
             self._pending = None
-        finally:
             await super().close()
+        if cancelled is not None:
+            raise cancelled
 
 
 @register_server

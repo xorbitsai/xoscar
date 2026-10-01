@@ -256,7 +256,7 @@ async def test_client_only_process_reuses_default_router(monkeypatch):
     assert Router.get_instance() is router
     assert router.get_internal_address("127.0.0.1:4567") == "dummy://0"
     router.remove_router(pool_router)
-    assert len(router._cache) == 1
+    assert await router.get_client("127.0.0.1:1234", from_who=caller) is clients[0]
 
 
 @pytest.mark.asyncio
