@@ -46,6 +46,7 @@ from ..utils import implements, is_zero_ip, register_asyncio_task_timeout_detect
 from .allocate_strategy import AddressSpecified, allocated_type
 from .communication import (
     Channel,
+    NixlChannel,
     Server,
     UCXChannel,
     gen_local_address,
@@ -539,9 +540,21 @@ class AbstractActorPool(ABC):
     def stopped(self) -> bool:
         return self._stopped.is_set()
 
-    async def _handle_ucx_meta_message(
+    async def _handle_buffer_meta_message(
         self, message: _MessageBase, channel: Channel
     ) -> bool:
+        if (
+            isinstance(message, ControlMessage)
+            and message.control_message_type == ControlMessageType.switch_to_copy_to
+            and isinstance(channel, NixlChannel)
+        ):
+            with _ErrorProcessor(
+                self.external_address, message.message_id, message.protocol
+            ) as processor:
+                result = channel.handle_buffers(message.content)
+                processor.result = ResultMessage(message.message_id, result)
+            await self._send_channel(processor.result, channel)
+            return True
         if (
             isinstance(message, ControlMessage)
             and message.message_type == MessageType.control
@@ -584,7 +597,7 @@ class AbstractActorPool(ABC):
                         # close failed, ignore
                         pass
                     return
-                if await self._handle_ucx_meta_message(message, channel):
+                if await self._handle_buffer_meta_message(message, channel):
                     continue
                 asyncio.create_task(self.process_message(message, channel))
                 # delete to release the reference of message

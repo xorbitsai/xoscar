@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 from typing import Any, Optional, Type, Union
 
@@ -42,11 +43,12 @@ class Router:
     )
 
     _instance: "Router" | None = None
+    _instance_lock = threading.Lock()
 
     @staticmethod
     def set_instance(router: Optional["Router"]):
-        # Default router is set when an actor pool started
-        Router._instance = router
+        with Router._instance_lock:
+            Router._instance = router
 
     @staticmethod
     def get_instance() -> "Router" | None:
@@ -54,7 +56,12 @@ class Router:
 
     @staticmethod
     def get_instance_or_empty() -> "Router":
-        return Router._instance or Router(list(), None)
+        # Client-only processes also need a persistent connection cache.
+        # Returning a temporary router here creates a connection on every RPC.
+        with Router._instance_lock:
+            if Router._instance is None:
+                Router._instance = Router([], None)
+            return Router._instance
 
     def __init__(
         self,
@@ -313,3 +320,11 @@ class Router:
             else:
                 proxies.append(proxy)
                 from_addr = proxy
+
+
+def _reset_router_lock_after_fork():
+    Router._instance_lock = threading.Lock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_router_lock_after_fork)

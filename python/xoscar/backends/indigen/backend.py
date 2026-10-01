@@ -29,7 +29,7 @@ class IndigenActorBackend(BaseActorBackend):
     def name():
         # None means Indigen is default scheme
         # ucx can be recognized as Indigen backend as well
-        return [None, "ucx"]
+        return [None, "ucx", "nixl"]
 
     @staticmethod
     def get_context_cls():

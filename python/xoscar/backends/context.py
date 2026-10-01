@@ -28,7 +28,7 @@ from ..debug import debug_async_timeout, detect_cycle_send
 from ..errors import CannotCancelTask
 from ..utils import dataslots, fix_all_zero_ip
 from .allocate_strategy import AddressSpecified, AllocateStrategy
-from .communication import Client, DummyClient, UCXClient
+from .communication import Client, DummyClient, NixlClient, UCXClient
 from .core import ActorCaller
 from .message import (
     DEFAULT_PROTOCOL,
@@ -327,7 +327,11 @@ class IndigenActorContext(BaseActorContext):
 
     async def _get_copy_to_client(self, router, address) -> Client:
         client = await self._caller.get_client(router, address)
-        if isinstance(client, DummyClient) or hasattr(client, "send_buffers"):
+        if (
+            isinstance(client, DummyClient)
+            or hasattr(client, "send_buffers")
+            or hasattr(client, "copy_buffers")
+        ):
             return client
         client_types = router.get_all_client_types(address)
         # For inter-process communication, the ``self._caller.get_client`` interface would not look for UCX Client,
@@ -337,6 +341,7 @@ class IndigenActorContext(BaseActorContext):
                 client_type
                 for client_type in client_types
                 if hasattr(client_type, "send_buffers")
+                or hasattr(client_type, "copy_buffers")
             )
         except StopIteration:
             return client
@@ -358,7 +363,13 @@ class IndigenActorContext(BaseActorContext):
     ):
         address = remote_buffer_refs[0].address
         client = await self._get_client(address)
-        if isinstance(client, UCXClient):
+        if isinstance(client, NixlClient):
+            return await client.copy_buffers(
+                local_buffers,
+                remote_buffer_refs,
+                lambda message: self._call_with_client(client, message),
+            )
+        elif isinstance(client, UCXClient):
             message = [(buf.address, buf.uid) for buf in remote_buffer_refs]
             await self._call_send_buffers(
                 client,

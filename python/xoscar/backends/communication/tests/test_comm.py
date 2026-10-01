@@ -30,6 +30,7 @@ from .. import (
     DummyChannel,
     DummyClient,
     DummyServer,
+    NixlServer,
     Server,
     SocketChannel,
     SocketClient,
@@ -103,6 +104,7 @@ def gen_params() -> List[Tuple[Type[Server], Dict, str]]:
     # server_type, config, con
     params: List[Tuple[Type[Server], Dict, str]] = [
         (SocketServer, dict(host="127.0.0.1", port=port), f"127.0.0.1:{port}"),
+        (NixlServer, dict(host="127.0.0.1", port=port), f"nixl://127.0.0.1:{port}"),
     ]
     if sys.platform != "win32":
         params.append((UnixSocketServer, dict(process_index="0"), f"unixsocket:///0"))
