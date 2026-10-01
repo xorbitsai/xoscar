@@ -56,10 +56,10 @@ pip install xoscar
 ### Build from source
 The source code is currently hosted on GitHub at: https://github.com/xorbitsai/xoscar .
 
-Building from source requires that you have cmake and gcc installed on your system.
+Building from source requires CMake and a C++20-capable compiler.
 
-- cmake >= 3.18
-- gcc >= 8
+- cmake >= 3.21 (>= 3.30 for Python 3.14 and later)
+- A C++20-capable compiler, such as GCC, Clang, or MSVC
 
 ```shell
 # If you have never cloned xoscar before

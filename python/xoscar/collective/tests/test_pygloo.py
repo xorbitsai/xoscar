@@ -19,6 +19,7 @@ import tempfile
 import numpy as np
 
 from ...tests.core import require_linux, require_unix
+from . import _join_all
 
 system_name = platform.system()
 
@@ -69,8 +70,7 @@ def test_allgather():
         process2 = mp.Process(target=worker_allgather, args=(1, temp_dir))
         process2.start()
 
-        process1.join()
-        process2.join()
+        _join_all(process1, process2)
 
 
 def worker_allreduce(rank, fileStore_path):
@@ -115,8 +115,7 @@ def test_allreduce():
         process2 = mp.Process(target=worker_allreduce, args=(1, temp_dir))
         process2.start()
 
-        process1.join()
-        process2.join()
+        _join_all(process1, process2)
 
 
 def worker_barrier(rank, fileStore_path):
@@ -162,8 +161,7 @@ def test_barrier():
         process2 = mp.Process(target=worker_barrier, args=(1, temp_dir))
         process2.start()
 
-        process1.join()
-        process2.join()
+        _join_all(process1, process2)
 
 
 def worker_broadcast(rank, fileStore_path):
@@ -220,8 +218,7 @@ def test_broadcast():
         process2 = mp.Process(target=worker_broadcast, args=(1, temp_dir))
         process2.start()
 
-        process1.join()
-        process2.join()
+        _join_all(process1, process2)
 
 
 def worker_gather(rank, fileStore_path):
@@ -274,9 +271,7 @@ def test_gather():
         process3 = mp.Process(target=worker_gather, args=(2, temp_dir))
         process3.start()
 
-        process1.join()
-        process2.join()
-        process3.join()
+        _join_all(process1, process2, process3)
 
 
 def worker_reduce_scatter(rank, fileStore_path):
@@ -338,9 +333,7 @@ def test_reduce_scatter():
         process3 = mp.Process(target=worker_reduce_scatter, args=(2, temp_dir))
         process3.start()
 
-        process1.join()
-        process2.join()
-        process3.join()
+        _join_all(process1, process2, process3)
 
 
 def worker_reduce(rank, fileStore_path):
@@ -400,9 +393,7 @@ def test_reduce():
         process3 = mp.Process(target=worker_reduce, args=(2, temp_dir))
         process3.start()
 
-        process1.join()
-        process2.join()
-        process3.join()
+        _join_all(process1, process2, process3)
 
 
 def worker_scatter(rank, fileStore_path):
@@ -459,8 +450,7 @@ def test_scatter():
         process2 = mp.Process(target=worker_scatter, args=(1, temp_dir))
         process2.start()
 
-        process1.join()
-        process2.join()
+        _join_all(process1, process2)
 
 
 def worker_send_recv(rank, fileStore_path):
@@ -519,8 +509,7 @@ def test_send_recv():
         process2 = mp.Process(target=worker_send_recv, args=(1, temp_dir))
         process2.start()
 
-        process1.join()
-        process2.join()
+        _join_all(process1, process2)
 
 
 def worker_all_to_all(rank, fileStore_path):
@@ -565,6 +554,4 @@ def test_all_to_all():
         process3 = mp.Process(target=worker_all_to_all, args=(2, temp_dir))
         process3.start()
 
-        process1.join()
-        process2.join()
-        process3.join()
+        _join_all(process1, process2, process3)
