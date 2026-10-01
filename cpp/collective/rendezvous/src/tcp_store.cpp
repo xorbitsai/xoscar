@@ -950,11 +950,10 @@ void TCPClient::setTimeout(std::chrono::milliseconds value) {
     }
 
 #ifdef _WIN32
-    struct timeval timeoutTV
-        = {static_cast<long>(value.count() / 1000),
-           static_cast<long>((value.count() % 1000) * 1000)};
+    // Winsock expects a DWORD in milliseconds, rather than a timeval.
+    DWORD timeout = static_cast<DWORD>(value.count());
 #else
-    struct timeval timeoutTV = {
+    struct timeval timeout = {
         .tv_sec = value.count() / 1000,
         .tv_usec = static_cast<suseconds_t>((value.count() % 1000) * 1000),
     };
@@ -962,8 +961,8 @@ void TCPClient::setTimeout(std::chrono::milliseconds value) {
     SYSCHECK_ERR_RETURN_NEG1(::setsockopt(socket_.handle(),
                                           SOL_SOCKET,
                                           SO_RCVTIMEO,
-                                          reinterpret_cast<char *>(&timeoutTV),
-                                          sizeof(timeoutTV)));
+                                          reinterpret_cast<char *>(&timeout),
+                                          sizeof(timeout)));
 }
 
 class TCPCallbackClient {

@@ -85,6 +85,48 @@ def test_tcp_store_destruction_releases_port(unused_tcp_port):
         gc.collect()
 
 
+def _publish_delayed_key(port, ready, publish):
+    options = xp.rendezvous.TCPStoreOptions()
+    options.port = port
+    options.numWorkers = 1
+    options.timeout = timedelta(seconds=5)
+    store = xp.rendezvous.TCPStore("127.0.0.1", options)
+    ready.set()
+    assert publish.wait(10)
+    # Exceed the effective Windows timeout when seconds are read as milliseconds.
+    time.sleep(1)
+    store.set("delayed", list("ready"))
+
+
+@pytest.mark.parametrize("operation", ["wait", "get"])
+def test_tcp_store_receives_delayed_key(operation, unused_tcp_port):
+    options = xp.rendezvous.TCPStoreOptions()
+    options.port = unused_tcp_port
+    options.isServer = True
+    options.numWorkers = 1
+    options.timeout = timedelta(seconds=5)
+    store = xp.rendezvous.TCPStore("127.0.0.1", options)
+    ctx = mp.get_context("spawn")
+    ready, publish = ctx.Event(), ctx.Event()
+    process = ctx.Process(
+        target=_publish_delayed_key, args=(unused_tcp_port, ready, publish)
+    )
+    process.start()
+    try:
+        assert ready.wait(10)
+        publish.set()
+        if operation == "wait":
+            store.wait(["delayed"], timedelta(seconds=5))
+        assert store.get("delayed") == list("ready")
+        process.join(10)
+        assert process.exitcode == 0
+    finally:
+        publish.set()
+        if process.is_alive():
+            process.terminate()
+            process.join(5)
+
+
 def test_rendezvous_context_casts_to_context():
     context = xp.rendezvous.Context(1, 3)
     assert context.rank == 1
