@@ -434,19 +434,19 @@ class MainActorPool(MainActorPoolBase):
     async def kill_sub_pool(
         self, process: asyncio.subprocess.Process, force: bool = False
     ):
-        # First, try to terminate the process gracefully
+        # Let a stopped sub pool finish Python cleanup before sending signals.
         if not force:
             try:
-                process.terminate()
-                # Wait for graceful termination
+                await asyncio.wait_for(process.wait(), timeout=2.0)
+            except asyncio.TimeoutError:
                 try:
+                    process.terminate()
                     await asyncio.wait_for(process.wait(), timeout=2.0)
                 except asyncio.TimeoutError:
-                    # Process didn't terminate gracefully, force kill
                     force = True
-            except ProcessLookupError:
-                # Process already terminated
-                pass
+                except ProcessLookupError:
+                    # Process already terminated.
+                    pass
 
         # Force kill if needed or if graceful termination failed
         if force:

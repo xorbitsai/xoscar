@@ -84,6 +84,9 @@ jobs:
     if: github.repository == 'xorbitsai/xoscar'
     runs-on: ${{ matrix.os }}
     needs: lint
+    permissions:
+      contents: read
+      id-token: write
     env:
       CONDA_ENV: xoscar-test
       SELF_HOST_PYTHON: /root/miniconda3/envs/xoscar-test/bin/python
@@ -194,3 +197,6 @@ jobs:
       with:
         working-directory: ./python
         flags: unittests
+        # Fork pull requests use Codecov's tokenless upload support.
+        use_oidc: ${{ github.event_name == 'push' }}
+        fail_ci_if_error: true

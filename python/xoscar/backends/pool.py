@@ -1435,8 +1435,9 @@ class MainActorPoolBase(ActorPoolBase):
             except (futures.TimeoutError, asyncio.TimeoutError):
                 force = True
         except (ConnectionError, ServerClosed):
-            # process dead maybe, ignore it
-            force = True
+            # A stopping sub pool closes its servers before replying. Allow
+            # the process to finish its exit handlers instead of forcing a kill.
+            pass
         # kill process
         await self.kill_sub_pool(process, force=force)
 
