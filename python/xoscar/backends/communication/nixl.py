@@ -49,7 +49,12 @@ def _describe_buffer(buffer, writable=False):
             ),
         )
     if hasattr(buffer, "__cuda_array_interface__"):
-        import cupy
+        try:
+            import cupy
+        except ImportError as ex:
+            raise ImportError(
+                "Install a CUDA-compatible CuPy to transfer CUDA arrays via NIXL"
+            ) from ex
 
         array = cupy.asarray(buffer)
         if not array.flags.c_contiguous:
@@ -95,6 +100,7 @@ class NixlChannel(SocketChannel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._agent = None
+        self._agent_init = None
         self._buffers = []
         self._descriptions = []
         self._registrations = []
@@ -111,21 +117,38 @@ class NixlChannel(SocketChannel):
         if self._closing or self.closed:
             raise ConnectionError("NIXL channel is closed")
         if self._agent is None:
-            if sys.platform != "linux":
-                raise ImportError("NIXL transfers require Linux")
-            try:
-                from nixl._api import nixl_agent, nixl_agent_config
-            except ImportError as ex:
-                raise ImportError("Install xoscar[nixl] to use NIXL transfers") from ex
-            self._agent = nixl_agent(
-                f"xoscar-{uuid.uuid4().hex}",
-                nixl_agent_config(
-                    enable_prog_thread=True,
-                    enable_listen_thread=False,
-                    backends=["UCX"],
-                ),
-            )
+            raise RuntimeError("NIXL agent has not been initialized")
         return self._agent
+
+    @staticmethod
+    def _create_agent():
+        if sys.platform != "linux":
+            raise ImportError("NIXL transfers require Linux")
+        try:
+            from nixl._api import nixl_agent, nixl_agent_config
+        except ImportError as ex:
+            raise ImportError("Install xoscar[nixl] to use NIXL transfers") from ex
+        return nixl_agent(
+            f"xoscar-{uuid.uuid4().hex}",
+            nixl_agent_config(
+                enable_prog_thread=True,
+                enable_listen_thread=False,
+                backends=["UCX"],
+            ),
+        )
+
+    async def _initialize_agent(self):
+        self._agent = await asyncio.to_thread(self._create_agent)
+
+    async def _ensure_agent(self):
+        if self._closing or self.closed:
+            raise ConnectionError("NIXL channel is closed")
+        if self._agent is None:
+            if self._agent_init is None:
+                self._agent_init = asyncio.create_task(self._initialize_agent())
+            # A cancelled caller must not abandon an agent still being created.
+            await asyncio.shield(self._agent_init)
+        return self.agent
 
     def _deregister(self):
         for registration in self._registrations:
@@ -168,7 +191,7 @@ class NixlChannel(SocketChannel):
         if sum(desc[1] for _, desc in self._descriptions) > _REGISTRATION_CACHE_BYTES:
             self._deregister()
 
-    def handle_buffers(self, content):
+    async def handle_buffers(self, content):
         operation, token, payload = content
         if operation == "prepare":
             if self._pending is not None:
@@ -180,6 +203,7 @@ class NixlChannel(SocketChannel):
                 size != desc[1] for size, (_, desc) in zip(sizes, descriptions)
             ):
                 raise ValueError("NIXL source and target buffer sizes must match")
+            await self._ensure_agent()
             self._register(buffers, writable=True)
             self._pending = token
             metadata = (
@@ -256,6 +280,7 @@ class NixlChannel(SocketChannel):
                     raise result.as_instanceof_cause()
                 return result.result
 
+            await self._ensure_agent()
             descriptions = self._register(buffers)
             try:
                 generation, metadata, remote = await command(
@@ -286,6 +311,11 @@ class NixlChannel(SocketChannel):
             return
         self._closing = True
         try:
+            if self._agent_init is not None:
+                try:
+                    await asyncio.shield(self._agent_init)
+                except Exception:
+                    pass
             if self._inflight is not None:
                 try:
                     await asyncio.shield(self._inflight)

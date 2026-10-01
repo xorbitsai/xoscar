@@ -324,6 +324,10 @@ class Router:
 
 def _reset_router_lock_after_fork():
     Router._instance_lock = threading.Lock()
+    if Router._instance is not None:
+        # Preserve routing/proxy configuration, but never reuse parent clients
+        # or asyncio locks, even if a child continues the inherited event loop.
+        Router._instance._cache_local = threading.local()
 
 
 if hasattr(os, "register_at_fork"):

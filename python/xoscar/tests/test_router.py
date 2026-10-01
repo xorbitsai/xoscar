@@ -301,3 +301,30 @@ async def test_client_only_rpcs_share_one_socket(monkeypatch):
     finally:
         await caller.stop()
         await server.stop()
+
+
+def test_fork_preserves_routes_but_discards_clients(monkeypatch):
+    import os
+
+    if not hasattr(os, "fork"):
+        pytest.skip("fork is unavailable")
+    router = Router([], None, mapping={"external": "internal"})
+    monkeypatch.setattr(Router, "_instance", router)
+    cache = router._cache
+    cache["parent"] = object()
+    lock = router._lock
+    pid = os.fork()
+    if pid == 0:
+        try:
+            child = Router.get_instance_or_empty()
+            assert child is router
+            assert child.get_internal_address("external") == "internal"
+            assert child._cache == {}
+            assert child._lock is not lock
+        except BaseException:
+            os._exit(1)
+        os._exit(0)
+    _, status = os.waitpid(pid, 0)
+    assert status == 0
+    assert router._cache is cache and "parent" in cache
+    assert router._lock is lock

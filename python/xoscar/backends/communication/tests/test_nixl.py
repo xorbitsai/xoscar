@@ -80,7 +80,7 @@ async def peers():
 
     async def call(message):
         try:
-            result = target.handle_buffers(message.content)
+            result = await target.handle_buffers(message.content)
             return ResultMessage(message.message_id, result)
         except Exception as e:
             return ErrorMessage(message.message_id, error_type=type(e), error=e)
@@ -307,3 +307,72 @@ async def test_nixl_gpu_pool_transfer(kill_peer):
             assert await actors[0].copy(actors[1], sizes)
     finally:
         await pool.stop()
+
+
+async def test_initialization_keeps_loop_responsive_and_close_waits(monkeypatch):
+    import threading
+
+    channel = make_channel()
+    agent = channel._agent
+    channel._agent = None
+    started = threading.Event()
+    release = threading.Event()
+    calls = []
+
+    def create():
+        calls.append(threading.get_ident())
+        started.set()
+        assert release.wait(10)
+        return agent
+
+    monkeypatch.setattr(channel, "_create_agent", create)
+    first = asyncio.create_task(channel._ensure_agent())
+    second = asyncio.create_task(channel._ensure_agent())
+    closing = None
+    try:
+
+        async def wait_started():
+            while not started.is_set():
+                await asyncio.sleep(0)
+
+        await asyncio.wait_for(wait_started(), 2)
+        assert calls == [calls[0]]
+        assert calls[0] != threading.get_ident()
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        closing = asyncio.create_task(channel.close())
+        await asyncio.sleep(0)
+        assert not closing.done()
+        release.set()
+        with pytest.raises(ConnectionError, match="closed"):
+            await second
+        await closing
+        assert channel.closed
+        assert channel._agent is None
+    finally:
+        release.set()
+        await asyncio.gather(first, second, return_exceptions=True)
+        if closing is not None:
+            await closing
+        await channel.close()
+
+
+def test_cuda_array_without_cupy(monkeypatch):
+    import sys
+
+    class CudaArray:
+        __cuda_array_interface__ = {}
+
+    monkeypatch.setitem(sys.modules, "cupy", None)
+    with pytest.raises(ImportError, match="CUDA-compatible CuPy"):
+        nixl._describe_buffer(CudaArray())
+
+
+def test_cpu_tensor_description():
+    torch = pytest.importorskip("torch")
+    tensor = torch.zeros(4)
+    assert nixl._describe_buffer(tensor) == (
+        "DRAM",
+        (tensor.data_ptr(), 4 * tensor.element_size(), 0),
+    )

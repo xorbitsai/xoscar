@@ -551,7 +551,7 @@ class AbstractActorPool(ABC):
             with _ErrorProcessor(
                 self.external_address, message.message_id, message.protocol
             ) as processor:
-                result = channel.handle_buffers(message.content)
+                result = await channel.handle_buffers(message.content)
                 processor.result = ResultMessage(message.message_id, result)
             await self._send_channel(processor.result, channel)
             return True
