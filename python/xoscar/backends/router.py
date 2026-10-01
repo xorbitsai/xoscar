@@ -56,6 +56,8 @@ class Router:
 
     @staticmethod
     def get_instance_or_empty() -> "Router":
+        if (router := Router._instance) is not None:
+            return router
         # Client-only processes also need a persistent connection cache.
         # Returning a temporary router here creates a connection on every RPC.
         with Router._instance_lock:

@@ -173,9 +173,8 @@ jobs:
         pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
         pip install ucxx-cu12 cloudpickle psutil tblib uvloop packaging coverage flaky torch
         python setup.py clean --all
-        # dev extras carry pytest and plugins; the new runner is provisioned
-        # fresh each run, so nothing is pre-installed in the environment.
-        pip install -e ".[dev,extra]"
+        # The single-GPU runner also exercises real NIXL DRAM transfers.
+        pip install -e ".[dev,extra,nixl]"
       working-directory: ./python
 
     - name: Test with pytest
@@ -188,7 +187,7 @@ jobs:
             --cov-config=setup.cfg --cov-report=xml --cov=xoscar xoscar
         else
           conda activate ${{ env.CONDA_ENV }}
-          pytest -s -v -m cuda --cov-config=setup.cfg --cov-report=xml --cov=xoscar
+          pytest -s -v -m "cuda or nixl" --cov-config=setup.cfg --cov-report=xml --cov=xoscar
         fi
       working-directory: ./python
 
@@ -199,4 +198,4 @@ jobs:
         flags: unittests
         # Fork pull requests use Codecov's tokenless upload support.
         use_oidc: ${{ github.event_name == 'push' }}
-        fail_ci_if_error: true
+        fail_ci_if_error: ${{ github.event_name == 'push' }}

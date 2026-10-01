@@ -536,8 +536,8 @@ async def test_registration_failure_releases_partial_batch(peers):
 
 
 class NixlCpuActor(Actor):
-    def __init__(self):
-        self.buffer = np.zeros(8, dtype="u1")
+    def __init__(self, size=8):
+        self.buffer = np.zeros(size, dtype="u1")
         self.started = False
         self.release = asyncio.Event()
 
@@ -724,3 +724,121 @@ async def test_agent_access_rejects_uninitialized_and_closed_channels():
     await channel.close()
     with pytest.raises(ConnectionError, match="closed"):
         await channel._ensure_agent()
+
+
+async def test_rejected_prepare_trims_large_source_batch(peers, monkeypatch):
+    source, target, call = peers
+    agent = source.agent
+    monkeypatch.setattr(nixl, "_REGISTRATION_CACHE_BYTES", 4)
+    a, b = np.ones(8, dtype="u1"), np.zeros(7, dtype="u1")
+    with pytest.raises(ValueError, match="sizes must match"):
+        await source.copy_buffers([a], refs_for([b]), call)
+    assert not source.closed
+    assert not source._registrations and not source._buffers
+    assert len(agent.deregistered) == 1
+
+
+@pytest.mark.parametrize("cancel_first", [False, True])
+async def test_concurrent_close_waits_for_shared_cleanup(peers, cancel_first):
+    source, target, call = peers
+    agent = source.agent
+    agent.proceed = False
+    a, b = np.arange(8, dtype="u1"), np.zeros(8, dtype="u1")
+    copying = asyncio.create_task(source.copy_buffers([a], refs_for([b]), call))
+    await agent.started.wait()
+    first = asyncio.create_task(source.close())
+    await asyncio.sleep(0)
+    assert not source.writer.is_closing()
+    second = asyncio.create_task(source.close())
+    await asyncio.sleep(0)
+    if cancel_first:
+        first.cancel()
+        await asyncio.sleep(0)
+    assert not first.done() and not second.done()
+    assert source.closed
+    assert not agent.deregistered
+    agent.proceed = True
+    await copying
+    if cancel_first:
+        with pytest.raises(asyncio.CancelledError):
+            await first
+    else:
+        await first
+    await second
+    assert source.writer.is_closing()
+    assert source._agent is None and not source._registrations
+    assert len(agent.deregistered) == 1
+
+
+async def test_router_replaces_draining_nixl_client(peers, monkeypatch):
+    from ...router import Router
+
+    source, target, call = peers
+    agent = source.agent
+    agent.proceed = False
+    a, b = np.arange(8, dtype="u1"), np.zeros(8, dtype="u1")
+    copying = asyncio.create_task(source.copy_buffers([a], refs_for([b]), call))
+    await agent.started.wait()
+    router = Router([], None)
+    address = "nixl://127.0.0.1:1234"
+    old_client = nixl.NixlClient(
+        local_address=None, dest_address=address, channel=source
+    )
+    replacement = nixl.NixlClient(
+        local_address=None, dest_address=address, channel=make_channel()
+    )
+    factory = mock.AsyncMock(side_effect=[old_client, replacement])
+    monkeypatch.setattr(Router, "_create_client", factory)
+    assert await router.get_client(address) is old_client
+    assert await router.get_client(address) is old_client
+    factory.assert_awaited_once()
+    closing = asyncio.create_task(source.close())
+    await asyncio.sleep(0)
+    try:
+        assert await router.get_client(address) is replacement
+        assert factory.await_count == 2
+        assert not closing.done()
+    finally:
+        agent.proceed = True
+        await copying
+        await closing
+        await replacement.close()
+
+
+@pytest.mark.nixl
+async def test_real_nixl_cpu_pool_transfer(monkeypatch):
+    import sys
+
+    if sys.platform != "linux":
+        pytest.skip("NIXL requires Linux")
+    pytest.importorskip("nixl")
+    import xoscar as xo
+
+    from ...allocate_strategy import ProcessIndex
+    from ...router import Router
+
+    # Transfer DRAM over TCP. NIXL also requires CUDA support in UCX_TLS
+    # when it detects physical GPUs, even with CUDA_VISIBLE_DEVICES empty.
+    monkeypatch.setenv("UCX_TLS", "tcp,cuda_copy")
+    size = 1024**2
+    pool = await xo.create_actor_pool(
+        "127.0.0.1:0",
+        n_process=1,
+        external_address_schemes=[None, "nixl"],
+        subprocess_start_method="spawn",
+        use_uvloop=False,
+    )
+    async with pool:
+        actor = await xo.create_actor(
+            NixlCpuActor,
+            size,
+            address=pool.external_address,
+            allocate_strategy=ProcessIndex(1),
+        )
+        ref = await actor.allocate()
+        with monkeypatch.context() as patch:
+            patch.setattr(Router, "_instance", None)
+            for value in (17, 29, 43):
+                source = np.full(size, value, dtype="u1")
+                await copy_to([source], [ref])
+                np.testing.assert_array_equal(await actor.read(), source)

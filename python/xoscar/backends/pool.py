@@ -149,6 +149,7 @@ class AbstractActorPool(ABC):
         "_actors",
         "_caller",
         "_process_messages",
+        "_forward_sends",
         "_asyncio_task_timeout_detector_task",
     )
 
@@ -188,6 +189,7 @@ class AbstractActorPool(ABC):
         self._actors: dict[bytes, Actor] = dict()
         # message id -> future
         self._process_messages = dict()
+        self._forward_sends: dict[tuple[str, bytes], asyncio.Future] = dict()
 
         # manage async actor callers
         self._caller = ActorCaller()
@@ -329,7 +331,30 @@ class AbstractActorPool(ABC):
         result_message
             result or error message
         """
-        return await self.call(message.address, message.raw_message)
+        raw_message = message.raw_message
+        if isinstance(raw_message, CancelMessage):
+            # Forwarding tasks serialize independently. Wait for the original
+            # request's send before forwarding its cancellation on this hop.
+            sent = self._forward_sends.get(
+                (message.address, raw_message.cancel_message_id)
+            )
+            if sent is not None:
+                await asyncio.shield(sent)
+            return await self.call(message.address, raw_message)
+
+        key = (message.address, raw_message.message_id)
+        sent = self._forward_sends[key] = asyncio.get_running_loop().create_future()
+        try:
+            response = await self._caller.call(
+                self._router, message.address, raw_message, wait=False
+            )
+            sent.set_result(None)
+            return await response
+        finally:
+            # A failed send must also release waiting cancellation forwards.
+            if not sent.done():
+                sent.set_result(None)
+            self._forward_sends.pop(key, None)
 
     def _sync_pool_config(self, actor_pool_config: ActorPoolConfig):
         self._config = actor_pool_config

@@ -123,6 +123,11 @@ class NixlChannel(SocketChannel):
         self._copy_lock = asyncio.Lock()
         self._inflight = None
         self._closing = False
+        self._close_task = None
+
+    @property
+    def closed(self):
+        return self._closing or super().closed
 
     @property
     def agent(self):
@@ -323,22 +328,28 @@ class NixlChannel(SocketChannel):
         except BaseException:
             # A rejected prepare has not started a transfer. The connection
             # also carries actor RPCs, so leave it usable for those callers.
-            if not prepare_rejected:
+            if prepare_rejected:
+                self._trim_registration_cache()
+            else:
                 await self.close()
             raise
         finally:
             self._inflight = None
 
     async def close(self):
-        if self._closing:
-            return
-        self._closing = True
-        cancelled = None
+        if self._close_task is None:
+            self._closing = True
+            self._close_task = asyncio.create_task(self._close())
+        cancelled = await _wait_until_done(self._close_task)
+        self._close_task.result()
+        if cancelled is not None:
+            raise cancelled
+
+    async def _close(self):
         try:
             for task in (self._agent_init, self._inflight):
                 if task is not None:
-                    cancellation = await _wait_until_done(task)
-                    cancelled = cancelled or cancellation
+                    await _wait_until_done(task)
                     try:
                         task.result()
                     except BaseException:
@@ -350,8 +361,6 @@ class NixlChannel(SocketChannel):
             self._agent = None
             self._pending = None
             await super().close()
-        if cancelled is not None:
-            raise cancelled
 
 
 @register_server

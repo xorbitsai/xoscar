@@ -17,12 +17,15 @@ import multiprocessing
 import socket
 from contextlib import ExitStack
 
+import numpy as np
 import psutil
 import pytest
 
 import xoscar as xo
 
+from ....serialization.aio import AioSerializer
 from ...context import IndigenActorContext
+from ...message import CancelMessage, ForwardMessage, SendMessage
 from ...router import Router
 
 
@@ -215,13 +218,16 @@ async def test_actor_ref_with_parameters():
 
 
 @pytest.mark.asyncio
-async def test_cancel_does_not_overtake_proxied_call(monkeypatch):
+@pytest.mark.parametrize("delay", ["connect", "serialize", "serialize_error"])
+async def test_cancel_does_not_overtake_proxied_call(monkeypatch, delay):
     remote_started = asyncio.Event()
     remote_cancelled = asyncio.Event()
     forwarding_started = asyncio.Event()
+    cancel_arrived = asyncio.Event()
+    release_serialization = asyncio.Event()
 
     class BlockingActor(xo.Actor):
-        async def long_running(self):
+        async def long_running(self, payload):
             remote_started.set()
             try:
                 await asyncio.Event().wait()
@@ -242,7 +248,11 @@ async def test_cancel_does_not_overtake_proxied_call(monkeypatch):
             original_create_client = Router._create_client
 
             async def delayed_create_client(router, client_type, address, **kwargs):
-                if router is proxy.router and address == target.external_address:
+                if (
+                    delay == "connect"
+                    and router is proxy.router
+                    and address == target.external_address
+                ):
                     forwarding_started.set()
                     await asyncio.sleep(0.2)
                 return await original_create_client(
@@ -250,20 +260,60 @@ async def test_cancel_does_not_overtake_proxied_call(monkeypatch):
                 )
 
             patch.setattr(Router, "_create_client", delayed_create_client)
+            original_get_buffers = AioSerializer._get_buffers
+            original_process = type(proxy).process_message
+
+            async def delayed_get_buffers(serializer):
+                message = serializer._obj
+                if (
+                    delay != "connect"
+                    and isinstance(message, SendMessage)
+                    and message.content[0] == "long_running"
+                ):
+                    forwarding_started.set()
+                    await release_serialization.wait()
+                    if delay == "serialize_error":
+                        raise ValueError("Forward serialization failed")
+                return await original_get_buffers(serializer)
+
+            async def observe_cancel(pool, message, channel):
+                if (
+                    pool is proxy
+                    and isinstance(message, ForwardMessage)
+                    and isinstance(message.raw_message, CancelMessage)
+                ):
+                    cancel_arrived.set()
+                return await original_process(pool, message, channel)
+
+            patch.setattr(AioSerializer, "_get_buffers", delayed_get_buffers)
+            patch.setattr(type(proxy), "process_message", observe_cancel)
             ctx = IndigenActorContext()
-            task = asyncio.create_task(ctx.send(ref, ("long_running", 0, (), {})))
+            # Distinct arrays cross serialize_with_spawn's 100-object threshold.
+            payload = [np.arange(4, dtype="u1") for _ in range(150)]
+            task = asyncio.create_task(
+                ctx.send(ref, ("long_running", 0, (payload,), {}))
+            )
             try:
                 await asyncio.wait_for(forwarding_started.wait(), timeout=2)
                 task.cancel()
+                await asyncio.wait_for(cancel_arrived.wait(), timeout=2)
+                await asyncio.sleep(0)
+                release_serialization.set()
                 with pytest.raises(asyncio.CancelledError):
                     await asyncio.wait_for(task, timeout=2)
-                await asyncio.wait_for(remote_started.wait(), timeout=2)
-                assert remote_cancelled.is_set()
+                if delay == "serialize_error":
+                    assert not remote_started.is_set()
+                else:
+                    await asyncio.wait_for(remote_started.wait(), timeout=2)
+                    assert remote_cancelled.is_set()
                 # The cancelled method must release the actor lock for the next RPC.
                 assert await asyncio.wait_for(
                     ctx.send(ref, ("run", 0, (), {})), timeout=2
                 )
+                if hasattr(proxy, "_forward_sends"):
+                    assert not proxy._forward_sends
             finally:
+                release_serialization.set()
                 # Also clean up the remote call when running against the broken code.
                 for process_task in list(target._process_messages.values()):
                     if process_task is not None:

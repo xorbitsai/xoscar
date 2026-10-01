@@ -328,3 +328,12 @@ def test_fork_preserves_routes_but_discards_clients(monkeypatch):
     assert status == 0
     assert router._cache is cache and "parent" in cache
     assert router._lock is lock
+
+
+def test_initialized_router_does_not_acquire_instance_lock(monkeypatch):
+    router = Router([], None)
+    monkeypatch.setattr(Router, "_instance", router)
+    lock = mock.MagicMock()
+    lock.__enter__.side_effect = AssertionError("Initialized Router took the lock")
+    monkeypatch.setattr(Router, "_instance_lock", lock)
+    assert Router.get_instance_or_empty() is router
