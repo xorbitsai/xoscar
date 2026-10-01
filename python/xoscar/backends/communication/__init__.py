@@ -16,6 +16,7 @@
 from .base import Channel, ChannelType, Client, Server
 from .core import gen_local_address, get_client_type, get_server_type
 from .dummy import DummyChannel, DummyClient, DummyServer
+from .nixl import NixlChannel, NixlClient, NixlServer
 from .socket import (
     SocketChannel,
     SocketClient,

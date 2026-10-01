@@ -28,7 +28,7 @@ from ..debug import debug_async_timeout, detect_cycle_send
 from ..errors import CannotCancelTask
 from ..utils import dataslots, fix_all_zero_ip
 from .allocate_strategy import AddressSpecified, AllocateStrategy
-from .communication import Client, DummyClient, UCXClient
+from .communication import Client, DummyClient, NixlClient, UCXClient
 from .core import ActorCaller
 from .message import (
     DEFAULT_PROTOCOL,
@@ -110,12 +110,22 @@ class IndigenActorContext(BaseActorContext):
         else:
             raise message.as_instanceof_cause()
 
-    async def _wait(self, future: asyncio.Future, address: str, message: _MessageBase):
+    async def _wait(
+        self,
+        future: asyncio.Future,
+        address: str,
+        message: _MessageBase,
+        proxy_addresses: list[str] | None = None,
+    ):
         try:
             await asyncio.shield(future)
         except asyncio.CancelledError:
             try:
-                await self.cancel(address, message.message_id)
+                # Follow the original RPC route so cancellation cannot bypass
+                # a proxy that is still forwarding the request.
+                await self.cancel(
+                    address, message.message_id, proxy_addresses=proxy_addresses
+                )
             except CannotCancelTask:
                 # cancel failed, already finished
                 raise asyncio.CancelledError
@@ -161,7 +171,12 @@ class IndigenActorContext(BaseActorContext):
             wait=False,
             proxy_addresses=actor_ref.proxy_addresses,
         )
-        result = await self._wait(future, actor_ref.address, message)  # type: ignore
+        result = await self._wait(
+            future,  # type: ignore
+            actor_ref.address,
+            message,
+            proxy_addresses=actor_ref.proxy_addresses,
+        )
         return self._process_result_message(result)
 
     async def destroy_actor(self, actor_ref: ActorRef):
@@ -174,7 +189,12 @@ class IndigenActorContext(BaseActorContext):
             wait=False,
             proxy_addresses=actor_ref.proxy_addresses,
         )
-        result = await self._wait(future, actor_ref.address, message)  # type: ignore
+        result = await self._wait(
+            future,  # type: ignore
+            actor_ref.address,
+            message,
+            proxy_addresses=actor_ref.proxy_addresses,
+        )
         return self._process_result_message(result)
 
     async def kill_actor(self, actor_ref: ActorRef, force: bool = True):
@@ -221,7 +241,12 @@ class IndigenActorContext(BaseActorContext):
             wait=False,
             proxy_addresses=actor_ref.proxy_addresses,
         )
-        result = await self._wait(future, actor_ref.address, message)
+        result = await self._wait(
+            future,
+            actor_ref.address,
+            message,
+            proxy_addresses=actor_ref.proxy_addresses,
+        )
         res = self._process_result_message(result)
         if res.address != connect_addr:
             res.address = fix_all_zero_ip(res.address, connect_addr)
@@ -258,16 +283,26 @@ class IndigenActorContext(BaseActorContext):
                 proxy_addresses=actor_ref.proxy_addresses,
             )
             if wait_response:
-                result = await self._wait(future, actor_ref.address, send_message)  # type: ignore
+                result = await self._wait(
+                    future,  # type: ignore
+                    actor_ref.address,
+                    send_message,
+                    proxy_addresses=actor_ref.proxy_addresses,
+                )
                 return self._process_result_message(result)
             else:
                 return future
 
-    async def cancel(self, address: str, cancel_message_id: bytes):
+    async def cancel(
+        self,
+        address: str,
+        cancel_message_id: bytes,
+        proxy_addresses: list[str] | None = None,
+    ):
         message = CancelMessage(
             new_message_id(), address, cancel_message_id, protocol=DEFAULT_PROTOCOL
         )
-        result = await self._call(address, message)
+        result = await self._call(address, message, proxy_addresses=proxy_addresses)
         return self._process_result_message(result)  # type: ignore
 
     async def wait_actor_pool_recovered(
@@ -327,7 +362,11 @@ class IndigenActorContext(BaseActorContext):
 
     async def _get_copy_to_client(self, router, address) -> Client:
         client = await self._caller.get_client(router, address)
-        if isinstance(client, DummyClient) or hasattr(client, "send_buffers"):
+        if (
+            isinstance(client, DummyClient)
+            or hasattr(client, "send_buffers")
+            or hasattr(client, "copy_buffers")
+        ):
             return client
         client_types = router.get_all_client_types(address)
         # For inter-process communication, the ``self._caller.get_client`` interface would not look for UCX Client,
@@ -337,6 +376,7 @@ class IndigenActorContext(BaseActorContext):
                 client_type
                 for client_type in client_types
                 if hasattr(client_type, "send_buffers")
+                or hasattr(client_type, "copy_buffers")
             )
         except StopIteration:
             return client
@@ -344,8 +384,7 @@ class IndigenActorContext(BaseActorContext):
             return await self._caller.get_client_via_type(router, address, client_type)
 
     async def _get_client(self, address: str) -> Client:
-        router = Router.get_instance()
-        assert router is not None, "`copy_to` can only be used inside pools"
+        router = Router.get_instance_or_empty()
         if router.get_proxy(address):
             raise RuntimeError("Cannot run `copy_to` when enabling proxy")
         return await self._get_copy_to_client(router, address)
@@ -358,7 +397,13 @@ class IndigenActorContext(BaseActorContext):
     ):
         address = remote_buffer_refs[0].address
         client = await self._get_client(address)
-        if isinstance(client, UCXClient):
+        if isinstance(client, NixlClient):
+            return await client.copy_buffers(
+                local_buffers,
+                remote_buffer_refs,
+                lambda message: self._call_with_client(client, message),
+            )
+        elif isinstance(client, UCXClient):
             message = [(buf.address, buf.uid) for buf in remote_buffer_refs]
             await self._call_send_buffers(
                 client,

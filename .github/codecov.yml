@@ -1,3 +1,6 @@
+fixes:
+  - "xoscar/::python/xoscar/"
+
 coverage:
   status:
     project:

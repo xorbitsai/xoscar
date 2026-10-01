@@ -227,3 +227,113 @@ async def test_calls_reject_client_without_listener_state():
 
     with pytest.raises(ServerClosed):
         await caller.call_send_buffers(client, [], Message())  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_client_only_process_reuses_default_router(monkeypatch):
+    # API/frontend processes may never start a local actor pool.
+    monkeypatch.setattr(Router, "_instance", None)
+    clients = []
+
+    async def create_client(_client_type, address, **_kwargs):
+        client = FakeClient(address)
+        clients.append(client)
+        return client
+
+    caller = object()
+    with mock.patch.object(Router, "_create_client", side_effect=create_client):
+        for _ in range(10):
+            router = Router.get_instance_or_empty()
+            await router.get_client("127.0.0.1:1234", from_who=caller)
+    assert len(clients) == 1
+    assert Router.get_instance() is router
+
+    # Starting and stopping a pool must retain the client-only router/cache.
+    from ..backends.pool import ActorPoolBase
+
+    pool_router = Router(["127.0.0.1:4567"], "dummy://0")
+    ActorPoolBase._set_global_router(pool_router)
+    assert Router.get_instance() is router
+    assert router.get_internal_address("127.0.0.1:4567") == "dummy://0"
+    router.remove_router(pool_router)
+    assert await router.get_client("127.0.0.1:1234", from_who=caller) is clients[0]
+
+
+@pytest.mark.asyncio
+async def test_client_only_rpcs_share_one_socket(monkeypatch):
+    from ..backends.communication import SocketServer
+    from ..backends.message import (
+        ControlMessage,
+        ControlMessageType,
+        ResultMessage,
+        new_message_id,
+    )
+
+    monkeypatch.setattr(Router, "_instance", None)
+    connected = []
+
+    async def handle(channel):
+        connected.append(channel)
+        try:
+            while True:
+                message = await channel.recv()
+                await channel.send(ResultMessage(message.message_id, True))
+        except (EOFError, ConnectionError):
+            pass
+
+    server = await SocketServer.create(
+        {"host": "127.0.0.1", "port": 0, "handle_channel": handle}
+    )
+    caller = ActorCallerThreadLocal()
+    await server.start()
+    try:
+        for _ in range(20):
+            message = ControlMessage(
+                message_id=new_message_id(),
+                control_message_type=ControlMessageType.get_config,
+            )
+            result = await caller.call(
+                Router.get_instance_or_empty(), server.address, message
+            )
+            assert result.result is True
+        assert len(connected) == 1
+        assert len(caller._clients) == 1
+    finally:
+        await caller.stop()
+        await server.stop()
+
+
+def test_fork_preserves_routes_but_discards_clients(monkeypatch):
+    import os
+
+    if not hasattr(os, "fork"):
+        pytest.skip("fork is unavailable")
+    router = Router([], None, mapping={"external": "internal"})
+    monkeypatch.setattr(Router, "_instance", router)
+    cache = router._cache
+    cache["parent"] = object()
+    lock = router._lock
+    pid = os.fork()
+    if pid == 0:
+        try:
+            child = Router.get_instance_or_empty()
+            assert child is router
+            assert child.get_internal_address("external") == "internal"
+            assert child._cache == {}
+            assert child._lock is not lock
+        except BaseException:
+            os._exit(1)
+        os._exit(0)
+    _, status = os.waitpid(pid, 0)
+    assert status == 0
+    assert router._cache is cache and "parent" in cache
+    assert router._lock is lock
+
+
+def test_initialized_router_does_not_acquire_instance_lock(monkeypatch):
+    router = Router([], None)
+    monkeypatch.setattr(Router, "_instance", router)
+    lock = mock.MagicMock()
+    lock.__enter__.side_effect = AssertionError("Initialized Router took the lock")
+    monkeypatch.setattr(Router, "_instance_lock", lock)
+    assert Router.get_instance_or_empty() is router
