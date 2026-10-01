@@ -24,6 +24,11 @@ class MemoryStore:
         assert all(key in self.values for key in keys)
 
 
+def test_prefix_store_rejects_none():
+    with pytest.raises(TypeError):
+        xp.rendezvous.PrefixStore("group", None)
+
+
 @pytest.mark.parametrize("kind", ["hash", "file", "tcp", "custom"])
 def test_prefix_store_owns_underlying_store(kind, tmp_path, unused_tcp_port):
     if kind == "hash":

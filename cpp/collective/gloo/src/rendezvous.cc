@@ -96,7 +96,9 @@ void def_rendezvous_module(pybind11::module &m) {
                      std::shared_ptr<gloo::rendezvous::PrefixStore>>(
         rendezvous, "PrefixStore")
         .def(pybind11::init<const std::string &,
-                            std::shared_ptr<gloo::rendezvous::Store>>())
+                            std::shared_ptr<gloo::rendezvous::Store>>(),
+             pybind11::arg("prefix"),
+             pybind11::arg("store").none(false))
         .def("set", &gloo::rendezvous::PrefixStore::set)
         .def("get", &gloo::rendezvous::PrefixStore::get);
 
