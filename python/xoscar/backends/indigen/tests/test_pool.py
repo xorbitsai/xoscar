@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 import contextlib
 import logging
 import multiprocessing
@@ -24,6 +25,7 @@ import re
 import sys
 import threading
 import time
+from pathlib import Path
 from unittest import mock
 
 import psutil
@@ -630,6 +632,35 @@ async def test_create_actor_pool():
     global_router = Router.get_instance()
     assert len(global_router._curr_external_addresses) == 0
     assert len(global_router._mapping) == 0
+
+
+class _ExitMarkerActor(Actor):
+    def __init__(self, marker_path):
+        atexit.register(Path(marker_path).write_text, "exited")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("force", [False, True])
+async def test_sub_pool_exit_cleanup(tmp_path, force):
+    marker = tmp_path / "exit-marker"
+    pool = await create_actor_pool("127.0.0.1:0", pool_cls=MainActorPool, n_process=1)
+    async with pool:
+        ref = await create_actor(
+            _ExitMarkerActor,
+            str(marker),
+            address=pool.external_address,
+            allocate_strategy=RandomSubPool(),
+        )
+        process = pool.sub_processes[ref.address]
+        if force:
+            await pool.remove_sub_pool(ref.address, force=True)
+
+    if force:
+        assert not marker.exists()
+        assert process.returncode != 0
+    else:
+        assert marker.read_text() == "exited"
+        assert process.returncode == 0
 
 
 @pytest.mark.asyncio

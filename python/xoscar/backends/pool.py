@@ -46,6 +46,7 @@ from ..utils import implements, is_zero_ip, register_asyncio_task_timeout_detect
 from .allocate_strategy import AddressSpecified, allocated_type
 from .communication import (
     Channel,
+    NixlChannel,
     Server,
     UCXChannel,
     gen_local_address,
@@ -148,6 +149,7 @@ class AbstractActorPool(ABC):
         "_actors",
         "_caller",
         "_process_messages",
+        "_forward_sends",
         "_asyncio_task_timeout_detector_task",
     )
 
@@ -187,6 +189,7 @@ class AbstractActorPool(ABC):
         self._actors: dict[bytes, Actor] = dict()
         # message id -> future
         self._process_messages = dict()
+        self._forward_sends: dict[tuple[str, bytes], asyncio.Future] = dict()
 
         # manage async actor callers
         self._caller = ActorCaller()
@@ -328,7 +331,30 @@ class AbstractActorPool(ABC):
         result_message
             result or error message
         """
-        return await self.call(message.address, message.raw_message)
+        raw_message = message.raw_message
+        if isinstance(raw_message, CancelMessage):
+            # Forwarding tasks serialize independently. Wait for the original
+            # request's send before forwarding its cancellation on this hop.
+            sent = self._forward_sends.get(
+                (message.address, raw_message.cancel_message_id)
+            )
+            if sent is not None:
+                await asyncio.shield(sent)
+            return await self.call(message.address, raw_message)
+
+        key = (message.address, raw_message.message_id)
+        sent = self._forward_sends[key] = asyncio.get_running_loop().create_future()
+        try:
+            response = await self._caller.call(
+                self._router, message.address, raw_message, wait=False
+            )
+            sent.set_result(None)
+            return await response
+        finally:
+            # A failed send must also release waiting cancellation forwards.
+            if not sent.done():
+                sent.set_result(None)
+            self._forward_sends.pop(key, None)
 
     def _sync_pool_config(self, actor_pool_config: ActorPoolConfig):
         self._config = actor_pool_config
@@ -539,9 +565,21 @@ class AbstractActorPool(ABC):
     def stopped(self) -> bool:
         return self._stopped.is_set()
 
-    async def _handle_ucx_meta_message(
+    async def _handle_buffer_meta_message(
         self, message: _MessageBase, channel: Channel
     ) -> bool:
+        if (
+            isinstance(message, ControlMessage)
+            and message.control_message_type == ControlMessageType.switch_to_copy_to
+            and isinstance(channel, NixlChannel)
+        ):
+            with _ErrorProcessor(
+                self.external_address, message.message_id, message.protocol
+            ) as processor:
+                result = await channel.handle_buffers(message.content)
+                processor.result = ResultMessage(message.message_id, result)
+            await self._send_channel(processor.result, channel)
+            return True
         if (
             isinstance(message, ControlMessage)
             and message.message_type == MessageType.control
@@ -584,7 +622,7 @@ class AbstractActorPool(ABC):
                         # close failed, ignore
                         pass
                     return
-                if await self._handle_ucx_meta_message(message, channel):
+                if await self._handle_buffer_meta_message(message, channel):
                     continue
                 asyncio.create_task(self.process_message(message, channel))
                 # delete to release the reference of message
@@ -1422,8 +1460,9 @@ class MainActorPoolBase(ActorPoolBase):
             except (futures.TimeoutError, asyncio.TimeoutError):
                 force = True
         except (ConnectionError, ServerClosed):
-            # process dead maybe, ignore it
-            force = True
+            # A stopping sub pool closes its servers before replying. Allow
+            # the process to finish its exit handlers instead of forcing a kill.
+            pass
         # kill process
         await self.kill_sub_pool(process, force=force)
 

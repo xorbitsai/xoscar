@@ -122,6 +122,7 @@ class _BaseSocketServer(Server, metaclass=ABCMeta):
     __slots__ = "_aio_server", "_channels"
 
     _channels: set[Channel]
+    channel_class = SocketChannel
 
     def __init__(
         self,
@@ -171,7 +172,7 @@ class _BaseSocketServer(Server, metaclass=ABCMeta):
                 f"{type(self).__name__} got unexpected "
                 f'arguments: {",".join(kwargs)}'
             )
-        channel = SocketChannel(
+        channel = self.channel_class(
             reader,
             writer,
             local_address=local_address,
@@ -212,7 +213,7 @@ class _BaseSocketServer(Server, metaclass=ABCMeta):
 class SocketServer(_BaseSocketServer):
     __slots__ = "host", "port"
 
-    scheme = None
+    scheme: str | None = None
 
     def __init__(
         self,
@@ -222,6 +223,8 @@ class SocketServer(_BaseSocketServer):
         channel_handler: Callable[[Channel], Coroutine] | None = None,
     ):
         address = f"{host}:{port}"
+        if self.scheme:
+            address = f"{self.scheme}://{address}"
         super().__init__(address, aio_server, channel_handler=channel_handler)
         self.host = host
         self.port = port
@@ -246,12 +249,14 @@ class SocketServer(_BaseSocketServer):
 
         return parsed_config
 
-    @staticmethod
+    @classmethod
     @implements(Server.create)
-    async def create(config: Dict) -> "Server":
+    async def create(cls, config: Dict) -> "Server":
         config = config.copy()
         if "address" in config:
             address = config.pop("address")
+            if cls.scheme:
+                address = address.removeprefix(f"{cls.scheme}://")
             host, port = address.rsplit(":", 1)
             port = int(port)
         else:
@@ -290,7 +295,7 @@ class SocketServer(_BaseSocketServer):
             for sock in aio_server.sockets:
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
 
-        server = SocketServer(host, port, aio_server, channel_handler=handle_channel)
+        server = cls(host, port, aio_server, channel_handler=handle_channel)
         return server
 
 
@@ -298,14 +303,18 @@ class SocketServer(_BaseSocketServer):
 class SocketClient(Client):
     __slots__ = ()
 
-    scheme = SocketServer.scheme
+    scheme: str | None = SocketServer.scheme
+    channel_class = SocketChannel
 
-    @staticmethod
+    @classmethod
     @implements(Client.connect)
     async def connect(
-        dest_address: str, local_address: str | None = None, **kwargs
+        cls, dest_address: str, local_address: str | None = None, **kwargs
     ) -> "Client":
-        host, port_str = dest_address.rsplit(":", 1)
+        address = dest_address
+        if cls.scheme:
+            address = address.removeprefix(f"{cls.scheme}://")
+        host, port_str = address.rsplit(":", 1)
         port = int(port_str)
         config = kwargs.get("config", {})
         connect_timeout = config.get("connect_timeout", XOSCAR_CONNECT_TIMEOUT)
@@ -372,14 +381,14 @@ class SocketClient(Client):
                         "(e.g., WSL, gVisor, or restricted containers).",
                         e,
                     )
-        channel = SocketChannel(
+        channel = cls.channel_class(
             reader,
             writer,
             local_address=local_address,
             dest_address=dest_address,
             channel_type=ChannelType.remote,
         )
-        return SocketClient(local_address, dest_address, channel)
+        return cls(local_address, dest_address, channel)
 
 
 def _get_or_create_default_unix_socket_dir():
