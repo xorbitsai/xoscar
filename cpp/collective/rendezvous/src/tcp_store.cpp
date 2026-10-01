@@ -1099,10 +1099,6 @@ TCPStore::TCPStore(std::string host, const TCPStoreOptions &opts)
     callbackClient_ = detail::TCPCallbackClient::connect(addr_, opts);
 }
 
-// The destructor does nothing means that
-// the background thread does not stop working when the ``tcp store`` object is
-// recycled, and it will continue to occupy the port. Care is required when
-// using it. So here is the implementation inherited from ``Torch``.
 TCPStore::~TCPStore() = default;
 
 void TCPStore::waitForWorkers() {

@@ -44,7 +44,10 @@ void def_rendezvous_module(pybind11::module &m) {
              pybind11::arg("rank") = nullptr,
              pybind11::arg("size") = nullptr,
              pybind11::arg("base") = 2)
-        .def("connectFullMesh", &gloo::rendezvous::Context::connectFullMesh);
+        .def("connectFullMesh",
+             &gloo::rendezvous::Context::connectFullMesh,
+             pybind11::arg("store").none(false),
+             pybind11::arg("dev").none(false));
 
     pybind11::class_<gloo::rendezvous::Store,
                      std::shared_ptr<gloo::rendezvous::Store>>(rendezvous,
