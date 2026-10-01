@@ -71,6 +71,8 @@ def test_allgather():
 
     process1.join()
     process2.join()
+    assert process1.exitcode == 0
+    assert process2.exitcode == 0
 
 
 def worker_allreduce(rank):
@@ -123,6 +125,8 @@ def test_allreduce():
 
     process1.join()
     process2.join()
+    assert process1.exitcode == 0
+    assert process2.exitcode == 0
 
 
 def worker_barrier(rank):
@@ -176,6 +180,8 @@ def test_barrier():
 
     process1.join()
     process2.join()
+    assert process1.exitcode == 0
+    assert process2.exitcode == 0
 
 
 def worker_broadcast(rank):
@@ -240,6 +246,8 @@ def test_broadcast():
 
     process1.join()
     process2.join()
+    assert process1.exitcode == 0
+    assert process2.exitcode == 0
 
 
 def worker_gather(rank):
@@ -305,6 +313,9 @@ def test_gather():
     process1.join()
     process2.join()
     process3.join()
+    assert process1.exitcode == 0
+    assert process2.exitcode == 0
+    assert process3.exitcode == 0
 
 
 def worker_reduce_scatter(rank):
@@ -377,6 +388,9 @@ def test_reduce_scatter():
     process1.join()
     process2.join()
     process3.join()
+    assert process1.exitcode == 0
+    assert process2.exitcode == 0
+    assert process3.exitcode == 0
 
 
 def worker_reduce(rank):
@@ -448,6 +462,9 @@ def test_reduce():
     process1.join()
     process2.join()
     process3.join()
+    assert process1.exitcode == 0
+    assert process2.exitcode == 0
+    assert process3.exitcode == 0
 
 
 def worker_scatter(rank):
@@ -512,6 +529,8 @@ def test_scatter():
 
     process1.join()
     process2.join()
+    assert process1.exitcode == 0
+    assert process2.exitcode == 0
 
 
 def worker_send_recv(rank):
@@ -579,6 +598,8 @@ def test_send_recv():
 
     process1.join()
     process2.join()
+    assert process1.exitcode == 0
+    assert process2.exitcode == 0
 
 
 def worker_all_to_all(rank):
@@ -634,3 +655,6 @@ def test_all_to_all():
     process1.join()
     process2.join()
     process3.join()
+    assert process1.exitcode == 0
+    assert process2.exitcode == 0
+    assert process3.exitcode == 0

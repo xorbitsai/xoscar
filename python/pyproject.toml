@@ -19,6 +19,7 @@ requires = [
     "numpy>=2.3.3; python_version>='3.14'",
     "cython>=0.29.33; python_version<'3.14'",
     "cython>=3.2.0; python_version>='3.14'",
+    "cmake>=3.21; python_version<'3.14'",
     "cmake>=3.30; python_version>='3.14'",
     "requests>=2.4.0",
     "cloudpickle>=2.2.1; python_version>='3.11'",

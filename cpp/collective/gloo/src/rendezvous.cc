@@ -33,10 +33,13 @@ void def_rendezvous_module(pybind11::module &m) {
     pybind11::module rendezvous
         = m.def_submodule("rendezvous", "This is a rendezvous module");
 
+    // Context is non-polymorphic, while rendezvous::Context has a vtable.
+    // Its Context base can have a nonzero offset, so disable pybind's simple
+    // inheritance cast optimization even though there is only one base.
     pybind11::class_<gloo::rendezvous::Context,
                      gloo::Context,
-                     std::shared_ptr<gloo::rendezvous::Context>>(rendezvous,
-                                                                 "Context")
+                     std::shared_ptr<gloo::rendezvous::Context>>(
+        rendezvous, "Context", pybind11::multiple_inheritance())
         .def(pybind11::init<int, int, int>(),
              pybind11::arg("rank") = nullptr,
              pybind11::arg("size") = nullptr,
@@ -44,7 +47,7 @@ void def_rendezvous_module(pybind11::module &m) {
         .def("connectFullMesh", &gloo::rendezvous::Context::connectFullMesh);
 
     pybind11::class_<gloo::rendezvous::Store,
-                     std::unique_ptr<gloo::rendezvous::Store>>(rendezvous,
+                     std::shared_ptr<gloo::rendezvous::Store>>(rendezvous,
                                                                "Store")
         .def("set", &gloo::rendezvous::Store::set)
         .def("get", &gloo::rendezvous::Store::get);
@@ -60,10 +63,7 @@ void def_rendezvous_module(pybind11::module &m) {
 
     pybind11::class_<TCPStore,
                      gloo::rendezvous::Store,
-                     std::unique_ptr<TCPStore, pybind11::nodelete>>(
-        rendezvous,  // why we use pybind11::nodelete:
-                     // https://github.com/pybind/pybind11/issues/3514
-        "TCPStore")
+                     std::shared_ptr<TCPStore>>(rendezvous, "TCPStore")
         .def(pybind11::init<std::string, const TCPStoreOptions &>())
         .def("wait",
              pybind11::overload_cast<const std::vector<std::string> &>(
@@ -77,7 +77,7 @@ void def_rendezvous_module(pybind11::module &m) {
 
     pybind11::class_<gloo::rendezvous::FileStore,
                      gloo::rendezvous::Store,
-                     std::unique_ptr<gloo::rendezvous::FileStore>>(rendezvous,
+                     std::shared_ptr<gloo::rendezvous::FileStore>>(rendezvous,
                                                                    "FileStore")
         .def(pybind11::init<const std::string &>())
         .def("set", &gloo::rendezvous::FileStore::set)
@@ -85,7 +85,7 @@ void def_rendezvous_module(pybind11::module &m) {
 
     pybind11::class_<gloo::rendezvous::HashStore,
                      gloo::rendezvous::Store,
-                     std::unique_ptr<gloo::rendezvous::HashStore>>(rendezvous,
+                     std::shared_ptr<gloo::rendezvous::HashStore>>(rendezvous,
                                                                    "HashStore")
         .def(pybind11::init([]() { return new gloo::rendezvous::HashStore(); }))
         .def("set", &gloo::rendezvous::HashStore::set)
@@ -93,9 +93,10 @@ void def_rendezvous_module(pybind11::module &m) {
 
     pybind11::class_<gloo::rendezvous::PrefixStore,
                      gloo::rendezvous::Store,
-                     std::unique_ptr<gloo::rendezvous::PrefixStore>>(
+                     std::shared_ptr<gloo::rendezvous::PrefixStore>>(
         rendezvous, "PrefixStore")
-        .def(pybind11::init<const std::string &, gloo::rendezvous::Store &>())
+        .def(pybind11::init<const std::string &,
+                            std::shared_ptr<gloo::rendezvous::Store>>())
         .def("set", &gloo::rendezvous::PrefixStore::set)
         .def("get", &gloo::rendezvous::PrefixStore::get);
 
@@ -152,7 +153,7 @@ void def_rendezvous_module(pybind11::module &m) {
 
     pybind11::class_<CustomStore,
                      gloo::rendezvous::Store,
-                     std::unique_ptr<CustomStore>>(rendezvous, "CustomStore")
+                     std::shared_ptr<CustomStore>>(rendezvous, "CustomStore")
         .def(pybind11::init<const pybind11::object &>())
         .def("set", &CustomStore::set)
         .def("get", &CustomStore::get)

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18...3.21)
+cmake_minimum_required(VERSION 3.21...3.30)
 if(Python_FIND_ABI MATCHES "ON$")
   cmake_minimum_required(VERSION 3.30)
 endif()
@@ -54,12 +54,6 @@ add_subdirectory(third_party/fmt)
 add_subdirectory(third_party/pybind11)
 add_subdirectory(third_party/gloo)
 
-# set c++11 for gloo
-set_target_properties(
-  gloo
-  PROPERTIES CXX_STANDARD 11
-             CXX_STANDARD_REQUIRED ON
-             CXX_EXTENSIONS OFF)
 if(NOT DEFINED BUILD_TMP_DIR)
   file(GLOB TMP_DIRS "python/build/temp*")
   foreach(TMP_DIR ${TMP_DIRS})

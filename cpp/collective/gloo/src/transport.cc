@@ -52,7 +52,9 @@ void def_transport_tcp_module(pybind11::module &m) {
     pybind11::class_<gloo::transport::tcp::Device,
                      std::shared_ptr<gloo::transport::tcp::Device>,
                      gloo::transport::Device>(tcp, "Device")
-        .def(pybind11::init<const struct gloo::transport::tcp::attr &>());
+        .def(pybind11::init([](const gloo::transport::tcp::attr &attr) {
+            return std::make_shared<gloo::transport::tcp::Device>(attr, false);
+        }));
 }
 #else
 void def_transport_tcp_module(pybind11::module &m) {
