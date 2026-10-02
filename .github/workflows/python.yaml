@@ -191,6 +191,18 @@ jobs:
         fi
       working-directory: ./python
 
+    - name: Test minimum NIXL version
+      if: ${{ matrix.module == 'gpu' }}
+      run: |
+        conda activate ${{ env.CONDA_ENV }}
+        python -m pip install "nixl==1.1.0"
+        # Exercise the real agent on the minimum version as well as the latest.
+        # Append to coverage so the preceding GPU suite remains in the report.
+        python -m pytest -s -v -m "cuda or nixl" --timeout=120 \
+          --cov-config=setup.cfg --cov-report=xml --cov=xoscar --cov-append \
+          xoscar/backends/communication/tests/test_nixl.py
+      working-directory: ./python
+
     - name: Report coverage data
       uses: codecov/codecov-action@v4
       with:

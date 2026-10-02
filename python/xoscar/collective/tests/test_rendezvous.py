@@ -171,6 +171,9 @@ def _collective_after_store_gc(rank, kind, directory, port, values):
         del memory
     prefix = xp.rendezvous.PrefixStore("after-gc", store)
     context.connectFullMesh(prefix, _device())
+    # UV does not retain the store, so keep the TCPStore server alive until
+    # every rank has finished reading its rendezvous keys.
+    xp.barrier(context)
     del store, prefix
     gc.collect()
     if memory_ref is not None and sys.platform == "linux":

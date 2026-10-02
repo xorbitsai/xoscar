@@ -16,9 +16,10 @@ NIXL requires Linux. Install the optional dependency on each worker:
 
    pip install 'xoscar[nixl]'
 
-The implementation was tested with NIXL 1.5.x, using its UCX plugin. Install
-CuPy separately if your application uses CuPy or RMM buffers. GPU peer access
-and cross-host RDMA depend on the CUDA/UCX installation and hardware.
+The supported NIXL range is ``>=1.1,<2``. CPU and CUDA transfers were tested
+with NIXL 1.1.0 and 1.5.x, using their UCX plugins. Install CuPy separately if
+your application uses CuPy or RMM buffers. GPU peer access and cross-host RDMA
+depend on the CUDA/UCX installation and hardware.
 
 Select ``nixl`` for the external addresses of the participating worker
 processes. For example, with two GPU workers:
