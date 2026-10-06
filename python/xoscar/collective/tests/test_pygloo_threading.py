@@ -62,7 +62,7 @@ def _threaded_transfer(rank, port, operation, bidirectional, progress):
                 # The peer waits for this Python thread before completing the
                 # native operation. Let the transfer thread enter its wait.
                 time.sleep(0.1)
-                assert not future.done()
+                assert not future.done(), future.exception()
                 progress.set()
             future.result(timeout=10)
     else:
@@ -86,9 +86,9 @@ def test_send_recv_releases_gil(operation, bidirectional, unused_tcp_port):
         )
         for rank in range(2)
     ]
-    for process in processes:
-        process.start()
     try:
+        for process in processes:
+            process.start()
         for process in processes:
             process.join(30)
         assert [process.exitcode for process in processes] == [0, 0]
@@ -105,3 +105,53 @@ def test_send_recv_propagates_native_error(operation):
     buffer = np.zeros(1, dtype=np.uint8)
     with pytest.raises(RuntimeError, match="peer equals to current rank"):
         _transfer(operation, context, buffer, 0)
+
+
+def _transfer_timeout(rank, port, operation, completed):
+    options = xp.rendezvous.TCPStoreOptions()
+    options.port = port
+    options.isServer = rank == 0
+    options.numWorkers = 2
+    options.timeout = timedelta(seconds=10)
+    store = xp.rendezvous.TCPStore("127.0.0.1", options)
+    prefix = xp.rendezvous.PrefixStore("transfer-timeout", store)
+    transport = xp.transport.tcp if sys.platform == "linux" else xp.transport.uv
+    device = transport.CreateDevice(transport.attr("127.0.0.1"))
+    context = xp.rendezvous.Context(rank, 2)
+    context.setTimeout(timedelta(seconds=10))
+    context.connectFullMesh(prefix, device)
+    xp.barrier(context)
+    if rank == 0:
+        context.setTimeout(timedelta(milliseconds=200))
+        buffer = np.zeros(192 * 1024, dtype=np.uint8)
+        with pytest.raises(RuntimeError, match="[Tt]imed out"):
+            _transfer(operation, context, buffer, 1)
+        # Python remains usable after the native wait throws with the GIL released.
+        completed.set()
+    else:
+        # Keep the connected peer alive without posting the matching operation.
+        assert completed.wait(10)
+
+
+@pytest.mark.parametrize("operation", ["send", "recv"])
+def test_send_recv_propagates_connected_timeout(operation, unused_tcp_port):
+    ctx = mp.get_context("spawn")
+    completed = ctx.Event()
+    processes = [
+        ctx.Process(
+            target=_transfer_timeout,
+            args=(rank, unused_tcp_port, operation, completed),
+        )
+        for rank in range(2)
+    ]
+    try:
+        for process in processes:
+            process.start()
+        for process in processes:
+            process.join(30)
+        assert [process.exitcode for process in processes] == [0, 0]
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(5)
