@@ -139,7 +139,8 @@ PYBIND11_MODULE(xoscar_pygloo, m, pybind11::mod_gil_not_used()) {
           pybind11::arg("size") = nullptr,
           pybind11::arg("datatype") = nullptr,
           pybind11::arg("peer") = nullptr,
-          pybind11::arg("tag") = 0);
+          pybind11::arg("tag") = 0,
+          pybind11::call_guard<pybind11::gil_scoped_release>());
     m.def("recv",
           &xoscar::recv_wrapper,
           pybind11::arg("context") = nullptr,
@@ -147,7 +148,8 @@ PYBIND11_MODULE(xoscar_pygloo, m, pybind11::mod_gil_not_used()) {
           pybind11::arg("size") = nullptr,
           pybind11::arg("datatype") = nullptr,
           pybind11::arg("peer") = nullptr,
-          pybind11::arg("tag") = 0);
+          pybind11::arg("tag") = 0,
+          pybind11::call_guard<pybind11::gil_scoped_release>());
 
     m.def("broadcast",
           &xoscar::broadcast_wrapper,
