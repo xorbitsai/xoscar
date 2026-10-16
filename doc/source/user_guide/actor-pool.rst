@@ -36,3 +36,45 @@ parallelism.
 
    loop = asyncio.get_event_loop()
    loop.run_until_complete(_main())
+
+
+Trust and transport authentication
+----------------------------------
+
+Actor pools exchange Python objects, including executable Python definitions.
+Every process permitted to send actor messages must therefore be trusted to run
+code in the receiving process. Listening on a network interface is needed for
+distributed operation; deployment administrators are responsible for restricting
+actor ports to their intended cluster peers. Authentication on an application's
+HTTP API does not protect Xoscar's actor transport.
+
+By default Xoscar retains its existing, unauthenticated transport for compatible
+deployments on trusted networks. Upgrading alone does not authenticate this mode
+or make an actor port suitable for access by untrusted clients.
+
+To enable message authentication, set the same nonempty ``XOSCAR_AUTH_KEY`` in
+every supervisor, worker, sub-pool and external actor client's environment before
+starting the processes. Generate one random deployment secret, for example with
+``python -c "import secrets; print(secrets.token_hex(32))"``, and distribute it
+through your deployment's secret management. Do not generate a separate key on
+each node or transmit the key in an actor message.
+
+With a key configured, both the Socket and UCX transports authenticate framing
+metadata and the complete message, including every payload buffer, with
+HMAC-SHA256 before deserializing any Python object. Keyed receivers reject legacy
+unauthenticated messages and invalid signatures. An unkeyed receiver rejects
+authenticated messages. All communicating processes must be upgraded and
+configured together; there is no automatic downgrade or mixed-mode rolling
+upgrade. Changing the key also requires restarting all communicating processes.
+
+This mechanism authenticates messages; it does not encrypt traffic or establish
+a session that prevents replay of captured messages. Use an authenticated,
+encrypted tunnel when those properties are required, and retain the deployment's
+network access controls. Anyone holding the shared key is a trusted cluster peer
+with Python execution privileges.
+
+Authenticated GPU transfers copy device buffers to host memory for hashing,
+including on UCX. This adds CPU work and host staging compared with the default
+UCX zero-copy path. Authenticated frames limit their fixed-width framing metadata
+to 16 MiB and their serialized Python header to 64 MiB; payload size is determined
+by the authenticated metadata. The legacy unkeyed wire format is unchanged.

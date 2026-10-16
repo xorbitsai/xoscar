@@ -97,10 +97,10 @@ class SocketChannel(Channel):
 
     @implements(Channel.recv)
     async def recv(self):
-        deserializer = AioDeserializer(self.reader)
+        deserializer = AioDeserializer(self.reader, buffer_reader=read_buffers)
         async with self._recv_lock:
             header = await deserializer.get_header()
-            buffers = await read_buffers(header, self.reader)
+            buffers = await deserializer.get_buffers(header)
         return deserialize(header, buffers)
 
     @implements(Channel.close)

@@ -22,12 +22,18 @@ import os
 import weakref
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Type
 
-import cloudpickle
 import numpy as np
 
 from ...nvutils import get_cuda_context, get_index_and_uuid
-from ...serialization import deserialize
-from ...serialization.aio import BUFFER_SIZES_NAME, AioSerializer, get_header_length
+from ...serialization import AioDeserializer, deserialize
+from ...serialization._security import (
+    MAC_SIZE,
+    byte_view,
+    get_auth_key,
+    sign_buffers,
+    verify_buffers,
+)
+from ...serialization.aio import BUFFER_SIZES_NAME, AioSerializer
 from ...utils import classproperty, implements, is_cuda_buffer, is_v6_ip, lazy_import
 from ..message import _MessageBase
 from .base import Channel, ChannelType, Client, Server
@@ -194,6 +200,32 @@ class UCXInitializer:
         UCXInitializer._inited = False
 
 
+class _UCXReader:
+    def __init__(self, endpoint):
+        self.endpoint = endpoint
+
+    async def readexactly(self, size):
+        buffer = np.empty(size, dtype="u1").data
+        if size:
+            await self.endpoint.recv(buffer)
+        return buffer
+
+
+async def _read_ucx_buffers(header, reader):
+    buffers = []
+    for is_cuda, size in zip(
+        header[0]["is_cuda_buffers"], header[0].pop(BUFFER_SIZES_NAME)
+    ):
+        if is_cuda:
+            buffer = rmm.DeviceBuffer(size=size)
+        else:
+            buffer = np.empty(size, dtype="u1").data
+        if size:
+            await reader.endpoint.recv(buffer)
+        buffers.append(buffer)
+    return buffers
+
+
 class UCXChannel(Channel):
     __slots__ = (
         "ucp_endpoint",
@@ -201,6 +233,7 @@ class UCXChannel(Channel):
         "_has_close_callback",
         "_send_lock",
         "_recv_lock",
+        "_last_frame_mac",
         "__weakref__",
     )
 
@@ -222,6 +255,7 @@ class UCXChannel(Channel):
 
         self._send_lock = asyncio.Lock()
         self._recv_lock = asyncio.Lock()
+        self._last_frame_mac = None
 
         # When the UCX endpoint closes or errors the registered callback
         # is called.
@@ -263,28 +297,12 @@ class UCXChannel(Channel):
     async def recv(self):
         async with self._recv_lock:
             try:
-                info_buffer = np.empty(11, dtype="u1").data
-                await self.ucp_endpoint.recv(info_buffer)
-                head_length = get_header_length(info_buffer)
-                header_buffer = np.empty(head_length, dtype="u1").data
-                await self.ucp_endpoint.recv(header_buffer)
-                header = cloudpickle.loads(header_buffer)
-
-                is_cuda_buffers = header[0].get("is_cuda_buffers")
-                buffer_sizes = header[0].pop(BUFFER_SIZES_NAME)
-
-                buffers = []
-                for is_cuda_buffer, buf_size in zip(is_cuda_buffers, buffer_sizes):
-                    if buf_size == 0:  # pragma: no cover
-                        buffers.append(bytes())
-                    elif is_cuda_buffer:
-                        cuda_buffer = rmm.DeviceBuffer(size=buf_size)
-                        await self.ucp_endpoint.recv(cuda_buffer)
-                        buffers.append(cuda_buffer)
-                    else:
-                        buffer = np.empty(buf_size, dtype="u1").data
-                        await self.ucp_endpoint.recv(buffer)
-                        buffers.append(buffer)
+                deserializer = AioDeserializer(
+                    _UCXReader(self.ucp_endpoint), buffer_reader=_read_ucx_buffers
+                )
+                header = await deserializer.get_header()
+                buffers = await deserializer.get_buffers(header)
+                self._last_frame_mac = deserializer.frame_mac
             except BaseException as e:
                 if not self._closed:
                     # In addition to UCX exceptions, may be CancelledError or another
@@ -309,15 +327,31 @@ class UCXChannel(Channel):
                 synchronize_stream(0)
 
             meta_buffers = None
+            auth_key = get_auth_key()
             if meta:
                 meta_buffers = await self._serialize(meta)
+            raw_mac = None
+            if meta_buffers and auth_key is not None:
+                # Validate and hash before emitting any part of the transfer.
+                raw_mac = sign_buffers(
+                    auth_key, (b"xoscar-raw-buffers", meta_buffers[2], *buffers)
+                )
 
             async with self._send_lock:
                 if meta_buffers:
                     for buf in meta_buffers:
-                        await self.ucp_endpoint.send(buf)
+                        size = buf.nbytes if hasattr(buf, "nbytes") else len(buf)
+                        if size:
+                            await self.ucp_endpoint.send(buf)
                 for buffer in buffers:
-                    await self.ucp_endpoint.send(buffer)
+                    size = buffer.nbytes if hasattr(buffer, "nbytes") else len(buffer)
+                    # Framed receivers and authenticated raw-copy receivers
+                    # skip empty buffers. Do not emit an unmatched zero-byte
+                    # tagged message; legacy raw copies still receive them.
+                    if size or (meta_buffers is not None and auth_key is None):
+                        await self.ucp_endpoint.send(buffer)
+                if raw_mac is not None:
+                    await self.ucp_endpoint.send(raw_mac)
         except ucp.exceptions.UCXError:  # pragma: no cover
             self.abort()
             raise ChannelClosed("While writing, the connection was closed")
@@ -325,8 +359,50 @@ class UCXChannel(Channel):
     async def recv_buffers(self, buffers: list):
         async with self._recv_lock:
             try:
-                for buffer in buffers:
-                    await self.ucp_endpoint.recv(buffer)
+                auth_key = get_auth_key()
+                if auth_key is None:
+                    for buffer in buffers:
+                        await self.ucp_endpoint.recv(buffer)
+                else:
+                    # Do not overwrite application-owned buffers with data that
+                    # has not yet been authenticated. Bind it to the preceding
+                    # authenticated control message as well as its contents.
+                    frame_mac, self._last_frame_mac = self._last_frame_mac, None
+                    if frame_mac is None:
+                        raise EOFError("Raw buffers require authenticated metadata")
+                    staging = [
+                        np.empty(
+                            buffer.nbytes if hasattr(buffer, "nbytes") else len(buffer),
+                            dtype="u1",
+                        )
+                        for buffer in buffers
+                    ]
+                    for buffer in staging:
+                        if buffer.nbytes:
+                            await self.ucp_endpoint.recv(buffer.data)
+                    mac = await _UCXReader(self.ucp_endpoint).readexactly(MAC_SIZE)
+                    if not verify_buffers(
+                        auth_key,
+                        (b"xoscar-raw-buffers", frame_mac, *staging),
+                        bytes(mac),
+                    ):
+                        raise EOFError("Raw buffer authentication failed")
+                    for target, source in zip(buffers, staging):
+                        if not source.nbytes:
+                            continue
+                        if is_cuda_buffer(target):
+                            if hasattr(target, "copy_from_host"):
+                                target.copy_from_host(source)
+                            elif hasattr(target, "data") and hasattr(
+                                target.data, "copy_from_host"
+                            ):
+                                target.data.copy_from_host(
+                                    source.ctypes.data, source.nbytes
+                                )
+                            else:  # pragma: no cover
+                                numba_cuda.as_cuda_array(target).copy_to_device(source)
+                        else:
+                            byte_view(target)[:] = source.data
             except BaseException as e:  # pragma: no cover
                 if not self._closed:
                     # In addition to UCX exceptions, may be CancelledError or another
