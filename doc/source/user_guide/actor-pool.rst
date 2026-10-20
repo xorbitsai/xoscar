@@ -108,6 +108,9 @@ environment and actor code; upgrading that code or model engines is separate
 application work. Existing actor references pointing directly at sub pools stay
 valid. Connections and references to the old main address must be redirected or
 recreated; Xoscar does not migrate those connections or move GPU memory.
+The deployment must allow retained sub processes to outlive the old main;
+handoff does not move OS process groups or containers, or prevent a service
+manager from killing the entire old process group.
 
 
 Trust and transport authentication

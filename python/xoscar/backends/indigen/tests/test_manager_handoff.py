@@ -379,9 +379,14 @@ async def main():
             await pool.handoff_to(target, timeout=1)
         except ConnectionResetError:
             pass
+    elif mode == "partial_commit":
+        try:
+            await pool.handoff_to(target, timeout=1)
+        except ConnectionResetError:
+            pass
     else:
         await pool.handoff_to(target)
-    if mode in ("stop", "lost_commit"):
+    if mode in ("stop", "lost_commit", "partial_commit"):
         await pool.stop()
     (root / "done").write_text("done")
 asyncio.run(main())
@@ -390,9 +395,24 @@ if mode == "abrupt":
 """
 
 
-@pytest.mark.parametrize("mode", ["stop", "loop_exit", "abrupt", "lost_commit"])
-async def test_old_main_process_really_exits(tmp_path, mode):
+@pytest.mark.parametrize(
+    "mode", ["stop", "loop_exit", "abrupt", "lost_commit", "partial_commit"]
+)
+async def test_old_main_process_really_exits(tmp_path, mode, monkeypatch):
     async with await create_pool() as new:
+        if mode == "partial_commit":
+            request = handoff._rpc
+            dropped = False
+
+            async def lose_ack(pool, address, op, **content):
+                nonlocal dropped
+                result = await request(pool, address, op, **content)
+                if pool is new and op == "finish_child" and not dropped:
+                    dropped = True
+                    raise ConnectionResetError("child acknowledgement lost")
+                return result
+
+            monkeypatch.setattr(handoff, "_rpc", lose_ack)
         proc = await asyncio.create_subprocess_exec(
             sys.executable, "-c", _SOURCE, str(tmp_path), new.external_address, mode
         )
@@ -540,6 +560,7 @@ async def test_unconfirmed_rollback_does_not_resume_old_owner(monkeypatch):
             with pytest.raises(RuntimeError, match="rollback was not confirmed"):
                 await old.handoff_to(new.external_address)
         assert old._handoff["phase"] == "rollback_failed"
+        assert new._handoff["phase"] == "aborting"
         with pytest.raises(RuntimeError, match="handoff"):
             await old.append_sub_pool()
         await old.handoff_to(new.external_address)

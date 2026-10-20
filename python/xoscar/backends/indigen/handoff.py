@@ -397,7 +397,11 @@ class MainPoolHandoffMixin:
 
     async def stop(self):
         async with self._lifecycle_lock:
-            if self._handoff and self._handoff["role"] == "target":
+            if (
+                self._handoff
+                and self._handoff["role"] == "target"
+                and self._handoff["phase"] != "committing"
+            ):
                 raise RuntimeError("Cannot stop a main pool during handoff")
             if self._handoff_expiry:
                 self._handoff_expiry.cancel()
@@ -588,6 +592,9 @@ class MainPoolHandoffMixin:
         while self._handoff and self._handoff.get("ticket") == ticket:
             state = self._handoff
             try:
+                if state["phase"] == "committing":
+                    await self._target_command("commit_main", {"ticket": ticket})
+                    return
                 decision = await asyncio.wait_for(
                     _rpc(
                         self, state["source"]["address"], "expire_main", ticket=ticket
@@ -692,11 +699,6 @@ class MainPoolHandoffMixin:
                 if state["phase"] not in ("staged", "committing"):
                     raise RuntimeError("Actor registry has not been staged")
                 state["phase"] = "committing"
-                if (
-                    self._handoff_expiry
-                    and self._handoff_expiry is not asyncio.current_task()
-                ):
-                    self._handoff_expiry.cancel()
                 self._sync_handoff_config(state["config"], state["processes"])
                 self.sub_processes = {
                     addr: SubPoolProcess(identity)
@@ -714,6 +716,11 @@ class MainPoolHandoffMixin:
                 result = list(self.sub_processes)
                 self._completed_handoffs[ticket] = result
                 self._handoff = None
+                if (
+                    self._handoff_expiry
+                    and self._handoff_expiry is not asyncio.current_task()
+                ):
+                    self._handoff_expiry.cancel()
                 await self.start_monitor()
                 return result
             elif operation == "abort_main":
@@ -724,13 +731,29 @@ class MainPoolHandoffMixin:
                     child_operation = "abort_child"
                 except (psutil.NoSuchProcess, ProcessLookupError):
                     child_operation = "discard_child"
-                await asyncio.gather(
+                state["phase"] = "aborting"
+                results = await asyncio.gather(
                     *[
                         _rpc(self, addr, child_operation, ticket=ticket)
                         for addr in state["processes"]
                     ],
                     return_exceptions=True,
                 )
+                failed = []
+                for addr, result in zip(state["processes"], results):
+                    if not isinstance(result, BaseException):
+                        continue
+                    process = SubPoolProcess(state["processes"][addr])
+                    if process.returncode is not None:
+                        continue
+                    if child_operation == "discard_child":
+                        await self.kill_sub_pool(process, force=True)
+                    else:
+                        failed.append(addr)
+                if failed:
+                    raise RuntimeError(
+                        f"Sub pool rollback is still pending for {failed}"
+                    )
                 self._handoff = None
                 if (
                     self._handoff_expiry
