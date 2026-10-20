@@ -160,6 +160,17 @@ def set_kill_on_parent_death_linux():
         assert False, "PR_SET_PDEATHSIG used despite being unavailable"
 
 
+def clear_kill_on_parent_death():
+    """Release the original OS parent binding during a planned POSIX handoff."""
+    if sys.platform == "win32":
+        raise NotImplementedError("Windows job ownership cannot be handed off yet")
+    if sys.platform.startswith("linux") and detect_fate_sharing_support_linux():
+        if linux_prctl(1, 0, 0, 0, 0) != 0:
+            import ctypes
+
+            raise OSError(ctypes.get_errno(), "prctl(PR_SET_PDEATHSIG, 0) failed")
+
+
 def set_kill_child_on_death_win32(child_proc):
     """Ensures the child process dies if this process dies (fate-sharing).
 
@@ -192,6 +203,14 @@ def preexec_fn():
 
 async def create_subprocess_exec(*args, **kwargs):
     win32 = sys.platform == "win32"
+    if not win32:
+        from .handoff import SubPoolProcess
+
+        # An asyncio subprocess transport kills a live child when closed. Use
+        # a detachable process handle for all ordinary native POSIX pools.
+        return SubPoolProcess.spawned(
+            subprocess.Popen(args, **kwargs, preexec_fn=preexec_fn)
+        )
     # With Windows fate-sharing, we need special care:
     # The process must be added to the job before it is allowed to execute.
     # Otherwise, there's a race condition: the process might spawn children

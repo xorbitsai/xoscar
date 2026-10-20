@@ -47,6 +47,7 @@ class ControlMessageType(Enum):
     add_sub_pool_actor = 5
     # indicate that the following data will be used for copy_to
     switch_to_copy_to = 6
+    pool_lifecycle = 7
 
 class _MessageBase:
     message_type: MessageType

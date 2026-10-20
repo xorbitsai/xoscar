@@ -47,7 +47,7 @@ def test_uv_virtialenv_manager():
                 # Exercise installation without requiring a Rust extension
                 # that has no wheel for the free-threaded interpreter.
                 ["humanize==4.12.0"],
-                index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+                index_url="https://pypi.org/simple",
             )
 
             sys.path.insert(0, manager.get_lib_path())
@@ -75,11 +75,11 @@ async def test_uv_virtialenv_pool():
 
         raw_sys_path = sys.path
         try:
-            manager.create_env()
+            manager.create_env(python_path=Path(sys.executable))
             assert os.path.exists(path)
             manager.install_packages(
                 ["xllamacpp==0.1.14"],
-                index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+                index_url="https://pypi.org/simple",
             )
 
             pool = await create_actor_pool(
@@ -129,7 +129,7 @@ def test_uv_virtualenv_manager_with_cancel():
         raw_sys_path = sys.path
         try:
             # Create the virtual environment
-            manager.create_env()
+            manager.create_env(python_path=Path(sys.executable))
             assert os.path.exists(path)
 
             # Start the package installation in a separate thread
@@ -138,7 +138,7 @@ def test_uv_virtualenv_manager_with_cancel():
             def install_task():
                 manager.install_packages(
                     ["pygraphviz==1.8"],
-                    index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+                    index_url="https://pypi.org/simple",
                 )
 
             # Start the installation thread
@@ -179,7 +179,7 @@ def test_uv_virtualenv_manager_with_log(caplog):
         raw_sys_path = sys.path
         try:
             # Create the virtual environment
-            manager.create_env()
+            manager.create_env(python_path=Path(sys.executable))
             assert os.path.exists(path)
 
             # Start logging
@@ -188,7 +188,7 @@ def test_uv_virtualenv_manager_with_log(caplog):
             # Install package with log enabled
             manager.install_packages(
                 ["packaging==24.0"],
-                index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+                index_url="https://pypi.org/simple",
                 log=True,
             )
 
@@ -243,7 +243,7 @@ def test_uv_virtualenv_manager_skip_system_package(caplog):
             # Install a pure-Python package and reuse the system numpy.
             manager.install_packages(
                 ["humanize==4.12.0", "#system_numpy#"],
-                index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+                index_url="https://pypi.org/simple",
                 skip_installed=True,
                 log=True,
             )
@@ -262,7 +262,7 @@ def test_uv_virtualenv_manager_skip_system_package(caplog):
             # Confirm numpy is skipped (no installation needed)
             manager.install_packages(
                 ["humanize>=4.12.0", "#system_numpy#"],
-                index_url="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+                index_url="https://pypi.org/simple",
                 skip_installed=True,
                 log=True,
             )

@@ -38,6 +38,81 @@ parallelism.
    loop.run_until_complete(_main())
 
 
+Replace a main process without restarting sub pools
+---------------------------------------------------
+
+An ordinary native actor pool can hand its existing sub pools to another main
+pool on the same machine. There is no creation-time option or extra host
+process. Sub pools keep their PIDs, addresses, actors, in-memory state, and
+active calls or generators. The replacement main runs in the new application's
+process and Python environment.
+
+Start a normal main pool in the replacement process with ``n_process=0``. Create
+any application control actors there and check that the replacement is ready.
+Then, in the old process, hand over its sub pools:
+
+.. code-block:: python
+
+   # Old process: created normally, with no handoff option.
+   old_pool = await xo.create_actor_pool("127.0.0.1:9000", n_process=2)
+
+   # Replacement process: starts its own main pool without loading actors again.
+   new_pool = await xo.create_actor_pool("127.0.0.1:9001", n_process=0)
+
+   # Old process: transfer the running sub pools to the new main.
+   addresses = await old_pool.handoff_to("127.0.0.1:9001")
+   await old_pool.stop()
+   # The old process may now exit. The same sub pools are managed by new_pool.
+
+   # Replacement process: find an existing actor through the new main.
+   actor = await xo.actor_ref(address=new_pool.external_address, uid="model")
+   # Normal shutdown still stops all sub pools owned by this main.
+   await new_pool.stop()
+
+The example's old-process and replacement-process blocks run in separate
+processes; ``new_pool`` is a normal local ``MainActorPool``, not a remote handle.
+Applications arrange readiness, pass the replacement address to the old
+process, recreate main-pool actors, and switch their API traffic.
+
+During handoff Xoscar briefly rejects actor creation/destruction and sub-pool
+append/removal; ordinary actor calls keep running. It transfers the actor
+registry and pool configuration, changes the children's main address and
+process watchers, and removes the old main's cleanup and recovery authority.
+The new main performs normal monitoring, recovery, append/removal, and shutdown
+for the adopted processes. Stopping the old main afterwards does not stop them.
+
+Failures before the commit decision roll back to the old main. If restoration
+cannot be confirmed for a live child, lifecycle changes remain blocked; retry
+with the same target to finish rollback, or stop the old pool. After the commit
+decision, retry ``old_pool.handoff_to()`` with the same address to finish a lost
+acknowledgement. Cancelling the coroutine waits for commit or rollback before
+propagating cancellation. The ``timeout`` argument bounds preparation (30 seconds
+by default); it does not revoke a committed transfer. Ordinary stop and main
+process failure retain their existing cleanup behavior outside a handoff.
+A prepared replacement also checks abandoned handoffs: it completes a fully
+staged transfer whose children already switched owners, or reclaims an
+incomplete transfer if the source has exited.
+
+Handoff currently supports POSIX native subprocess pools. Windows rejects the
+operation before making changes; its job-object ownership needs separate
+support. Both mains must use the same Python major/minor and compatible Xoscar
+serialization and actor interfaces, with matching transport and proxy settings.
+After a handoff, children watch their new main in userspace rather than relying
+on Linux's binding to their original OS parent. This is a planned upgrade
+operation, not a guarantee of preserving actors after an arbitrary main crash
+or a crash midway through handoff.
+
+Only sub-pool actors are retained. Actors in the old main stay there and must be
+recreated by the application. The retained sub pools keep their original Python
+environment and actor code; upgrading that code or model engines is separate
+application work. Existing actor references pointing directly at sub pools stay
+valid. Connections and references to the old main address must be redirected or
+recreated; Xoscar does not migrate those connections or move GPU memory.
+The deployment must allow retained sub processes to outlive the old main;
+handoff does not move OS process groups or containers, or prevent a service
+manager from killing the entire old process group.
+
+
 Trust and transport authentication
 ----------------------------------
 

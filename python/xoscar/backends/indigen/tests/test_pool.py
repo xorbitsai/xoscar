@@ -320,21 +320,21 @@ async def test_fail_when_create_subpool():
 
 
 @pytest.mark.asyncio
-async def test_main_actor_pool():
+async def test_main_actor_pool(unused_tcp_port_factory):
     config = ActorPoolConfig()
     my_label = "computation"
-    main_address = f"127.0.0.1:{get_next_port()}"
+    main_address = f"127.0.0.1:{unused_tcp_port_factory()}"
     _add_pool_conf(config, 0, "main", "unixsocket:///0", main_address)
     _add_pool_conf(
         config,
         1,
         my_label,
         "unixsocket:///1",
-        f"127.0.0.1:{get_next_port()}",
+        f"127.0.0.1:{unused_tcp_port_factory()}",
         env={"my_env": "1"},
     )
     _add_pool_conf(
-        config, 2, my_label, "unixsocket:///2", f"127.0.0.1:{get_next_port()}"
+        config, 2, my_label, "unixsocket:///2", f"127.0.0.1:{unused_tcp_port_factory()}"
     )
 
     strategy = IdleLabel(my_label, "my_test")
@@ -452,7 +452,7 @@ async def test_main_actor_pool():
 
         # test sync config
         config.add_pool_conf(
-            3, "sub", "unixsocket:///3", f"127.0.0.1:{get_next_port()}"
+            3, "sub", "unixsocket:///3", f"127.0.0.1:{unused_tcp_port_factory()}"
         )
         sync_config_message = ControlMessage(
             new_message_id(),
@@ -1054,6 +1054,12 @@ async def test_recover_sub_pool_concurrent_create_actor():
     # directly across an await; a concurrent create_actor() mutating that
     # same dict raised "dictionary changed size during iteration".
     pool = object.__new__(MainActorPool)
+    pool._handoff = None
+    pool._stopped = asyncio.Event()
+    pool._lifecycle_active = 0
+    pool._lifecycle_tasks = {}
+    pool._lifecycle_idle = asyncio.Event()
+    pool._lifecycle_idle.set()
     pool.external_address = "dummy://main"
     pool._config = mock.Mock(get_process_index=mock.Mock(return_value=0))
     pool.sub_processes = {}
@@ -1131,6 +1137,12 @@ async def test_recover_sub_pool_skips_in_flight_placeholder():
     # placeholder rather than replay it, since replaying resends an
     # unfinished create straight to the sub pool.
     pool = object.__new__(MainActorPool)
+    pool._handoff = None
+    pool._stopped = asyncio.Event()
+    pool._lifecycle_active = 0
+    pool._lifecycle_tasks = {}
+    pool._lifecycle_idle = asyncio.Event()
+    pool._lifecycle_idle.set()
     pool.external_address = "dummy://main"
     pool._config = mock.Mock(get_process_index=mock.Mock(return_value=0))
     pool.sub_processes = {}

@@ -21,6 +21,7 @@ from typing import Any, Optional
 
 from ..communication import DummyServer, gen_local_address
 from ..config import ActorPoolConfig
+from ..indigen.handoff import SubPoolProcess
 from ..indigen.pool import MainActorPool, SubActorPool
 from ..message import ControlMessage, ControlMessageType, new_message_id
 from ..pool import ActorPoolType
@@ -152,7 +153,7 @@ class TestMainActorPool(MainActorPool):
         return addresses[0][0]
 
     async def kill_sub_pool(
-        self, process: asyncio.subprocess.Process, force: bool = False
+        self, process: asyncio.subprocess.Process | SubPoolProcess, force: bool = False
     ):
         # Test pool uses None for processes, so skip if process is None
         if process is None:
@@ -190,7 +191,9 @@ class TestMainActorPool(MainActorPool):
                 # Ignore errors during cleanup
                 pass
 
-    async def is_sub_pool_alive(self, process: asyncio.subprocess.Process):
+    async def is_sub_pool_alive(
+        self, process: asyncio.subprocess.Process | SubPoolProcess
+    ):
         # Test pool uses None for processes, so always return True
         return True
 
