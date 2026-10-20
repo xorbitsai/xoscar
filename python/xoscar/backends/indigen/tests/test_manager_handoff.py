@@ -270,7 +270,8 @@ async def test_handoff_drains_lifecycle_without_blocking_calls(monkeypatch):
         ).address == slow.address
 
 
-async def test_cancellation_completes_the_transfer(monkeypatch):
+@pytest.mark.parametrize("cancellations", [1, 3])
+async def test_cancellation_completes_the_transfer(monkeypatch, cancellations):
     async with await create_pool(1) as old, await create_pool() as new:
         ref = await actor(old)
         request = handoff._rpc
@@ -287,12 +288,62 @@ async def test_cancellation_completes_the_transfer(monkeypatch):
             m.setattr(handoff, "_rpc", pause)
             transfer = asyncio.create_task(old.handoff_to(new.external_address))
             await ready.wait()
-            transfer.cancel()
+            for _ in range(cancellations):
+                transfer.cancel()
+                await asyncio.sleep(0)
+            assert not transfer.done()
             release.set()
             with pytest.raises(asyncio.CancelledError):
                 await transfer
         assert not old.sub_processes and ref.address in new.sub_processes
         assert (await ref.add(1))[0] == 1
+
+
+@pytest.mark.parametrize("operation", ["abort_child", "abort_main"])
+async def test_repeated_cancellation_completes_rollback(monkeypatch, operation):
+    async with await create_pool(1) as old, await create_pool() as new:
+        ref = await actor(old)
+        pid = (await ref.add(5))[1]
+        request = handoff._rpc
+        staged, fail_preparation = asyncio.Event(), asyncio.Event()
+        rolling_back, finish_rollback = asyncio.Event(), asyncio.Event()
+
+        async def pause(pool, address, op, **content):
+            if pool is old and op == "stage_main":
+                staged.set()
+                await fail_preparation.wait()
+                raise ConnectionResetError("preparation failed")
+            if pool is old and op == operation:
+                rolling_back.set()
+                await finish_rollback.wait()
+            return await request(pool, address, op, **content)
+
+        with monkeypatch.context() as m:
+            m.setattr(handoff, "_rpc", pause)
+            transfer = asyncio.create_task(old.handoff_to(new.external_address))
+            try:
+                await asyncio.wait_for(staged.wait(), 5)
+                transfer.cancel()
+                fail_preparation.set()
+                await asyncio.wait_for(rolling_back.wait(), 5)
+                for _ in range(2):
+                    transfer.cancel()
+                    await asyncio.sleep(0)
+                assert not transfer.done()
+                finish_rollback.set()
+                with pytest.raises(asyncio.CancelledError):
+                    await transfer
+            finally:
+                fail_preparation.set()
+                finish_rollback.set()
+                await asyncio.gather(transfer, return_exceptions=True)
+        assert old._handoff is None and new._handoff is None
+        assert old._monitor_task and not old._monitor_task.done()
+        assert await ref.add(1) == (6, pid)
+        other = await actor(old, "after_rollback")
+        await xo.destroy_actor(other)
+        await old.handoff_to(new.external_address)
+        assert await ref.add(1) == (7, pid)
 
 
 async def test_preparation_timeout_rolls_back(monkeypatch):

@@ -438,11 +438,18 @@ class MainPoolHandoffMixin:
         try:
             return await asyncio.shield(task)
         except asyncio.CancelledError:
-            # Do not abandon a half-finished ownership transfer.
-            try:
-                await task
-            finally:
-                raise
+            # Shutdown may cancel the caller repeatedly, even during rollback.
+            # Shield every wait so the ownership transfer reaches a final state.
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    continue
+                except Exception:
+                    break
+            if not task.cancelled():
+                task.exception()
+            raise
 
     async def _rollback_handoff(self, state):
         results = await asyncio.gather(
