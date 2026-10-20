@@ -8,5 +8,6 @@ Actor pool
    :toctree: generated/
 
    xoscar.create_actor_pool
+   xoscar.take_over_actor_pool
    xoscar.wait_actor_pool_recovered
    xoscar.get_pool_config

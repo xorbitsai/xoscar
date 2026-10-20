@@ -38,6 +38,84 @@ parallelism.
    loop.run_until_complete(_main())
 
 
+Switch managers without restarting actors
+------------------------------------------
+
+By default, actor pools keep the existing process hierarchy: stopping
+the main pool stops its sub pools, and sub pools exit if their main process dies.
+For resources that must survive a manager replacement, use
+``enable_manager_handoff=True``. Xoscar starts an independent local host process and
+returns a ``HandoffActorPool`` management handle. The host owns the actual
+main pool, actor registry, sub pools, and automatic recovery. Replacing the
+manager transfers ownership of that host; actors keep their PIDs, addresses,
+in-memory state, and active calls or generators.
+
+.. code-block:: python
+
+   import xoscar as xo
+
+   pool = await xo.create_actor_pool(
+       "127.0.0.1",
+       n_process=1,
+       enable_manager_handoff=True,
+       lease_timeout=15,
+       orphan_timeout=300,
+   )
+   # Use the normal actor APIs with pool.external_address.
+   actor = await xo.create_actor(
+       MyActor, uid="model", address=pool.external_address,
+       allocate_strategy=xo.allocate_strategy.RandomSubPool(),
+   )
+
+   # Hand over management to the replacement process.
+   credential = await pool.handoff()
+   replacement = await xo.take_over_actor_pool(credential)
+   actors = await replacement.list_actors()
+   same_actor = await xo.actor_ref(address=replacement.external_address, uid="model")
+
+   # Explicitly stop the host and all its sub pools when no longer needed.
+   await replacement.stop()
+
+``handoff()`` releases the current owner's lease and returns a one-use credential.
+It closes the old local management handle without stopping the host. The next
+manager can take over immediately; two managers racing to take over cannot both win.
+Each successful takeover rotates the credential, so the old owner cannot renew
+its lease or stop the host through an obsolete handle.
+
+The credential's ``to_dict()`` result is JSON-compatible and may be passed to
+``take_over_actor_pool()`` in another process on the same machine. Treat the token
+as a private management credential: store it in a file restricted to its owner
+when transferring it through the filesystem. These credentials prevent stale
+management operations; they do not replace transport authentication or restrict
+the normal actor APIs available to trusted Xoscar clients.
+
+The management handle renews its lease in the background on its owning event
+loop. Before an unexpected manager failure, ``pool.handoff_handle`` can be saved for
+recovery. Once the old lease expires, a replacement can take over using that saved
+credential. An expired lease cannot be revived by a late heartbeat. Actors
+continue serving during the handoff window; if no manager takes over within
+``orphan_timeout`` after handoff or lease expiration, the host stops and reclaims
+its sub pools. Keep the owner's event loop responsive, and explicitly stop or
+hand off a pool before closing its handle. A handed-off pool also survives normal manager
+event-loop shutdown.
+
+``HandoffActorPool`` provides ``external_address``, ``pid``, ``handoff_handle``,
+``get_config()``, ``list_actors()``, ``append_sub_pool()``, ``remove_sub_pool()``,
+``handoff()``, ``join()`` and ``stop()``. Its async context manager stops the host
+on exit. It is a remote management handle, so code that accesses private
+``MainActorPool`` attributes must use the public methods instead.
+
+Manager handoff currently requires a native TCP address and local, same-user
+management. Taking over checks the host's process identity, handoff protocol, and
+Python major/minor version. The receiving environment must also provide
+compatible Xoscar serialization and actor interfaces. A handoff preserves the
+host's original Python environment and running actor code; upgrading that code
+or its dependencies requires creating a replacement pool. Xoscar does not
+migrate actor memory, GPU allocations, or in-flight calls to a different host.
+Applications decide compatibility, readiness, request draining, and traffic
+switching when replacing their resource pools.
+
+
 Trust and transport authentication
 ----------------------------------
 
