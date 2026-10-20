@@ -25,6 +25,7 @@ import pytest
 import xoscar as xo
 
 from ...allocate_strategy import AddressSpecified, RandomSubPool
+from ...message import ControlMessage, ControlMessageType, new_message_id
 from ...router import Router
 from .. import handoff
 from ..handoff import SubPoolProcess
@@ -139,6 +140,15 @@ async def test_handoff_preserves_state_stream_and_main_actors():
             assert await old.handoff_to(new.external_address) == addresses
             with pytest.raises(RuntimeError, match="handed off"):
                 await old.append_sub_pool()
+            for address, command in (
+                (ref.address, ControlMessageType.stop),
+                (ref.address, ControlMessageType.sync_config),
+                (old.external_address, ControlMessageType.sync_config),
+            ):
+                with pytest.raises(RuntimeError, match="handoff"):
+                    await old.handle_control_command(
+                        ControlMessage(new_message_id(), address, command, old._config)
+                    )
             await old.stop()
             assert await ref.add(1) == (11, pid)
         finally:
@@ -246,6 +256,8 @@ async def test_handoff_drains_lifecycle_without_blocking_calls(monkeypatch):
             transfer = asyncio.create_task(old.handoff_to(new.external_address))
             await asyncio.wait_for(prepared.wait(), 5)
             assert (await ref.add(3))[0] == 3
+            with pytest.raises(RuntimeError, match="Cannot stop"):
+                await new.stop()
             with pytest.raises(RuntimeError, match="handoff"):
                 await old.append_sub_pool()
             with pytest.raises(RuntimeError, match="handoff"):
@@ -483,13 +495,15 @@ async def test_normal_main_crash_still_cleans_children(tmp_path):
     )
     try:
         ready = await read_json(tmp_path / "ready")
-        child = psutil.Process(ready["pid"])
+        child = SubPoolProcess(
+            {
+                "pid": ready["pid"],
+                "create_time": psutil.Process(ready["pid"]).create_time(),
+            }
+        )
         proc.kill()
         await proc.wait()
-        await wait_until(
-            lambda: not child.is_running() or child.status() == psutil.STATUS_ZOMBIE,
-            timeout=5,
-        )
+        await wait_until(lambda: child.returncode is not None, timeout=5)
     finally:
         if proc.returncode is None:
             proc.kill()
@@ -565,3 +579,81 @@ async def test_unconfirmed_rollback_does_not_resume_old_owner(monkeypatch):
             await old.append_sub_pool()
         await old.handoff_to(new.external_address)
         assert (await ref.add(1))[0] == 1
+
+
+async def test_handoff_cancels_monitor_before_its_first_run(monkeypatch):
+    async with await create_pool(1) as old, await create_pool() as new:
+        ref = await actor(old)
+        old._monitor_task.cancel()
+        await asyncio.gather(old._monitor_task, return_exceptions=True)
+        old._monitor_task = None
+        wait_idle = old._lifecycle_idle.wait
+
+        async def install_unstarted_monitor():
+            await wait_idle()
+            # No yield between creating the task and handoff cancelling it.
+            old._monitor_task = asyncio.create_task(old.monitor_sub_pools())
+
+        monkeypatch.setattr(old._lifecycle_idle, "wait", install_unstarted_monitor)
+        await old.handoff_to(new.external_address)
+        assert (await ref.add(1))[0] == 1
+
+
+async def test_incompatible_transport_does_not_change_ownership():
+    async with await create_pool(1) as old, await create_pool(
+        extra_conf={"socket": {"connect_timeout": 10}}
+    ) as new:
+        ref = await actor(old)
+        with pytest.raises(ValueError, match="matching transport"):
+            await old.handoff_to(new.external_address)
+        assert old._handoff is None and new._handoff is None
+        assert (await ref.add(1))[0] == 1
+
+
+_ABANDON_SOURCE = r"""
+import asyncio, json, os, sys
+from pathlib import Path
+import xoscar as xo
+from xoscar.backends.indigen import handoff
+root, target, mode = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+async def main():
+    pool = await xo.create_actor_pool("127.0.0.1", n_process=2)
+    (root / "ready").write_text(json.dumps(list(p.identity for p in pool.sub_processes.values())))
+    request = handoff._rpc
+    async def abandon(pool, address, operation, **content):
+        result = await request(pool, address, operation, **content)
+        if (mode == "reserved" and operation == "reserve_main") or (mode == "partial" and operation == "switch_child"):
+            os._exit(0)
+        return result
+    handoff._rpc = abandon
+    await pool.handoff_to(target, timeout=2)
+asyncio.run(main())
+"""
+
+
+@pytest.mark.parametrize("mode", ["reserved", "partial"])
+async def test_abandoned_preparation_reclaims_children(tmp_path, mode):
+    async with await create_pool() as new:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-c",
+            _ABANDON_SOURCE,
+            str(tmp_path),
+            new.external_address,
+            mode,
+        )
+        children = []
+        try:
+            identities = await read_json(tmp_path / "ready")
+            children = [SubPoolProcess(identity) for identity in identities]
+            assert await asyncio.wait_for(proc.wait(), 15) == 0
+            await wait_until(lambda: new._handoff is None, timeout=10)
+            await wait_until(lambda: all(p.returncode is not None for p in children))
+            assert not new.sub_processes
+        finally:
+            if proc.returncode is None:
+                proc.kill()
+                await proc.wait()
+            for process in children:
+                if process.returncode is None:
+                    process.kill()

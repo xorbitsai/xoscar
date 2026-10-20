@@ -514,9 +514,13 @@ class MainPoolHandoffMixin:
             async def prepare():
                 await self._lifecycle_idle.wait()
                 if self._monitor_task:
-                    self._monitor_task.cancel()
-                    await self._monitor_task
-                    self._monitor_task = None
+                    monitor, self._monitor_task = self._monitor_task, None
+                    monitor.cancel()
+                    # A task cancelled before its coroutine first runs never
+                    # reaches monitor_sub_pools()' cancellation handler. Consume
+                    # that child cancellation while preserving cancellation of
+                    # this preparation task (e.g. its timeout).
+                    await asyncio.gather(monitor, return_exceptions=True)
                 processes.update(
                     {addr: p.identity for addr, p in self.sub_processes.items()}
                 )
