@@ -1054,6 +1054,12 @@ async def test_recover_sub_pool_concurrent_create_actor():
     # directly across an await; a concurrent create_actor() mutating that
     # same dict raised "dictionary changed size during iteration".
     pool = object.__new__(MainActorPool)
+    pool._handoff = None
+    pool._stopped = asyncio.Event()
+    pool._lifecycle_active = 0
+    pool._lifecycle_tasks = {}
+    pool._lifecycle_idle = asyncio.Event()
+    pool._lifecycle_idle.set()
     pool.external_address = "dummy://main"
     pool._config = mock.Mock(get_process_index=mock.Mock(return_value=0))
     pool.sub_processes = {}
@@ -1131,6 +1137,12 @@ async def test_recover_sub_pool_skips_in_flight_placeholder():
     # placeholder rather than replay it, since replaying resends an
     # unfinished create straight to the sub pool.
     pool = object.__new__(MainActorPool)
+    pool._handoff = None
+    pool._stopped = asyncio.Event()
+    pool._lifecycle_active = 0
+    pool._lifecycle_tasks = {}
+    pool._lifecycle_idle = asyncio.Event()
+    pool._lifecycle_idle.set()
     pool.external_address = "dummy://main"
     pool._config = mock.Mock(get_process_index=mock.Mock(return_value=0))
     pool.sub_processes = {}

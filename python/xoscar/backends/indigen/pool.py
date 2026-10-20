@@ -26,7 +26,6 @@ import random
 import signal
 import struct
 import sys
-import threading
 import time
 import uuid
 from enum import IntEnum
@@ -46,6 +45,13 @@ from ..message import (
 from ..pool import MainActorPoolBase, SubActorPoolBase, _register_message_handler
 from . import shared_memory
 from .fate_sharing import create_subprocess_exec
+from .handoff import (
+    MainPoolHandoffMixin,
+    ParentWatcher,
+    SubPoolHandoffMixin,
+    SubPoolProcess,
+    pool_lifecycle,
+)
 
 _SUBPROCESS_SHM_SIZE = 10240
 _is_windows: bool = sys.platform.startswith("win")
@@ -77,7 +83,7 @@ def _shm_get_object(seq: _ShmSeq, shm: shared_memory.SharedMemory):
 
 
 @_register_message_handler
-class MainActorPool(MainActorPoolBase):
+class MainActorPool(MainPoolHandoffMixin, MainActorPoolBase):
     @classmethod
     def get_external_addresses(
         cls,
@@ -185,21 +191,7 @@ class MainActorPool(MainActorPoolBase):
             process_index = config["process_index"]
             main_pool_pid = config["main_pool_pid"]
 
-            def _check_ppid():
-                while True:
-                    try:
-                        # We can't simply check if the os.getppid() equals with main_pool_pid,
-                        # as the double fork may result in a new process as the parent.
-                        psutil.Process(main_pool_pid)
-                    except psutil.NoSuchProcess:
-                        logger.error("Exit due to main pool %s exit.", main_pool_pid)
-                        os._exit(233)  # Special exit code for debugging.
-                    except Exception as e:
-                        logger.exception("Check ppid failed: %s", e)
-                    time.sleep(10)
-
-            t = threading.Thread(target=_check_ppid, daemon=True)
-            t.start()
+            main_pool_pid = ParentWatcher(main_pool_pid)
 
             # make sure enough randomness for every sub pool
             random.seed(uuid.uuid1().bytes)
@@ -348,6 +340,7 @@ class MainActorPool(MainActorPoolBase):
             raise OSError(f"Start sub pool failed, returncode: {process.returncode}")
         return process, external_addresses
 
+    @pool_lifecycle
     async def append_sub_pool(
         self,
         label: str | None = None,
@@ -411,15 +404,18 @@ class MainActorPool(MainActorPoolBase):
             content=self._config,
         )
         await self.handle_control_command(control_message)
+        await self.start_monitor()
         # The actual port will return in process_status.
         return external_addresses[0]
 
+    @pool_lifecycle
     async def remove_sub_pool(
         self, external_address: str, timeout: float | None = None, force: bool = False
     ):
         process = self.sub_processes[external_address]
         process_index = self._config.get_process_index(external_address)
         del self.sub_processes[external_address]
+        self._allocated_actors.pop(external_address, None)
         self._config.remove_pool_config(process_index)
         await self.stop_sub_pool(external_address, process, timeout, force)
 
@@ -432,7 +428,7 @@ class MainActorPool(MainActorPoolBase):
         await self.handle_control_command(control_message)
 
     async def kill_sub_pool(
-        self, process: asyncio.subprocess.Process, force: bool = False
+        self, process: asyncio.subprocess.Process | SubPoolProcess, force: bool = False
     ):
         # Let a stopped sub pool finish Python cleanup before sending signals.
         if not force:
@@ -486,6 +482,11 @@ class MainActorPool(MainActorPoolBase):
         # Additional cleanup using psutil to ensure process tree is terminated
         try:
             p = psutil.Process(process.pid)
+            if (
+                isinstance(process, SubPoolProcess)
+                and p.create_time() != process.identity["create_time"]
+            ):
+                return
             if p.is_running():
                 # Kill the entire process tree
                 for child in p.children(recursive=True):
@@ -499,9 +500,12 @@ class MainActorPool(MainActorPoolBase):
             # Process already dead or couldn't be killed
             pass
 
-    async def is_sub_pool_alive(self, process: asyncio.subprocess.Process):
+    async def is_sub_pool_alive(
+        self, process: asyncio.subprocess.Process | SubPoolProcess
+    ):
         return process.returncode is None
 
+    @pool_lifecycle
     async def recover_sub_pool(self, address: str):
         process_index = self._config.get_process_index(address)
         # process dead, restart it
@@ -538,5 +542,5 @@ class MainActorPool(MainActorPoolBase):
 
 
 @_register_message_handler
-class SubActorPool(SubActorPoolBase):
+class SubActorPool(SubPoolHandoffMixin, SubActorPoolBase):
     pass

@@ -59,7 +59,7 @@ class ControlMessageType(Enum):
     add_sub_pool_actor = 5
     # the new channel created is for data transfer only
     switch_to_copy_to = 6
-    # Management of independently hosted actor pools.
+    # Native main pool handoff and actor registry updates.
     pool_lifecycle = 7
 
 

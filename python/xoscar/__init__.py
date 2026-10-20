@@ -29,7 +29,6 @@ from .api import (
     Actor,
     StatelessActor,
     create_actor_pool,
-    take_over_actor_pool,
     setup_cluster,
     wait_actor_pool_recovered,
     get_pool_config,

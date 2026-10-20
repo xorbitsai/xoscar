@@ -45,7 +45,6 @@ from .core import ActorRef, BufferRef, FileObjectRef, _Actor, _StatelessActor
 
 if TYPE_CHECKING:
     from .backends.config import ActorPoolConfig
-    from .backends.indigen.handoff import ActorPoolHandoff, HandoffActorPool
     from .backends.pool import MainActorPoolType
 
 logger = logging.getLogger(__name__)
@@ -152,12 +151,8 @@ async def kill_actor(actor_ref: ActorRef):
 
 
 async def create_actor_pool(
-    address: str,
-    n_process: int | None = None,
-    *,
-    enable_manager_handoff: bool = False,
-    **kwargs,
-) -> "MainActorPoolType | HandoffActorPool":
+    address: str, n_process: int | None = None, **kwargs
+) -> "MainActorPoolType":
     # TODO: explain default values.
     """
     Create an actor pool.
@@ -168,24 +163,15 @@ async def create_actor_pool(
         Address of the actor pool.
     n_process: Optional[int], default=None
         Number of processes.
-    enable_manager_handoff: bool, default=False
-        Allow the manager process to be replaced without restarting actors.
-        Host the pool independently and return a transferable management handle.
     kwargs : dict
         Other keyword arguments for the actor pool.
 
     Returns
     -------
-    MainActorPoolType or HandoffActorPool
+    MainActorPoolType
     """
     if address is None:
         raise ValueError("address has to be provided")
-    if not isinstance(enable_manager_handoff, bool):
-        raise ValueError("enable_manager_handoff must be a boolean")
-    if enable_manager_handoff:
-        from .backends.indigen.handoff import create_handoff_pool
-
-        return await create_handoff_pool(address, n_process=n_process, **kwargs)
     if "://" not in address:
         scheme = None
     else:
@@ -194,20 +180,6 @@ async def create_actor_pool(
     return await get_backend(scheme).create_actor_pool(
         address, n_process=n_process, **kwargs
     )
-
-
-async def take_over_actor_pool(
-    handle: "ActorPoolHandoff | dict",
-) -> "HandoffActorPool":
-    """Take over a pool after its manager hands it off or its lease expires.
-
-    The handle is a local management credential. Keep it private. Taking over
-    rotates the credential, so an earlier owner cannot renew or stop the pool.
-    Actors keep their processes, addresses, and in-memory state.
-    """
-    from .backends.indigen.handoff import HandoffActorPool
-
-    return await HandoffActorPool.take_over(handle)
 
 
 async def wait_for(fut: Awaitable[Any], timeout: int | float | None = None) -> Any:
