@@ -774,6 +774,9 @@ async def test_machine_identity_clock_precision(monkeypatch, platform, offset, a
             handoff._check_identity(remote)
         return
     handoff._check_identity(remote)
+    for invalid in (None, (local["machine"][0],), (local["machine"][0], None)):
+        with pytest.raises(ValueError, match="matching machine"):
+            handoff._check_identity({**remote, "machine": invalid})
     with pytest.raises(ValueError, match="matching machine"):
         handoff._check_identity(
             {**remote, "machine": ("different-host", remote["machine"][1])}

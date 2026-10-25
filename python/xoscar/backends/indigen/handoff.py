@@ -71,10 +71,13 @@ def _check_identity(identity: dict):
         if field == "machine" and sys.platform == "win32":
             # Windows boot-time estimates can differ by a second across
             # processes (psutil#1007). PID generation is still checked below.
-            host, boot = identity[field]
-            same = host == local[field][0] and math.isclose(
-                boot, local[field][1], rel_tol=0, abs_tol=1
-            )
+            try:
+                host, boot = identity[field]
+                same = host == local[field][0] and math.isclose(
+                    boot, local[field][1], rel_tol=0, abs_tol=1
+                )
+            except (TypeError, ValueError):
+                same = False
         if not same:
             raise ValueError(
                 f"Actor pool handoff requires matching {field}: "
