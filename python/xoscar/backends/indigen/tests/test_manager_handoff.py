@@ -18,6 +18,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import psutil
 import pytest
@@ -25,18 +26,14 @@ import pytest
 import xoscar as xo
 
 from ...allocate_strategy import AddressSpecified, RandomSubPool
+from ...config import ActorPoolConfig
 from ...message import ControlMessage, ControlMessageType, new_message_id
 from ...router import Router
 from .. import handoff
 from ..handoff import SubPoolProcess
 from ..pool import MainActorPool
 
-pytestmark = [
-    pytest.mark.asyncio,
-    pytest.mark.skipif(
-        sys.platform == "win32", reason="Native handoff currently requires POSIX"
-    ),
-]
+pytestmark = pytest.mark.asyncio
 
 
 class CounterActor(xo.StatelessActor):
@@ -100,9 +97,26 @@ async def wait_until(predicate, timeout=10):
     await asyncio.wait_for(wait(), timeout)
 
 
-async def read_json(path):
-    await wait_until(path.exists)
+async def read_json(path, *, timeout=30):
+    # Windows cold starts with coverage and optional dependencies can exceed
+    # 10s before a helper and its actor sub pools publish their ready file.
+    await wait_until(path.exists, timeout=timeout)
     return json.loads(path.read_text())
+
+
+@pytest.mark.parametrize("internal", ["127.0.0.1:0", "unixsocket:///1"])
+async def test_bound_address_is_preserved_in_handoff_config(internal):
+    config = ActorPoolConfig()
+    config.add_pool_conf(1, None, internal, "127.0.0.1:0")
+    config.reset_pool_external_address(1, "127.0.0.1:12345")
+    expected = "127.0.0.1:12345" if internal == "127.0.0.1:0" else internal
+    assert config.get_pool_config(1)["internal_address"] == expected
+    assert config.external_to_internal_address_map == {"127.0.0.1:12345": expected}
+    # Recovery may bind a different port after a later handoff.
+    config.reset_pool_external_address(1, "127.0.0.1:23456")
+    expected = "127.0.0.1:23456" if internal == "127.0.0.1:0" else internal
+    assert config.get_pool_config(1)["internal_address"] == expected
+    assert config.external_to_internal_address_map == {"127.0.0.1:23456": expected}
 
 
 async def test_handoff_preserves_state_stream_and_main_actors():
@@ -698,7 +712,9 @@ async def test_abandoned_preparation_reclaims_children(tmp_path, mode):
             identities = await read_json(tmp_path / "ready")
             children = [SubPoolProcess(identity) for identity in identities]
             assert await asyncio.wait_for(proc.wait(), 15) == 0
-            await wait_until(lambda: new._handoff is None, timeout=10)
+            # Allow expiry, the source probe and both child RPC rounds to time
+            # out: Windows TCP connects can finish after the original 10s.
+            await wait_until(lambda: new._handoff is None, timeout=20)
             await wait_until(lambda: all(p.returncode is not None for p in children))
             assert not new.sub_processes
         finally:
@@ -708,3 +724,66 @@ async def test_abandoned_preparation_reclaims_children(tmp_path, mode):
             for process in children:
                 if process.returncode is None:
                     process.kill()
+
+
+async def test_failed_adoption_releases_prepared_handles(monkeypatch):
+    async with await create_pool(2) as old, await create_pool() as new:
+        refs = [
+            await actor(old, f"counter{i}", address)
+            for i, address in enumerate(old.sub_processes)
+        ]
+        adopt = SubPoolProcess.adopted
+        prepared = []
+        jobs = []
+
+        def fail_second(identity, owner):
+            if prepared:
+                raise OSError("Cannot duplicate job handle")
+            process = adopt(identity, owner)
+            prepared.append(process)
+            jobs.append(process._job)
+            return process
+
+        with monkeypatch.context() as patch:
+            patch.setattr(SubPoolProcess, "adopted", fail_second)
+            with pytest.raises(OSError, match="duplicate job"):
+                await old.handoff_to(new.external_address)
+        assert old._handoff is None and new._handoff is None
+        assert not new.sub_processes
+        assert prepared[0]._job is None
+        assert all(job is None or job.closed for job in jobs)
+        for ref in refs:
+            assert (await ref.add(1))[0] == 1
+        await old.handoff_to(new.external_address)
+        for ref in refs:
+            assert (await ref.add(1))[0] == 2
+
+
+@pytest.mark.parametrize(
+    "platform,offset,allowed",
+    [
+        ("win32", 0.001, True),
+        ("win32", 1, True),
+        ("win32", 2, False),
+        ("linux", 0.001, False),
+    ],
+)
+async def test_machine_identity_clock_precision(monkeypatch, platform, offset, allowed):
+    local = handoff._identity()
+    monkeypatch.setattr(handoff, "_identity", lambda: local)
+    monkeypatch.setattr(handoff, "sys", SimpleNamespace(platform=platform))
+    remote = {**local, "machine": (local["machine"][0], local["machine"][1] + offset)}
+    if not allowed:
+        with pytest.raises(ValueError, match="matching machine"):
+            handoff._check_identity(remote)
+        return
+    handoff._check_identity(remote)
+    for invalid in (None, (local["machine"][0],), (local["machine"][0], None)):
+        with pytest.raises(ValueError, match="matching machine"):
+            handoff._check_identity({**remote, "machine": invalid})
+    with pytest.raises(ValueError, match="matching machine"):
+        handoff._check_identity(
+            {**remote, "machine": ("different-host", remote["machine"][1])}
+        )
+    with pytest.raises(ProcessLookupError, match="identity changed"):
+        handoff._check_identity({**remote, "create_time": remote["create_time"] + 1})

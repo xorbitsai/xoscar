@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
+import contextlib
 import logging
 import subprocess
 import sys
@@ -23,23 +23,24 @@ import psutil
 # prctl support is detected dynamically once, and assumed thereafter.
 linux_prctl = None
 
-# Windows can bind processes' lifetimes to that of kernel-level "job objects".
-# We keep a global job object to tie its lifetime to that of our own process.
+# Windows binds process lifetimes with job objects. Native sub pools use
+# separate jobs; the shared job remains available to the fate-sharing helper.
 win32_job = None
 win32_AssignProcessToJobObject = None
+win32_job_factory = None
 
 logger = logging.getLogger(__name__)
 
 
 def detect_fate_sharing_support_win32():
-    global win32_job, win32_AssignProcessToJobObject
+    global win32_job, win32_AssignProcessToJobObject, win32_job_factory
     if win32_job is None and sys.platform == "win32":
         import ctypes
 
         try:
             from ctypes.wintypes import BOOL, DWORD, HANDLE, LPCWSTR, LPVOID
 
-            kernel32 = ctypes.WinDLL("kernel32")
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
             kernel32.CreateJobObjectW.argtypes = (LPVOID, LPCWSTR)
             kernel32.CreateJobObjectW.restype = HANDLE
             sijo_argtypes = (HANDLE, ctypes.c_int, LPVOID, DWORD)
@@ -108,6 +109,22 @@ def detect_fate_sharing_support_win32():
                 job, infoclass, ctypes.byref(buf), ctypes.sizeof(buf)
             ):
                 job = None
+            else:
+
+                def create_job():
+                    handle = kernel32.CreateJobObjectW(None, None)
+                    if not handle:
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    handle = subprocess.Handle(handle)
+                    if not kernel32.SetInformationJobObject(
+                        handle, infoclass, ctypes.byref(buf), ctypes.sizeof(buf)
+                    ):
+                        error = ctypes.WinError(ctypes.get_last_error())
+                        handle.Close()
+                        raise error
+                    return handle
+
+                win32_job_factory = create_job
         win32_AssignProcessToJobObject = (
             kernel32.AssignProcessToJobObject if kernel32 is not None else False
         )
@@ -161,9 +178,7 @@ def set_kill_on_parent_death_linux():
 
 
 def clear_kill_on_parent_death():
-    """Release the original OS parent binding during a planned POSIX handoff."""
-    if sys.platform == "win32":
-        raise NotImplementedError("Windows job ownership cannot be handed off yet")
+    """Release Linux's OS parent binding; Windows transfers job handles instead."""
     if sys.platform.startswith("linux") and detect_fate_sharing_support_linux():
         if linux_prctl(1, 0, 0, 0, 0) != 0:
             import ctypes
@@ -171,7 +186,7 @@ def clear_kill_on_parent_death():
             raise OSError(ctypes.get_errno(), "prctl(PR_SET_PDEATHSIG, 0) failed")
 
 
-def set_kill_child_on_death_win32(child_proc):
+def set_kill_child_on_death_win32(child_proc, job=None):
     """Ensures the child process dies if this process dies (fate-sharing).
 
     Windows-only. Must be called by the parent, after spawning the child.
@@ -185,7 +200,9 @@ def set_kill_child_on_death_win32(child_proc):
     assert isinstance(child_proc, subprocess.Handle)
 
     if detect_fate_sharing_support_win32():
-        if not win32_AssignProcessToJobObject(win32_job, int(child_proc)):
+        if not win32_AssignProcessToJobObject(
+            win32_job if job is None else job, int(child_proc)
+        ):
             import ctypes
 
             raise OSError(ctypes.get_last_error(), "AssignProcessToJobObject() failed")
@@ -202,10 +219,10 @@ def preexec_fn():
 
 
 async def create_subprocess_exec(*args, **kwargs):
+    from .handoff import SubPoolProcess
+
     win32 = sys.platform == "win32"
     if not win32:
-        from .handoff import SubPoolProcess
-
         # An asyncio subprocess transport kills a live child when closed. Use
         # a detachable process handle for all ordinary native POSIX pools.
         return SubPoolProcess.spawned(
@@ -217,24 +234,71 @@ async def create_subprocess_exec(*args, **kwargs):
     # before the process itself is assigned to the job.
     # After that point, its children will not be added to the job anymore.
     CREATE_SUSPENDED = 0x00000004  # from Windows headers
-    creationflags = CREATE_SUSPENDED if win32 else 0
-    if win32 and detect_fate_sharing_support_win32():
-        creationflags |= subprocess.CREATE_NEW_PROCESS_GROUP
+    if not detect_fate_sharing_support_win32():
+        raise RuntimeError("Windows actor subprocesses require Job Object support")
+    creationflags = CREATE_SUSPENDED | subprocess.CREATE_NEW_PROCESS_GROUP
     # CREATE_NEW_PROCESS_GROUP is used to send Ctrl+C on Windows:
     # https://docs.python.org/3/library/subprocess.html#subprocess.Popen.send_signal
-    process: asyncio.subprocess.Process = await asyncio.create_subprocess_exec(
-        *args,
-        **kwargs,
-        preexec_fn=preexec_fn if not win32 else None,
-        creationflags=creationflags,
+    # Each native sub pool needs a separate job: transferring a process-wide
+    # job would also keep unrelated actor pools alive after their owner exits.
+    assert win32_job_factory is not None
+    job = win32_job_factory()
+    process = None
+    try:
+        process = subprocess.Popen(args, **kwargs, creationflags=creationflags)
+        set_kill_child_on_death_win32(process, job)
+        psutil.Process(process.pid).resume()
+        return SubPoolProcess.spawned(process, job=job)
+    except BaseException:
+        if process is not None:
+            with contextlib.suppress(ProcessLookupError):
+                process.kill()
+            process.wait()
+        job.Close()
+        raise
+
+
+def duplicate_win32_job(owner_pid: int, job_handle: int):
+    """Keep a sub pool's job alive in its new main, without inheritable handles."""
+    if sys.platform != "win32":
+        raise NotImplementedError("Job handles are only available on Windows")
+    import ctypes
+    from ctypes.wintypes import BOOL, DWORD, HANDLE
+    from subprocess import Handle  # type: ignore[attr-defined]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = (DWORD, BOOL, DWORD)
+    kernel32.OpenProcess.restype = HANDLE
+    kernel32.GetCurrentProcess.argtypes = ()
+    kernel32.GetCurrentProcess.restype = HANDLE
+    kernel32.DuplicateHandle.argtypes = (
+        HANDLE,
+        HANDLE,
+        HANDLE,
+        ctypes.POINTER(HANDLE),
+        DWORD,
+        BOOL,
+        DWORD,
     )
-    if win32:
-        proc = process._transport._proc
-        try:
-            set_kill_child_on_death_win32(proc)
-            psutil.Process(process.pid).resume()
-        except (psutil.Error, OSError):
-            logger.exception("Resume process failed, kill %s.", process.pid)
-            process.kill()
-            raise
-    return process
+    kernel32.DuplicateHandle.restype = BOOL
+    PROCESS_DUP_HANDLE = 0x0040
+    DUPLICATE_SAME_ACCESS = 0x00000002
+    owner = kernel32.OpenProcess(PROCESS_DUP_HANDLE, False, owner_pid)
+    if not owner:
+        raise ctypes.WinError(ctypes.get_last_error())
+    owner = Handle(owner)
+    try:
+        duplicate = HANDLE()
+        if not kernel32.DuplicateHandle(
+            owner,
+            job_handle,
+            kernel32.GetCurrentProcess(),
+            ctypes.byref(duplicate),
+            0,
+            False,
+            DUPLICATE_SAME_ACCESS,
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return Handle(duplicate.value)
+    finally:
+        owner.Close()

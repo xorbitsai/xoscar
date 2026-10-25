@@ -67,8 +67,22 @@ def _process(identity: dict) -> psutil.Process:
 def _check_identity(identity: dict):
     local = _identity()
     for field in ("machine", "python", "protocol"):
-        if identity[field] != local[field]:
-            raise ValueError(f"Actor pool handoff requires matching {field}")
+        same = identity[field] == local[field]
+        if field == "machine" and sys.platform == "win32":
+            # Windows boot-time estimates can differ by a second across
+            # processes (psutil#1007). PID generation is still checked below.
+            try:
+                host, boot = identity[field]
+                same = host == local[field][0] and math.isclose(
+                    boot, local[field][1], rel_tol=0, abs_tol=1
+                )
+            except (TypeError, ValueError):
+                same = False
+        if not same:
+            raise ValueError(
+                f"Actor pool handoff requires matching {field}: "
+                f"{identity[field]!r} != {local[field]!r}"
+            )
     _process(identity)
 
 
@@ -79,16 +93,42 @@ class SubPoolProcess:
     identity avoids waitpid() and PID reuse; the original parent alone reaps it.
     """
 
-    def __init__(self, identity: dict, popen: subprocess.Popen | None = None):
-        self.identity = identity
+    def __init__(self, identity: dict, popen: subprocess.Popen | None = None, job=None):
+        self.identity = dict(identity)
         self._popen = popen
+        self._job = job
+        if job is not None:
+            self.identity["job_handle"] = int(job)
 
     @classmethod
-    def spawned(cls, popen: subprocess.Popen):
+    def spawned(cls, popen: subprocess.Popen, job=None):
         return cls(
             {"pid": popen.pid, "create_time": psutil.Process(popen.pid).create_time()},
             popen,
+            job,
         )
+
+    @classmethod
+    def adopted(cls, identity: dict, owner: dict):
+        job = None
+        if sys.platform == "win32":
+            from .fate_sharing import duplicate_win32_job
+
+            if "job_handle" not in identity:
+                raise NotImplementedError("Windows handoff requires per-sub-pool jobs")
+            _process(owner)
+            job = duplicate_win32_job(owner["pid"], identity["job_handle"])
+            try:
+                _process(owner)
+            except BaseException:
+                job.Close()
+                raise
+        return cls(identity, job=job)
+
+    def _close_job(self):
+        if self._job is not None:
+            job, self._job = self._job, None
+            job.Close()
 
     @property
     def pid(self):
@@ -97,13 +137,17 @@ class SubPoolProcess:
     @property
     def returncode(self):
         if self._popen is not None:
-            return self._popen.poll()
-        try:
-            _process(self.identity)
-            return None
-        except (psutil.NoSuchProcess, ProcessLookupError):
-            # Non-parents cannot collect the exit status.
-            return 0
+            code = self._popen.poll()
+        else:
+            try:
+                _process(self.identity)
+                return None
+            except (psutil.NoSuchProcess, ProcessLookupError):
+                # Non-parents cannot collect the exit status.
+                code = 0
+        if code is not None:
+            self._close_job()
+        return code
 
     async def wait(self):
         while self.returncode is None:
@@ -128,6 +172,7 @@ class SubPoolProcess:
         if self._popen is not None:
             threading.Thread(target=self._popen.wait, daemon=True).start()
             self._popen = None
+        self._close_job()
 
 
 class ParentWatcher:
@@ -416,15 +461,11 @@ class MainPoolHandoffMixin:
         actors. Existing references to sub-pool actors remain valid; callers
         using this main's address must reconnect to the target.
 
-        Handoff currently supports POSIX. Windows raises NotImplementedError
-        before changing either pool. Cancellation waits for commit or rollback.
+        Handoff supports native POSIX and Windows subprocess pools.
+        Cancellation waits for commit or rollback.
         Before commit failures roll back; after commit retry this method with
         the same address to finish an interrupted acknowledgement.
         """
-        if sys.platform == "win32":
-            raise NotImplementedError(
-                "Native main pool handoff is not yet supported on Windows"
-            )
         if address == self.external_address:
             raise ValueError("The handoff target must be a different main pool")
         if (
@@ -651,10 +692,6 @@ class MainPoolHandoffMixin:
             if operation == "commit_main" and ticket in self._completed_handoffs:
                 return self._completed_handoffs[ticket]
             if operation == "reserve_main":
-                if sys.platform == "win32":
-                    raise NotImplementedError(
-                        "Native main pool handoff is not yet supported on Windows"
-                    )
                 self._check_mutable()
                 if self.sub_processes or self._config.n_pool != 1:
                     raise ValueError("The handoff target must have no sub pools")
@@ -688,6 +725,17 @@ class MainPoolHandoffMixin:
                 if self.sub_processes or self._config.n_pool != 1:
                     self._handoff = None
                     raise ValueError("The handoff target must have no sub pools")
+                adopted = self._handoff["adopted"] = {}
+                try:
+                    for addr, identity in content["processes"].items():
+                        adopted[addr] = SubPoolProcess.adopted(
+                            identity, content["source"]
+                        )
+                except BaseException:
+                    for process in adopted.values():
+                        process.detach()
+                    self._handoff = None
+                    raise
                 self._handoff_expiry = asyncio.create_task(
                     self._expire_handoff(ticket, content["timeout"])
                 )
@@ -711,10 +759,7 @@ class MainPoolHandoffMixin:
                     raise RuntimeError("Actor registry has not been staged")
                 state["phase"] = "committing"
                 self._sync_handoff_config(state["config"], state["processes"])
-                self.sub_processes = {
-                    addr: SubPoolProcess(identity)
-                    for addr, identity in state["processes"].items()
-                }
+                self.sub_processes = state["adopted"]
                 self._allocated_actors.update(state["allocated"])
                 for addr, process in self.sub_processes.items():
                     try:
@@ -765,6 +810,8 @@ class MainPoolHandoffMixin:
                     raise RuntimeError(
                         f"Sub pool rollback is still pending for {failed}"
                     )
+                for process in state["adopted"].values():
+                    process.detach()
                 self._handoff = None
                 if (
                     self._handoff_expiry
