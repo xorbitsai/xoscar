@@ -111,6 +111,7 @@ class ActorPoolConfig:
                 internal_address = external_address[0]
             mapping.pop(addr, None)
 
+        cur_pool_config["internal_address"] = internal_address
         cur_pool_config["external_address"] = external_address
         for addr in external_address:
             mapping[addr] = internal_address

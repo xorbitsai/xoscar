@@ -26,6 +26,7 @@ import pytest
 import xoscar as xo
 
 from ...allocate_strategy import AddressSpecified, RandomSubPool
+from ...config import ActorPoolConfig
 from ...message import ControlMessage, ControlMessageType, new_message_id
 from ...router import Router
 from .. import handoff
@@ -99,6 +100,21 @@ async def wait_until(predicate, timeout=10):
 async def read_json(path):
     await wait_until(path.exists)
     return json.loads(path.read_text())
+
+
+@pytest.mark.parametrize("internal", ["127.0.0.1:0", "unixsocket:///1"])
+async def test_bound_address_is_preserved_in_handoff_config(internal):
+    config = ActorPoolConfig()
+    config.add_pool_conf(1, None, internal, "127.0.0.1:0")
+    config.reset_pool_external_address(1, "127.0.0.1:12345")
+    expected = "127.0.0.1:12345" if internal == "127.0.0.1:0" else internal
+    assert config.get_pool_config(1)["internal_address"] == expected
+    assert config.external_to_internal_address_map == {"127.0.0.1:12345": expected}
+    # Recovery may bind a different port after a later handoff.
+    config.reset_pool_external_address(1, "127.0.0.1:23456")
+    expected = "127.0.0.1:23456" if internal == "127.0.0.1:0" else internal
+    assert config.get_pool_config(1)["internal_address"] == expected
+    assert config.external_to_internal_address_map == {"127.0.0.1:23456": expected}
 
 
 async def test_handoff_preserves_state_stream_and_main_actors():
