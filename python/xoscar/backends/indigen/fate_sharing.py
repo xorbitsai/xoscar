@@ -264,6 +264,7 @@ def duplicate_win32_job(owner_pid: int, job_handle: int):
         raise NotImplementedError("Job handles are only available on Windows")
     import ctypes
     from ctypes.wintypes import BOOL, DWORD, HANDLE
+    from subprocess import Handle  # type: ignore[attr-defined]
 
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.OpenProcess.argtypes = (DWORD, BOOL, DWORD)
@@ -285,7 +286,7 @@ def duplicate_win32_job(owner_pid: int, job_handle: int):
     owner = kernel32.OpenProcess(PROCESS_DUP_HANDLE, False, owner_pid)
     if not owner:
         raise ctypes.WinError()
-    owner = subprocess.Handle(owner)
+    owner = Handle(owner)
     try:
         duplicate = HANDLE()
         if not kernel32.DuplicateHandle(
@@ -298,6 +299,6 @@ def duplicate_win32_job(owner_pid: int, job_handle: int):
             DUPLICATE_SAME_ACCESS,
         ):
             raise ctypes.WinError()
-        return subprocess.Handle(duplicate.value)
+        return Handle(duplicate.value)
     finally:
         owner.Close()

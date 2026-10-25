@@ -18,6 +18,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import psutil
 import pytest
@@ -736,3 +737,30 @@ async def test_failed_adoption_releases_prepared_handles(monkeypatch):
         await old.handoff_to(new.external_address)
         for ref in refs:
             assert (await ref.add(1))[0] == 2
+
+
+@pytest.mark.parametrize(
+    "platform,offset,allowed",
+    [
+        ("win32", 0.001, True),
+        ("win32", 1, True),
+        ("win32", 2, False),
+        ("linux", 0.001, False),
+    ],
+)
+async def test_machine_identity_clock_precision(monkeypatch, platform, offset, allowed):
+    local = handoff._identity()
+    monkeypatch.setattr(handoff, "_identity", lambda: local)
+    monkeypatch.setattr(handoff, "sys", SimpleNamespace(platform=platform))
+    remote = {**local, "machine": (local["machine"][0], local["machine"][1] + offset)}
+    if not allowed:
+        with pytest.raises(ValueError, match="matching machine"):
+            handoff._check_identity(remote)
+        return
+    handoff._check_identity(remote)
+    with pytest.raises(ValueError, match="matching machine"):
+        handoff._check_identity(
+            {**remote, "machine": ("different-host", remote["machine"][1])}
+        )
+    with pytest.raises(ProcessLookupError, match="identity changed"):
+        handoff._check_identity({**remote, "create_time": remote["create_time"] + 1})
