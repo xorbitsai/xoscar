@@ -710,7 +710,9 @@ async def test_abandoned_preparation_reclaims_children(tmp_path, mode):
             identities = await read_json(tmp_path / "ready")
             children = [SubPoolProcess(identity) for identity in identities]
             assert await asyncio.wait_for(proc.wait(), 15) == 0
-            await wait_until(lambda: new._handoff is None, timeout=10)
+            # Allow expiry, the source probe and both child RPC rounds to time
+            # out: Windows TCP connects can finish after the original 10s.
+            await wait_until(lambda: new._handoff is None, timeout=20)
             await wait_until(lambda: all(p.returncode is not None for p in children))
             assert not new.sub_processes
         finally:
