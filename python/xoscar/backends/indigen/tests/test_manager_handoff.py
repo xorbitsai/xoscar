@@ -31,12 +31,7 @@ from .. import handoff
 from ..handoff import SubPoolProcess
 from ..pool import MainActorPool
 
-pytestmark = [
-    pytest.mark.asyncio,
-    pytest.mark.skipif(
-        sys.platform == "win32", reason="Native handoff currently requires POSIX"
-    ),
-]
+pytestmark = pytest.mark.asyncio
 
 
 class CounterActor(xo.StatelessActor):
@@ -708,3 +703,36 @@ async def test_abandoned_preparation_reclaims_children(tmp_path, mode):
             for process in children:
                 if process.returncode is None:
                     process.kill()
+
+
+async def test_failed_adoption_releases_prepared_handles(monkeypatch):
+    async with await create_pool(2) as old, await create_pool() as new:
+        refs = [
+            await actor(old, f"counter{i}", address)
+            for i, address in enumerate(old.sub_processes)
+        ]
+        adopt = SubPoolProcess.adopted
+        prepared = []
+        jobs = []
+
+        def fail_second(identity, owner):
+            if prepared:
+                raise OSError("Cannot duplicate job handle")
+            process = adopt(identity, owner)
+            prepared.append(process)
+            jobs.append(process._job)
+            return process
+
+        with monkeypatch.context() as patch:
+            patch.setattr(SubPoolProcess, "adopted", fail_second)
+            with pytest.raises(OSError, match="duplicate job"):
+                await old.handoff_to(new.external_address)
+        assert old._handoff is None and new._handoff is None
+        assert not new.sub_processes
+        assert prepared[0]._job is None
+        assert all(job is None or job.closed for job in jobs)
+        for ref in refs:
+            assert (await ref.add(1))[0] == 1
+        await old.handoff_to(new.external_address)
+        for ref in refs:
+            assert (await ref.add(1))[0] == 2

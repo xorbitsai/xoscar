@@ -93,14 +93,16 @@ A prepared replacement also checks abandoned handoffs: it completes a fully
 staged transfer whose children already switched owners, or reclaims an
 incomplete transfer if the source has exited.
 
-Handoff currently supports POSIX native subprocess pools. Windows rejects the
-operation before making changes; its job-object ownership needs separate
-support. Both mains must use the same Python major/minor and compatible Xoscar
-serialization and actor interfaces, with matching transport and proxy settings.
+Handoff supports native subprocess pools on POSIX and Windows. Both mains must
+use the same Python major/minor and compatible Xoscar serialization and actor
+interfaces, with matching transport and proxy settings.
 After a handoff, children watch their new main in userspace rather than relying
-on Linux's binding to their original OS parent. This is a planned upgrade
-operation, not a guarantee of preserving actors after an arbitrary main crash
-or a crash midway through handoff.
+on Linux's binding to their original OS parent. On Windows each sub pool uses
+its own Job Object. The replacement duplicates its handles before children
+switch owners; the old main releases its copies only after the transfer commits.
+The replacement retains kernel-level cleanup if it exits unexpectedly.
+This is a planned upgrade operation, not a guarantee of preserving actors after
+an arbitrary main crash or a crash midway through handoff.
 
 Only sub-pool actors are retained. Actors in the old main stay there and must be
 recreated by the application. The retained sub pools keep their original Python
@@ -109,8 +111,9 @@ application work. Existing actor references pointing directly at sub pools stay
 valid. Connections and references to the old main address must be redirected or
 recreated; Xoscar does not migrate those connections or move GPU memory.
 The deployment must allow retained sub processes to outlive the old main;
-handoff does not move OS process groups or containers, or prevent a service
-manager from killing the entire old process group.
+handoff does not move OS process groups, external Windows Job Objects or
+containers, or prevent a service manager from killing the entire old process
+group.
 
 
 Trust and transport authentication
