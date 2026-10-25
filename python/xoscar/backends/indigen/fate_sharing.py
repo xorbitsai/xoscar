@@ -114,12 +114,12 @@ def detect_fate_sharing_support_win32():
                 def create_job():
                     handle = kernel32.CreateJobObjectW(None, None)
                     if not handle:
-                        raise ctypes.WinError()
+                        raise ctypes.WinError(ctypes.get_last_error())
                     handle = subprocess.Handle(handle)
                     if not kernel32.SetInformationJobObject(
                         handle, infoclass, ctypes.byref(buf), ctypes.sizeof(buf)
                     ):
-                        error = ctypes.WinError()
+                        error = ctypes.WinError(ctypes.get_last_error())
                         handle.Close()
                         raise error
                     return handle
@@ -285,7 +285,7 @@ def duplicate_win32_job(owner_pid: int, job_handle: int):
     DUPLICATE_SAME_ACCESS = 0x00000002
     owner = kernel32.OpenProcess(PROCESS_DUP_HANDLE, False, owner_pid)
     if not owner:
-        raise ctypes.WinError()
+        raise ctypes.WinError(ctypes.get_last_error())
     owner = Handle(owner)
     try:
         duplicate = HANDLE()
@@ -298,7 +298,7 @@ def duplicate_win32_job(owner_pid: int, job_handle: int):
             False,
             DUPLICATE_SAME_ACCESS,
         ):
-            raise ctypes.WinError()
+            raise ctypes.WinError(ctypes.get_last_error())
         return Handle(duplicate.value)
     finally:
         owner.Close()

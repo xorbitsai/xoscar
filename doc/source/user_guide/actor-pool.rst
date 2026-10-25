@@ -101,6 +101,9 @@ on Linux's binding to their original OS parent. On Windows each sub pool uses
 its own Job Object. The replacement duplicates its handles before children
 switch owners; the old main releases its copies only after the transfer commits.
 The replacement retains kernel-level cleanup if it exits unexpectedly.
+It needs ``PROCESS_DUP_HANDLE`` access to the old main. Run both mains as the
+same user and at the same integrity level (for example, both without elevation);
+mismatched permissions can reject preparation.
 This is a planned upgrade operation, not a guarantee of preserving actors after
 an arbitrary main crash or a crash midway through handoff.
 
