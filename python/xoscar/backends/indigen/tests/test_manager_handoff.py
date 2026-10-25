@@ -97,7 +97,9 @@ async def wait_until(predicate, timeout=10):
     await asyncio.wait_for(wait(), timeout)
 
 
-async def read_json(path, *, timeout=10):
+async def read_json(path, *, timeout=30):
+    # Windows cold starts with coverage and optional dependencies can exceed
+    # 10s before a helper and its actor sub pools publish their ready file.
     await wait_until(path.exists, timeout=timeout)
     return json.loads(path.read_text())
 

@@ -24,7 +24,7 @@ import xoscar as xo
 
 from ...allocate_strategy import RandomSubPool
 from ...router import Router
-from .. import handoff
+from .. import fate_sharing, handoff
 from ..fate_sharing import duplicate_win32_job
 from ..handoff import SubPoolProcess
 from .test_manager_handoff import (
@@ -85,9 +85,7 @@ async def test_transferring_one_pool_does_not_retain_unrelated_jobs(tmp_path):
         )
         unrelated = None
         try:
-            # Starting two pools sequentially can exceed 10s with coverage and
-            # the full set of optional dependencies on Windows CI.
-            ready = await read_json(tmp_path / "ready", timeout=30)
+            ready = await read_json(tmp_path / "ready")
             unrelated = SubPoolProcess(ready["unrelated"])
             assert await asyncio.wait_for(process.wait(), 15) == 0
             ref = await xo.actor_ref(address=ready["address"], uid="retained")
@@ -107,6 +105,34 @@ async def test_job_duplication_reports_windows_error(invalid_owner, error_code):
     with pytest.raises(OSError) as exc:
         duplicate_win32_job(0 if invalid_owner else os.getpid(), 0)
     assert exc.value.winerror == error_code
+
+
+async def test_owner_recheck_failure_closes_duplicated_job(monkeypatch):
+    async with await create_pool(1) as old:
+        source = next(iter(old.sub_processes.values()))
+        owner = handoff._identity()
+        duplicate = fate_sharing.duplicate_win32_job
+        check = handoff._process
+        prepared = []
+
+        def record_duplicate(owner_pid, job_handle):
+            job = duplicate(owner_pid, job_handle)
+            prepared.append(job)
+            return job
+
+        def owner_changed(identity):
+            if prepared:
+                raise ProcessLookupError("owner identity changed")
+            return check(identity)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(fate_sharing, "duplicate_win32_job", record_duplicate)
+            patch.setattr(handoff, "_process", owner_changed)
+            with pytest.raises(ProcessLookupError, match="owner identity changed"):
+                SubPoolProcess.adopted(source.identity, owner)
+        assert len(prepared) == 1 and prepared[0].closed
+        assert source._job is not None and not source._job.closed
+        assert source.returncode is None
 
 
 async def test_handoff_releases_job_handles_after_rollback_commit_and_exit(monkeypatch):
