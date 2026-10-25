@@ -97,8 +97,8 @@ async def wait_until(predicate, timeout=10):
     await asyncio.wait_for(wait(), timeout)
 
 
-async def read_json(path):
-    await wait_until(path.exists)
+async def read_json(path, *, timeout=10):
+    await wait_until(path.exists, timeout=timeout)
     return json.loads(path.read_text())
 
 

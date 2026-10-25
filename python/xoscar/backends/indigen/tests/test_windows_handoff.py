@@ -78,7 +78,9 @@ async def test_transferring_one_pool_does_not_retain_unrelated_jobs(tmp_path):
         )
         unrelated = None
         try:
-            ready = await read_json(tmp_path / "ready")
+            # Starting two pools sequentially can exceed 10s with coverage and
+            # the full set of optional dependencies on Windows CI.
+            ready = await read_json(tmp_path / "ready", timeout=30)
             unrelated = SubPoolProcess(ready["unrelated"])
             assert await asyncio.wait_for(process.wait(), 15) == 0
             ref = await xo.actor_ref(address=ready["address"], uid="retained")
