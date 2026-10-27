@@ -1070,7 +1070,7 @@ class MainActorPoolBase(ActorPoolBase):
         # make sure different processes does not share process indexes
         pid = os.getpid()
         for idx in cls._process_index_gen:
-            yield pid << 16 + idx
+            yield (pid << 16) + idx
 
     @property
     def _sub_processes(self):

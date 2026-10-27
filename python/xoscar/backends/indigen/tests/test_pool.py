@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import atexit
 import contextlib
+import itertools
 import logging
 import multiprocessing
 import os
@@ -68,10 +69,25 @@ from ...message import (
     TellMessage,
     new_message_id,
 )
-from ...pool import create_actor_pool
+from ...pool import MainActorPoolBase, create_actor_pool
 from ...router import Router
 from ...test.pool import TestMainActorPool
 from ..pool import MainActorPool, SubActorPool
+
+
+@pytest.mark.parametrize("source_pid,target_pid", [(15, 30), (15, 60), (60, 120)])
+def test_process_indexes_do_not_overlap_between_processes(
+    monkeypatch, source_pid, target_pid
+):
+    monkeypatch.setattr(MainActorPoolBase, "_process_index_gen", itertools.count())
+    with mock.patch("os.getpid", return_value=source_pid):
+        worker = next(MainActorPoolBase.process_index_gen("127.0.0.1:1"))
+        supervisor = next(MainActorPoolBase.process_index_gen("127.0.0.1:2"))
+        model = next(MainActorPoolBase.process_index_gen("127.0.0.1:3"))
+    monkeypatch.setattr(MainActorPoolBase, "_process_index_gen", itertools.count())
+    with mock.patch("os.getpid", return_value=target_pid):
+        replacement = next(MainActorPoolBase.process_index_gen("127.0.0.1:4"))
+    assert len({worker, supervisor, model, replacement}) == 4
 
 
 class _CannotBePickled:
