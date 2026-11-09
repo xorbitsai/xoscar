@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 import uuid
 
@@ -27,6 +28,8 @@ from ...utils import classproperty
 from ..message import ControlMessage, ControlMessageType, ErrorMessage, new_message_id
 from .core import register_client, register_server
 from .socket import SocketChannel, SocketClient, SocketServer
+
+logger = logging.getLogger(__name__)
 
 # Retain only the most recent batch per connection, limited by its byte size.
 # Larger batches are registered for the duration of a single copy only.
@@ -289,8 +292,11 @@ class NixlChannel(SocketChannel):
                 raise
 
     async def _copy_buffers(self, buffers, refs, call):
+        if self.closed:
+            raise ConnectionError("NIXL channel is closed")
         token = new_message_id()
         prepare_rejected = False
+        abort_prepare = False
 
         async def command(operation, payload=None):
             nonlocal prepare_rejected
@@ -305,10 +311,14 @@ class NixlChannel(SocketChannel):
                 raise result.as_instanceof_cause()
             return result.result
 
-        await self._ensure_agent()
-        descriptions = self._register(buffers)
+        cold = self._agent is None
+        if cold:
+            descriptions = [_describe_buffer(buffer) for buffer in buffers]
+        else:
+            await self._ensure_agent()
+            descriptions = self._register(buffers)
         try:
-            generation, metadata, remote = await command(
+            prepare = command(
                 "prepare",
                 (
                     [(ref.address, ref.uid) for ref in refs],
@@ -316,6 +326,24 @@ class NixlChannel(SocketChannel):
                     self._remote_generation,
                 ),
             )
+            if cold:
+                # Drain both sides before cleanup. A receiver rejection takes
+                # precedence because it establishes that no prepare is pending.
+                local, prepared = await asyncio.gather(
+                    self._ensure_agent(), prepare, return_exceptions=True
+                )
+                if isinstance(prepared, BaseException):
+                    if isinstance(local, BaseException):
+                        logger.warning("NIXL sender setup also failed", exc_info=local)
+                    raise prepared
+                abort_prepare = True
+                if isinstance(local, BaseException):
+                    raise local
+                self._register(buffers, descriptions)
+                abort_prepare = False
+            else:
+                prepared = await prepare
+            generation, metadata, remote = prepared
             if metadata is not None:
                 if self._remote_agent is not None:
                     self.agent.remove_remote_agent(self._remote_agent)
@@ -325,11 +353,19 @@ class NixlChannel(SocketChannel):
             await asyncio.shield(self._inflight)
             await command("finish")
             self._trim_registration_cache()
-        except BaseException:
+        except BaseException as error:
             # A rejected prepare has not started a transfer. The connection
             # also carries actor RPCs, so leave it usable for those callers.
             if prepare_rejected:
                 self._trim_registration_cache()
+            elif abort_prepare:
+                # Sender setup failed before any write. Finish the receiver's
+                # reservation so the shared actor RPC connection can stay open.
+                try:
+                    await command("finish")
+                except BaseException as cleanup_error:
+                    await self.close()
+                    raise error from cleanup_error
             else:
                 await self.close()
             raise
