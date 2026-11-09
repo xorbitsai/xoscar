@@ -128,7 +128,9 @@ async def test_cold_copy_drains_peer_prepare_when_local_init_fails(peers, monkey
     source, target, call = peers
     source._agent = None
     preparing, finish = asyncio.Event(), asyncio.Event()
+    prepared = asyncio.Event()
     local_failed = asyncio.Event()
+    close = source.close
 
     async def fail():
         await asyncio.wait_for(preparing.wait(), 2)
@@ -136,11 +138,21 @@ async def test_cold_copy_drains_peer_prepare_when_local_init_fails(peers, monkey
         raise RuntimeError("local agent init failed")
 
     async def delay_prepare(message):
-        preparing.set()
-        await finish.wait()
+        if message.content[0] == "prepare":
+            preparing.set()
+            await finish.wait()
+            result = await call(message)
+            prepared.set()
+            return result
+        assert prepared.is_set()
         return await call(message)
 
+    async def checked_close():
+        assert prepared.is_set()
+        await close()
+
     monkeypatch.setattr(source, "_initialize_agent", fail)
+    monkeypatch.setattr(source, "close", checked_close)
     payload = np.arange(8)
     dest = np.zeros_like(payload)
     task = asyncio.create_task(
@@ -153,8 +165,68 @@ async def test_cold_copy_drains_peer_prepare_when_local_init_fails(peers, monkey
         finish.set()
     with pytest.raises(RuntimeError, match="local agent init failed"):
         await task
-    assert source.closed
+    assert not source.closed and target._pending is None
     assert not dest.any()
+
+
+async def test_cold_copy_preserves_both_setup_errors(peers, monkeypatch, caplog):
+    source, target, call = peers
+    source._agent = None
+
+    def missing_agent():
+        raise ImportError("missing local NIXL")
+
+    monkeypatch.setattr(source, "_create_agent", missing_agent)
+    payload = np.arange(8)
+    dest = np.zeros(7, dtype=payload.dtype)
+    with pytest.raises(ValueError, match="sizes must match"):
+        await source.copy_buffers([payload], refs_for([dest]), call)
+    assert "NIXL sender setup also failed" in caplog.text
+    assert "ImportError: missing local NIXL" in caplog.text
+    assert not source.closed and target._pending is None
+    assert not dest.any()
+
+
+@pytest.mark.parametrize("finish_fails", [False, True])
+async def test_cold_registration_failure_releases_prepare(
+    peers, monkeypatch, finish_fails
+):
+    source, target, call = peers
+    agent = source.agent
+    source._agent = None
+    monkeypatch.setattr(source, "_create_agent", lambda: agent)
+
+    async def exchange(message):
+        if finish_fails and message.content[0] == "finish":
+            raise ConnectionError("finish disconnected")
+        return await call(message)
+
+    payload = np.arange(8)
+    dest = np.zeros_like(payload)
+    refs = refs_for([dest])
+    with mock.patch.object(
+        agent, "register_memory", side_effect=RuntimeError("local registration failed")
+    ):
+        with pytest.raises(RuntimeError, match="local registration failed") as exc:
+            await source.copy_buffers([payload], refs, exchange)
+    assert not dest.any()
+    if finish_fails:
+        assert source.closed
+        assert isinstance(exc.value.__cause__, ConnectionError)
+    else:
+        assert not source.closed and target._pending is None
+        await source.copy_buffers([payload], refs, call)
+        np.testing.assert_array_equal(payload, dest)
+
+
+async def test_closed_copy_does_not_prepare_or_validate_buffers(peers):
+    source, target, call = peers
+    await source.close()
+    exchange = mock.AsyncMock()
+    with pytest.raises(ConnectionError, match="NIXL channel is closed"):
+        await source.copy_buffers([object()], [], exchange)
+    exchange.assert_not_awaited()
+    assert target._pending is None
 
 
 async def test_batch_copy_reuses_registration_and_metadata(peers):
@@ -545,8 +617,13 @@ async def test_prepare_rejection_keeps_channel_open(peers, monkeypatch, failure)
     assert not source.closed and not source._closing
 
 
-async def test_prepare_transport_failure_closes_channel(peers):
+@pytest.mark.parametrize("cold", [False, True])
+async def test_prepare_transport_failure_closes_channel(peers, monkeypatch, cold):
     source, target, call = peers
+    if cold:
+        agent = source.agent
+        source._agent = None
+        monkeypatch.setattr(source, "_create_agent", lambda: agent)
 
     async def disconnected(message):
         raise ConnectionError("peer disconnected")
