@@ -100,6 +100,63 @@ def refs_for(buffers):
     ]
 
 
+async def test_cold_copy_initializes_both_peers_in_parallel(peers, monkeypatch):
+    source, target, call = peers
+    source_started, target_started = asyncio.Event(), asyncio.Event()
+
+    def delay_agent(channel, started, other_started):
+        agent = channel._agent
+        channel._agent = None
+
+        async def initialize():
+            started.set()
+            await asyncio.wait_for(other_started.wait(), 2)
+            channel._agent = agent
+
+        monkeypatch.setattr(channel, "_initialize_agent", initialize)
+
+    delay_agent(source, source_started, target_started)
+    delay_agent(target, target_started, source_started)
+    payload = np.arange(8)
+    dest = np.zeros_like(payload)
+    await asyncio.wait_for(source.copy_buffers([payload], refs_for([dest]), call), 5)
+    np.testing.assert_array_equal(payload, dest)
+    assert target._pending is None
+
+
+async def test_cold_copy_drains_peer_prepare_when_local_init_fails(peers, monkeypatch):
+    source, target, call = peers
+    source._agent = None
+    preparing, finish = asyncio.Event(), asyncio.Event()
+    local_failed = asyncio.Event()
+
+    async def fail():
+        await asyncio.wait_for(preparing.wait(), 2)
+        local_failed.set()
+        raise RuntimeError("local agent init failed")
+
+    async def delay_prepare(message):
+        preparing.set()
+        await finish.wait()
+        return await call(message)
+
+    monkeypatch.setattr(source, "_initialize_agent", fail)
+    payload = np.arange(8)
+    dest = np.zeros_like(payload)
+    task = asyncio.create_task(
+        source.copy_buffers([payload], refs_for([dest]), delay_prepare)
+    )
+    try:
+        await asyncio.wait_for(local_failed.wait(), 5)
+        assert not source.closed and not task.done()
+    finally:
+        finish.set()
+    with pytest.raises(RuntimeError, match="local agent init failed"):
+        await task
+    assert source.closed
+    assert not dest.any()
+
+
 async def test_batch_copy_reuses_registration_and_metadata(peers):
     source, target, call = peers
     buffers = [

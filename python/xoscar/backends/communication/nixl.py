@@ -305,10 +305,14 @@ class NixlChannel(SocketChannel):
                 raise result.as_instanceof_cause()
             return result.result
 
-        await self._ensure_agent()
-        descriptions = self._register(buffers)
+        cold = self._agent is None
+        if cold:
+            descriptions = [_describe_buffer(buffer) for buffer in buffers]
+        else:
+            await self._ensure_agent()
+            descriptions = self._register(buffers)
         try:
-            generation, metadata, remote = await command(
+            prepare = command(
                 "prepare",
                 (
                     [(ref.address, ref.uid) for ref in refs],
@@ -316,6 +320,20 @@ class NixlChannel(SocketChannel):
                     self._remote_generation,
                 ),
             )
+            if cold:
+                # The receiver can initialize and register its buffers while
+                # the sender initializes its own agent.
+                local, prepared = await asyncio.gather(
+                    self._ensure_agent(), prepare, return_exceptions=True
+                )
+                if isinstance(prepared, BaseException):
+                    raise prepared
+                if isinstance(local, BaseException):
+                    raise local
+                self._register(buffers, descriptions)
+            else:
+                prepared = await prepare
+            generation, metadata, remote = prepared
             if metadata is not None:
                 if self._remote_agent is not None:
                     self.agent.remove_remote_agent(self._remote_agent)
