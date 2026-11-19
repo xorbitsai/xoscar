@@ -649,7 +649,7 @@ def test_install_packages_retry_skip_installed_does_not_repin(uv_manager):
     assert "numpy" not in plan_calls[1][1]
 
 
-def test_install_packages_no_retry_after_cancel(uv_manager):
+def test_install_packages_no_retry_after_cancel(uv_manager, monkeypatch):
     # cancel_install terminates uv, which also exits non-zero; that must not
     # be mistaken for a resolver conflict and trigger the pin-drop retry
     import subprocess
@@ -659,14 +659,16 @@ def test_install_packages_no_retry_after_cancel(uv_manager):
     class FakeProcess:
         def __init__(self):
             self._terminated = False
+            self.returncode = None
 
         def poll(self):
             return -15 if self._terminated else None
 
-        def terminate(self):
+        def kill(self):
             self._terminated = True
+            self.returncode = -15
 
-        def wait(self):
+        def wait(self, timeout=None):
             if not self._terminated:
                 # simulate the user cancelling while uv is running
                 uv_manager.cancel_install()
@@ -734,12 +736,14 @@ def test_resolve_install_plan_forwards_find_links_and_trusted_host(
 ):
     commands = []
 
-    def fake_run(command, **kwargs):
+    def fake_popen(command, **kwargs):
         commands.append(command)
-        assert kwargs == {"check": True, "text": True, "capture_output": True}
-        return mock.Mock(stderr="+ vllm==0.28.0+custom\n")
+        assert kwargs["text"] is True
+        return mock.Mock(
+            communicate=lambda: ("", "+ vllm==0.28.0+custom\n"), returncode=0
+        )
 
-    monkeypatch.setattr("xoscar.virtualenv.uv.subprocess.run", fake_run)
+    monkeypatch.setattr("xoscar.virtualenv.uv.subprocess.Popen", fake_popen)
     manager = UVVirtualEnvManager(tmp_path / "venv")
 
     result = manager._resolve_install_plan(
@@ -806,7 +810,7 @@ def test_install_uses_sources_for_filter_and_formal_install(monkeypatch, tmp_pat
 
     monkeypatch.setattr(
         "xoscar.virtualenv.uv.subprocess.Popen",
-        lambda command: commands.append(command) or mock.Mock(wait=lambda: 0),
+        lambda command, **kwargs: commands.append(command) or mock.Mock(wait=lambda: 0),
     )
     manager = UVVirtualEnvManager(tmp_path / "venv")
     monkeypatch.setattr(manager, "_filter_packages_not_installed", fake_filter)
@@ -847,7 +851,7 @@ def test_install_without_skip_installed_keeps_find_links(monkeypatch, tmp_path):
 
     monkeypatch.setattr(
         "xoscar.virtualenv.uv.subprocess.Popen",
-        lambda command: commands.append(command) or SuccessfulProcess(),
+        lambda command, **kwargs: commands.append(command) or SuccessfulProcess(),
     )
     manager = UVVirtualEnvManager(tmp_path / "venv")
     monkeypatch.setattr(manager, "_filter_packages_not_installed", fail_filter)
@@ -883,7 +887,7 @@ def test_retry_preserves_sources_for_each_dry_run(monkeypatch, tmp_path):
         def wait(self):
             return self.returncode
 
-    def fake_popen(command):
+    def fake_popen(command, **kwargs):
         install_calls.append(command)
         return Process(1 if len(install_calls) == 1 else 0)
 
@@ -910,3 +914,76 @@ def test_retry_preserves_sources_for_each_dry_run(monkeypatch, tmp_path):
     )
     assert len(install_calls) == 2
     assert all("/wheels/model" in command for command in install_calls)
+
+
+def test_cancelled_dry_run_prevents_follow_up_install(uv_manager, monkeypatch):
+    from xoscar.virtualenv.uv import UVInstallCancelled
+
+    process = mock.Mock(returncode=-15)
+    process.poll.return_value = None
+    process.wait.side_effect = AssertionError("cancel_install must not wait")
+
+    def communicate():
+        uv_manager.cancel_install()
+        process.poll.return_value = -15
+        return "", ""
+
+    process.communicate.side_effect = communicate
+    popen = mock.Mock(return_value=process)
+    monkeypatch.setattr("xoscar.virtualenv.uv.subprocess.Popen", popen)
+
+    with uv_manager.dependency_operations():
+        with pytest.raises(UVInstallCancelled):
+            uv_manager._resolve_install_plan(["example"], {})
+        with pytest.raises(UVInstallCancelled):
+            uv_manager.install_packages(["example"], skip_installed=False)
+
+    popen.assert_called_once()
+    process.kill.assert_called_once()
+
+    process.returncode = 0
+    process.wait.side_effect = None
+    process.wait.return_value = 0
+    uv_manager.install_packages(["example"], skip_installed=False)
+    assert popen.call_count == 2
+
+
+def test_standalone_dry_run_can_retry_after_cancel(uv_manager, monkeypatch):
+    from xoscar.virtualenv.uv import UVInstallCancelled
+
+    first = mock.Mock(returncode=-15)
+    first.poll.return_value = None
+
+    def cancel_during_read():
+        uv_manager.cancel_install()
+        first.poll.return_value = -15
+        return "", ""
+
+    first.communicate.side_effect = cancel_during_read
+    second = mock.Mock(returncode=0)
+    second.communicate.return_value = ("", "+ example==1.0\n")
+    monkeypatch.setattr(
+        "xoscar.virtualenv.uv.subprocess.Popen",
+        mock.Mock(side_effect=[first, second]),
+    )
+
+    with pytest.raises(UVInstallCancelled):
+        uv_manager._resolve_install_plan(["example"], {})
+    assert uv_manager._resolve_install_plan(["example"], {}) == ["example==1.0"]
+
+
+def test_cancel_between_dry_run_and_install(uv_manager, monkeypatch):
+    from ..uv import UVInstallCancelled
+
+    process = mock.Mock(returncode=0)
+    process.communicate.return_value = ("", "+ example==1.0")
+    popen = mock.Mock(return_value=process)
+    monkeypatch.setattr("subprocess.Popen", popen)
+
+    with uv_manager.dependency_operations():
+        assert uv_manager._resolve_install_plan(["example"], {}) == ["example==1.0"]
+        uv_manager.cancel_install()
+        with pytest.raises(UVInstallCancelled):
+            uv_manager.install_packages(["example"], skip_installed=False)
+
+    popen.assert_called_once()
