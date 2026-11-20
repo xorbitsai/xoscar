@@ -205,8 +205,11 @@ class UVVirtualEnvManager(VirtualEnvManager):
                 self._install_process = None
             logger.info(
                 "uv %s ended for %s after %.2fs (returncode=%s, cancelled=%s)",
-                phase, self.env_path, time.monotonic() - started,
-                process.returncode, cancelled,
+                phase,
+                self.env_path,
+                time.monotonic() - started,
+                process.returncode,
+                cancelled,
             )
         if cancelled:
             raise UVInstallCancelled(process.returncode or -signal.SIGTERM, cmd)
@@ -253,7 +256,11 @@ class UVVirtualEnvManager(VirtualEnvManager):
             )
             cmd.extend(specs)
             with self._tracked_install_process(
-                cmd, phase="dry-run", stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                cmd,
+                phase="dry-run",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
             ) as process:
                 stdout, stderr = process.communicate()
             if process.returncode:
@@ -535,7 +542,11 @@ class UVVirtualEnvManager(VirtualEnvManager):
             if process is not None:
                 # The installing thread owns the wait.
                 process.kill()
-        logger.info("uv cancellation requested for %s (active_process=%s)", self.env_path, process is not None)
+        logger.info(
+            "uv cancellation requested for %s (active_process=%s)",
+            self.env_path,
+            process is not None,
+        )
 
     def get_python_path(self) -> str | None:
         if self.env_path.exists():
