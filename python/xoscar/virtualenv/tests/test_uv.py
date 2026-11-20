@@ -987,3 +987,139 @@ def test_cancel_between_dry_run_and_install(uv_manager, monkeypatch):
             uv_manager.install_packages(["example"], skip_installed=False)
 
     popen.assert_called_once()
+
+
+def test_dependency_operations_rejects_concurrent_thread(uv_manager):
+    from concurrent.futures import ThreadPoolExecutor
+
+    def resolve():
+        return uv_manager._resolve_install_plan(["example"], {})
+
+    with uv_manager.dependency_operations():
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(resolve)
+            with pytest.raises(RuntimeError, match="already running"):
+                future.result(timeout=5)
+        assert uv_manager._dependency_owner is not None
+    assert uv_manager._dependency_owner is None
+
+
+def test_resolution_exception_cleans_up_process(uv_manager, monkeypatch):
+    process = mock.Mock()
+    error = OSError("failed to read uv output")
+    process.communicate.side_effect = error
+    monkeypatch.setattr(
+        "xoscar.virtualenv.uv.subprocess.Popen", mock.Mock(return_value=process)
+    )
+
+    with pytest.raises(OSError) as raised:
+        uv_manager._resolve_install_plan(["example"], {})
+
+    assert raised.value is error
+    process.kill.assert_called_once_with()
+    process.wait.assert_called_once_with()
+    assert uv_manager._install_process is None
+    assert uv_manager._dependency_owner is None
+
+    process.communicate.side_effect = None
+    process.communicate.return_value = ("", "+ example==1.0\n")
+    process.returncode = 0
+    assert uv_manager._resolve_install_plan(["example"], {}) == ["example==1.0"]
+
+
+def test_resolution_failure_preserves_output(uv_manager, monkeypatch):
+    import subprocess
+
+    process = mock.Mock(returncode=1)
+    process.communicate.return_value = ("resolver output", "resolution failed")
+    monkeypatch.setattr(
+        "xoscar.virtualenv.uv.subprocess.Popen", mock.Mock(return_value=process)
+    )
+
+    with pytest.raises(subprocess.CalledProcessError) as raised:
+        uv_manager._resolve_install_plan(["example"], {})
+
+    assert raised.value.returncode == 1
+    assert raised.value.output == "resolver output"
+    assert raised.value.stderr == "resolution failed"
+    process.kill.assert_not_called()
+    assert uv_manager._install_process is None
+
+
+def test_cancel_successful_resolution_still_stops_install(uv_manager, monkeypatch):
+    from xoscar.virtualenv.uv import UVInstallCancelled
+
+    process = mock.Mock(returncode=0)
+
+    def communicate():
+        uv_manager.cancel_install()
+        return "", "+ example==1.0\n"
+
+    process.communicate.side_effect = communicate
+    popen = mock.Mock(return_value=process)
+    monkeypatch.setattr("xoscar.virtualenv.uv.subprocess.Popen", popen)
+
+    with uv_manager.dependency_operations():
+        with pytest.raises(UVInstallCancelled) as raised:
+            uv_manager._resolve_install_plan(["example"], {})
+        assert raised.value.returncode != 0
+        with pytest.raises(UVInstallCancelled):
+            uv_manager.install_packages(["example"], skip_installed=False)
+
+    popen.assert_called_once()
+    assert uv_manager._install_process is None
+
+
+def test_tracked_process_rejects_overlap(uv_manager, monkeypatch):
+    process = mock.Mock(returncode=0)
+    popen = mock.Mock(return_value=process)
+    monkeypatch.setattr("xoscar.virtualenv.uv.subprocess.Popen", popen)
+
+    with uv_manager.dependency_operations():
+        with uv_manager._tracked_install_process(["uv", "first"]):
+            with pytest.raises(RuntimeError, match="already running"):
+                with uv_manager._tracked_install_process(["uv", "second"]):
+                    pytest.fail("Overlapping processes must be rejected")
+            assert uv_manager._install_process is process
+
+    popen.assert_called_once()
+    assert uv_manager._install_process is None
+
+
+@pytest.mark.parametrize("log", [False, True])
+def test_install_process_wait_and_logging(uv_manager, monkeypatch, log, caplog):
+    import io
+
+    process = mock.Mock(returncode=0)
+    process.stdout = io.BytesIO(b"installation output\n")
+    process.stderr = io.BytesIO(b"installation warning\n")
+    # Exercise the fallback to Popen.returncode after waiting.
+    process.wait.return_value = None
+    popen = mock.Mock(return_value=process)
+    monkeypatch.setattr("xoscar.virtualenv.uv.subprocess.Popen", popen)
+
+    with caplog.at_level(logging.INFO):
+        uv_manager.install_packages(["example"], skip_installed=False, log=log)
+
+    process.wait.assert_called_once_with()
+    process.kill.assert_not_called()
+    assert uv_manager._install_process is None
+    if log:
+        assert "installation output" in caplog.text
+        assert "installation warning" in caplog.text
+        assert popen.call_args.kwargs["stdout"] is not None
+    else:
+        assert popen.call_args.kwargs == {}
+
+
+def test_subprocess_logger_streams_and_waits(caplog):
+    from xoscar.virtualenv.utils import run_subprocess_with_logger
+
+    with caplog.at_level(logging.INFO):
+        with run_subprocess_with_logger(
+            [sys.executable, "-c", "print('logged subprocess output')"]
+        ) as process:
+            pass
+
+    assert process.returncode == 0
+    assert "logged subprocess output" in caplog.text
