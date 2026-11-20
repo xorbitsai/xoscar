@@ -1123,3 +1123,31 @@ def test_subprocess_logger_streams_and_waits(caplog):
 
     assert process.returncode == 0
     assert "logged subprocess output" in caplog.text
+
+
+def test_dependency_operations_rejects_another_owner(uv_manager, monkeypatch):
+    with uv_manager.dependency_operations():
+        owner = uv_manager._dependency_owner
+        with monkeypatch.context() as patch:
+            patch.setattr("xoscar.virtualenv.uv.threading.get_ident", lambda: owner + 1)
+            with pytest.raises(RuntimeError, match="already running"):
+                with uv_manager.dependency_operations():
+                    pytest.fail("Another owner must be rejected")
+        assert uv_manager._dependency_owner == owner
+    assert uv_manager._dependency_owner is None
+
+
+def test_tracked_process_rejects_cancelled_scope(uv_manager, monkeypatch):
+    from xoscar.virtualenv.uv import UVInstallCancelled
+
+    popen = mock.Mock()
+    monkeypatch.setattr("xoscar.virtualenv.uv.subprocess.Popen", popen)
+    with uv_manager.dependency_operations():
+        uv_manager.cancel_install()
+        with pytest.raises(UVInstallCancelled) as raised:
+            with uv_manager._tracked_install_process(["uv", "pip", "install"]):
+                pytest.fail("A cancelled scope must not start a process")
+        assert raised.value.cmd == ["uv", "pip", "install"]
+        assert raised.value.returncode != 0
+    popen.assert_not_called()
+    assert uv_manager._install_process is None
