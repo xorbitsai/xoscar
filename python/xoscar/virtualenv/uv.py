@@ -18,10 +18,15 @@ import logging
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import sysconfig
 import tempfile
+import threading
+import time
+from contextlib import contextmanager
+from functools import wraps
 from importlib.metadata import distributions
 from pathlib import Path
 from typing import Optional, Union
@@ -30,12 +35,25 @@ from packaging.requirements import Requirement
 from packaging.version import Version
 
 from .core import VirtualEnvManager, collect_system_pins, relax_system_requirement
-from .utils import is_vcs_url, run_subprocess_with_logger
+from .utils import is_vcs_url, log_subprocess_output
 
 UV_PATH = os.getenv("XOSCAR_UV_PATH")
 SKIP_INSTALLED = bool(int(os.getenv("XOSCAR_VIRTUAL_ENV_SKIP_INSTALLED", "0")))
 SourceOption = Optional[Union[str, list[str]]]
 logger = logging.getLogger(__name__)
+
+
+class UVInstallCancelled(subprocess.CalledProcessError):
+    """A uv dependency operation was cancelled by its caller."""
+
+
+def _dependency_operation(method):
+    @wraps(method)
+    def run(self, *args, **kwargs):
+        with self.dependency_operations():
+            return method(self, *args, **kwargs)
+
+    return run
 
 
 def _is_in_pyinstaller():
@@ -47,6 +65,8 @@ class UVVirtualEnvManager(VirtualEnvManager):
         super().__init__(env_path)
         self._install_process: Optional[subprocess.Popen] = None
         self._install_cancelled = False
+        self._install_lock = threading.Lock()
+        self._dependency_owner = None
 
     @classmethod
     def is_available(cls):
@@ -145,6 +165,56 @@ class UVVirtualEnvManager(VirtualEnvManager):
         if index_strategy:
             command.extend(["--index-strategy", index_strategy])
 
+    @contextmanager
+    def dependency_operations(self):
+        """Share cancellation across dependency planning and installation."""
+        owner = threading.get_ident()
+        with self._install_lock:
+            outermost = self._dependency_owner is None
+            if outermost:
+                self._install_cancelled = False
+                self._dependency_owner = owner
+            elif self._dependency_owner != owner:
+                raise RuntimeError("A uv dependency operation is already running")
+        try:
+            yield
+        finally:
+            if outermost:
+                with self._install_lock:
+                    self._dependency_owner = None
+
+    @contextmanager
+    def _tracked_install_process(self, cmd, *, phase="install", **kwargs):
+        with self._install_lock:
+            if self._install_cancelled:
+                raise UVInstallCancelled(-signal.SIGTERM, cmd)
+            if self._install_process is not None:
+                raise RuntimeError("A uv dependency operation is already running")
+            process = self._install_process = subprocess.Popen(cmd, **kwargs)
+        started = time.monotonic()
+        try:
+            logger.info("uv %s started for %s", phase, self.env_path)
+            yield process
+        except BaseException:
+            process.kill()
+            process.wait()
+            raise
+        finally:
+            with self._install_lock:
+                cancelled = self._install_cancelled
+                self._install_process = None
+            logger.info(
+                "uv %s ended for %s after %.2fs (returncode=%s, cancelled=%s)",
+                phase,
+                self.env_path,
+                time.monotonic() - started,
+                process.returncode,
+                cancelled,
+            )
+        if cancelled:
+            raise UVInstallCancelled(process.returncode or -signal.SIGTERM, cmd)
+
+    @_dependency_operation
     def _resolve_install_plan(
         self,
         specs: list[str],
@@ -185,15 +255,23 @@ class UVVirtualEnvManager(VirtualEnvManager):
                 index_strategy=index_strategy,
             )
             cmd.extend(specs)
-            try:
-                result = subprocess.run(cmd, check=True, text=True, capture_output=True)
-            except subprocess.CalledProcessError as e:
-                logger.error(e.stderr)
-                raise e
+            with self._tracked_install_process(
+                cmd,
+                phase="dry-run",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            ) as process:
+                stdout, stderr = process.communicate()
+            if process.returncode:
+                logger.error(stderr)
+                raise subprocess.CalledProcessError(
+                    process.returncode, cmd, output=stdout, stderr=stderr
+                )
         # the temp file is automatically deleted here
         deps = [
             f"{m.group(1)}=={m.group(2)}"
-            for line in result.stderr.splitlines()
+            for line in stderr.splitlines()
             if (m := re.match(r"^\+ (\S+)==(\S+)$", line.strip()))
         ]
         return deps
@@ -326,6 +404,7 @@ class UVVirtualEnvManager(VirtualEnvManager):
         logger.debug(f"Filtered install list: {final}")
         return final
 
+    @_dependency_operation
     def install_packages(self, packages: list[str], **kwargs):
         """
         Install packages into the virtual environment using uv.
@@ -354,7 +433,6 @@ class UVVirtualEnvManager(VirtualEnvManager):
         processed = self.process_packages(packages, **kwargs)
         if not processed:
             return
-        self._install_cancelled = False
 
         def _do_install(
             install_list: list[str], relax_names: frozenset[str] = frozenset()
@@ -407,20 +485,27 @@ class UVVirtualEnvManager(VirtualEnvManager):
             cmd.extend(install_list)
 
             logger.info("Installing packages via command: %s", cmd)
-            if not log:
-                self._install_process = process = subprocess.Popen(cmd)
-                returncode = process.wait()
-            else:
-                with run_subprocess_with_logger(cmd) as process:
-                    self._install_process = process
+            options = (
+                {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "bufsize": 1}
+                if log
+                else {}
+            )
+            with self._tracked_install_process(cmd, **options) as process:
+                if log:
+                    with log_subprocess_output(process):
+                        pass
+                    returncode = process.returncode
+                else:
+                    returncode = process.wait()
+            if returncode is None:
                 returncode = process.returncode
-
-            self._install_process = None
             if returncode != 0:
                 raise subprocess.CalledProcessError(returncode, cmd)
 
         try:
             _do_install(processed)
+        except UVInstallCancelled:
+            raise
         except subprocess.CalledProcessError:
             # An explicitly cancelled install also exits non-zero; never
             # start a second install in that case.
@@ -450,10 +535,18 @@ class UVVirtualEnvManager(VirtualEnvManager):
             _do_install(retry_list, relaxed_names)
 
     def cancel_install(self):
-        if self._install_process and self._install_process.poll() is None:
+        """Cancel the running install or the current dependency scope."""
+        with self._install_lock:
             self._install_cancelled = True
-            self._install_process.terminate()
-            self._install_process.wait()
+            process = self._install_process
+            if process is not None:
+                # The installing thread owns the wait.
+                process.kill()
+        logger.info(
+            "uv cancellation requested for %s (active_process=%s)",
+            self.env_path,
+            process is not None,
+        )
 
     def get_python_path(self) -> str | None:
         if self.env_path.exists():

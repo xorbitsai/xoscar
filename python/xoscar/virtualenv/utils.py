@@ -65,6 +65,12 @@ def run_subprocess_with_logger(
         bufsize=1,
     )
 
+    with log_subprocess_output(process):
+        yield process
+
+
+@contextmanager
+def log_subprocess_output(process: subprocess.Popen) -> Iterator[None]:
     threads = [
         threading.Thread(
             target=stream_reader, args=(process.stdout, logger.info, sys.stdout)
@@ -77,7 +83,7 @@ def run_subprocess_with_logger(
         t.start()
 
     try:
-        yield process
+        yield
     finally:
         process.wait()
         for t in threads:
