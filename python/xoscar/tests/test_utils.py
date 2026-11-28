@@ -16,16 +16,63 @@
 import importlib
 import os
 import shutil
+import socket
 import sys
 import tempfile
 import textwrap
 import threading
 import time
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
 
 from .. import utils
+
+
+@pytest.mark.parametrize("error_code", [10013, 10048])
+@pytest.mark.parametrize("occupy", [True, False])
+def test_get_next_port_windows_skips_unbindable_port(monkeypatch, error_code, occupy):
+    monkeypatch.setattr(utils, "sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setattr(utils, "LOW_PORT_BOUND", 50001)
+    monkeypatch.setattr(utils, "HIGH_PORT_BOUND", 50003)
+    monkeypatch.setattr(utils, "_get_ports_from_netstat", lambda: {50002})
+    monkeypatch.setattr(utils, "_local_occupied_ports", set())
+    monkeypatch.setattr(utils.random, "randint", lambda *_: 1)
+
+    error = OSError("port cannot be bound")
+    setattr(error, "winerror", error_code)
+    probe = MagicMock()
+    probe.__enter__.return_value = probe
+    probe.bind.side_effect = [error, None]
+    socket_factory = MagicMock(return_value=probe)
+    monkeypatch.setattr(utils.socket, "socket", socket_factory)
+
+    # The first candidate is the final port in the range, so retry wraps.
+    assert utils.get_next_port(occupy=occupy) == 50001
+    assert [call.args for call in probe.bind.call_args_list] == [
+        (("", 50003),),
+        (("", 50001),),
+    ]
+    socket_factory.assert_called_with(socket.AF_INET, socket.SOCK_STREAM)
+    assert utils._local_occupied_ports == ({50001} if occupy else set())
+
+
+def test_get_next_port_windows_propagates_unexpected_bind_error(monkeypatch):
+    monkeypatch.setattr(utils, "sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setattr(utils, "_get_ports_from_netstat", set)
+    monkeypatch.setattr(utils, "_local_occupied_ports", set())
+
+    probe = MagicMock()
+    probe.__enter__.return_value = probe
+    probe.bind.side_effect = OSError("unexpected bind failure")
+    monkeypatch.setattr(utils.socket, "socket", MagicMock(return_value=probe))
+
+    with pytest.raises(OSError, match="unexpected bind failure"):
+        utils.get_next_port(typ=socket.SOCK_DGRAM)
+    utils.socket.socket.assert_called_once_with(socket.AF_INET, socket.SOCK_DGRAM)
+    assert not utils._local_occupied_ports
 
 
 def test_string_conversion():

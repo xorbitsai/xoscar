@@ -201,12 +201,13 @@ def _get_ports_from_netstat() -> set[int]:
 def get_next_port(typ: int | None = None, occupy: bool = True) -> int:
     import psutil
 
-    if sys.platform.lower().startswith("win"):
+    is_windows = sys.platform.lower().startswith("win")
+    typ = typ or socket.SOCK_STREAM
+    if is_windows:
         occupied = _get_ports_from_netstat()
     else:
         try:
             conns = psutil.net_connections()
-            typ = typ or socket.SOCK_STREAM
             occupied = set(
                 sc.laddr.port
                 for sc in conns
@@ -216,18 +217,31 @@ def get_next_port(typ: int | None = None, occupy: bool = True) -> int:
             occupied = _get_ports_from_netstat()
 
     occupied.update(_local_occupied_ports)
-    random.seed(uuid.uuid1().bytes)
-    randn = random.randint(0, 100000000)
+    available = [
+        port
+        for port in range(LOW_PORT_BOUND, HIGH_PORT_BOUND + 1)
+        if port not in occupied
+    ]
+    if not available:
+        raise SystemError("No ports available.")
 
-    idx = int(randn % (1 + HIGH_PORT_BOUND - LOW_PORT_BOUND - len(occupied)))
-    for i in range(LOW_PORT_BOUND, HIGH_PORT_BOUND + 1):
-        if i in occupied:
-            continue
-        if idx == 0:
-            if occupy:
-                _local_occupied_ports.add(i)
-            return i
-        idx -= 1
+    random.seed(uuid.uuid1().bytes)
+    start = random.randint(0, 100000000) % len(available)
+    for offset in range(len(available)):
+        port = available[(start + offset) % len(available)]
+        if is_windows:
+            # Windows can exclude a port even when netstat shows no listener.
+            with socket.socket(socket.AF_INET, typ) as probe:
+                try:
+                    probe.bind(("", port))
+                except OSError as error:
+                    # WSAEACCES (excluded port) or WSAEADDRINUSE.
+                    if getattr(error, "winerror", None) in (10013, 10048):
+                        continue
+                    raise
+        if occupy:
+            _local_occupied_ports.add(port)
+        return port
     raise SystemError("No ports available.")
 
 
